@@ -1,0 +1,17 @@
+{
+  "name": "queda-workspace",
+  "private": true,
+  "version": "0.8.2",
+  "description": "Automacoes Windows para o projeto Queda",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "dev:check": "powershell -ExecutionPolicy Bypass -File .\\scripts\\check-env.ps1",
+    "dev:setup": "powershell -ExecutionPolicy Bypass -File .\\scripts\\setup-dev.ps1",
+    "dev:init-db": "powershell -ExecutionPolicy Bypass -File .\\scripts\\init-db.ps1",
+    "dev:start": "powershell -ExecutionPolicy Bypass -File .\\scripts\\start-all.ps1",
+    "dev:stop": "powershell -ExecutionPolicy Bypass -File .\\scripts\\stop-all.ps1",
+    "dev:smoke": "powershell -ExecutionPolicy Bypass -File .\\scripts\\smoke-test.ps1"
+  }
+}

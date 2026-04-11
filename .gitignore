@@ -1,0 +1,50 @@
+.pio/
+.pioenvs/
+.vscode/.browse.c_cpp.db*
+.vscode/c_cpp_properties.json
+.vscode/launch.json
+.vscode/ipch/
+.idea/
+.vs/
+Thumbs.db
+.DS_Store
+
+# Node / frontend / backend
+node_modules/
+backend/node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+coverage/
+.cache/
+.eslintcache
+*.tsbuildinfo
+
+# Environment files
+backend/.env
+frontend/.env
+.env
+.env.local
+.env.*.local
+
+# Logs and runtime artifacts
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+scripts/.runtime/
+
+# PlatformIO / firmware artifacts
+.pio/
+*.bin
+*.elf
+*.map
+
+# Local archives and backups
+*.zip
+*.7z
+*.rar
+*.bak
+*.tmp
+shared_chat.html

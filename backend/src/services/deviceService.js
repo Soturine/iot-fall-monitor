@@ -1,0 +1,1128 @@
+const { execute, one, transaction } = require("../db/pool");
+const { parseMaybeJson, toBoolean } = require("../utils/formatters");
+const { HttpError } = require("../utils/httpError");
+const { getPagination } = require("../utils/pagination");
+const { createAuditLog } = require("./auditService");
+const { assertRole, buildScopeFilter, canAccessScope } = require("./scopeService");
+
+function toNullableNumber(value) {
+  if (value == null || value === "") {
+    return null;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function toIso(value) {
+  if (!value) {
+    return null;
+  }
+
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function normalizeDeviceIdentifier(value, fallback = "device") {
+  const normalized = String(value || "").trim();
+  return normalized || fallback;
+}
+
+function normalizeDeviceUid(deviceUid, deviceIdentifier) {
+  const normalizedUid = String(deviceUid || "").trim();
+
+  if (normalizedUid) {
+    return normalizedUid;
+  }
+
+  const normalizedIdentifier = normalizeDeviceIdentifier(deviceIdentifier, "");
+  if (!normalizedIdentifier) {
+    throw new HttpError(400, "device_uid ou device_identifier é obrigatório.");
+  }
+
+  return `legacy:${normalizedIdentifier}`;
+}
+
+function mapDeviceRow(row) {
+  const currentPatient = row.currentPatientId
+    ? {
+        id: Number(row.currentPatientId),
+        fullName: row.currentPatientName,
+      }
+    : null;
+
+  return {
+    id: Number(row.id),
+    deviceUid: row.deviceUid || row.device_uid,
+    deviceIdentifier: row.deviceIdentifier || row.device_identifier,
+    name: row.name,
+    location: row.location || "",
+    isActive: toBoolean(row.isActive ?? row.is_active),
+    claimStatus: row.claimStatus || row.claim_status,
+    claimedAt: toIso(row.claimedAt || row.claimed_at),
+    currentAssignmentHistoryId: row.currentAssignmentHistoryId
+      ? Number(row.currentAssignmentHistoryId)
+      : row.current_assignment_history_id
+        ? Number(row.current_assignment_history_id)
+        : null,
+    organization: row.organizationId || row.organization_id
+      ? {
+          id: Number(row.organizationId || row.organization_id),
+          name: row.organizationName || row.organization_name,
+          type: row.organizationType || row.organization_type,
+        }
+      : null,
+    currentPatient,
+    patientName: currentPatient?.fullName || "",
+    activeAlerts: Number(row.activeAlerts || row.active_alerts || 0),
+    status: {
+      online: toBoolean(row.online),
+      wifiRssi: row.wifiRssi ?? row.wifi_rssi ?? null,
+      batteryPercent: row.batteryPercent ?? row.battery_percent ?? null,
+      firmwareVersion: row.firmwareVersion || row.firmware_version || null,
+      lastSeenAt: toIso(row.lastSeenAt || row.last_seen_at),
+      updatedAt: toIso(row.statusUpdatedAt || row.status_updated_at),
+    },
+  };
+}
+
+function mapTelemetryRow(row) {
+  return {
+    id: Number(row.id),
+    deviceId: Number(row.device_id),
+    organizationId: row.organization_id ? Number(row.organization_id) : null,
+    patientId: row.patient_id ? Number(row.patient_id) : null,
+    ax: toNullableNumber(row.ax),
+    ay: toNullableNumber(row.ay),
+    az: toNullableNumber(row.az),
+    gx: toNullableNumber(row.gx),
+    gy: toNullableNumber(row.gy),
+    gz: toNullableNumber(row.gz),
+    accelMagnitude: toNullableNumber(row.accel_magnitude),
+    gyroMagnitude: toNullableNumber(row.gyro_magnitude),
+    pitchDeg: toNullableNumber(row.pitch_deg),
+    rollDeg: toNullableNumber(row.roll_deg),
+    createdAt: toIso(row.created_at),
+  };
+}
+
+function mapDeviceEventRow(row) {
+  return {
+    id: Number(row.id),
+    deviceId: Number(row.device_id),
+    organizationId: row.organization_id ? Number(row.organization_id) : null,
+    patientId: row.patient_id ? Number(row.patient_id) : null,
+    eventType: row.event_type,
+    severity: row.severity,
+    intensity: toNullableNumber(row.intensity),
+    immobility: toBoolean(row.immobility),
+    message: row.message,
+    eventTime: toIso(row.event_time),
+    rawPayloadJson: parseMaybeJson(row.raw_payload_json),
+    createdAt: toIso(row.created_at),
+  };
+}
+
+function mapDeviceAlertRow(row) {
+  return {
+    id: Number(row.id),
+    status: row.status,
+    organizationId: row.organization_id ? Number(row.organization_id) : null,
+    patientId: row.patient_id ? Number(row.patient_id) : null,
+    createdAt: toIso(row.created_at),
+    updatedAt: toIso(row.updated_at),
+    event: {
+      id: Number(row.event_id),
+      eventType: row.event_type,
+      severity: row.severity,
+      intensity: toNullableNumber(row.intensity),
+      immobility: toBoolean(row.immobility),
+      message: row.message,
+      eventTime: toIso(row.event_time),
+      rawPayloadJson: parseMaybeJson(row.raw_payload_json),
+    },
+  };
+}
+
+async function ensureDeviceStatusRow(deviceId, executor = null) {
+  await execute(
+    executor,
+    `
+      INSERT INTO device_status (device_id, online)
+      VALUES (?, 0)
+      ON DUPLICATE KEY UPDATE updated_at = updated_at
+    `,
+    [deviceId],
+  );
+}
+
+async function getDeviceScopeSnapshot(deviceId, executor = null) {
+  const row = await one(
+    executor,
+    `
+      SELECT
+        organization_id AS organizationId,
+        current_patient_id AS patientId,
+        current_assignment_history_id AS assignmentHistoryId
+      FROM devices
+      WHERE id = ?
+    `,
+    [deviceId],
+  );
+
+  if (!row) {
+    throw new HttpError(404, "Dispositivo não encontrado.");
+  }
+
+  return {
+    organizationId: row.organizationId ? Number(row.organizationId) : null,
+    patientId: row.patientId ? Number(row.patientId) : null,
+    assignmentHistoryId: row.assignmentHistoryId ? Number(row.assignmentHistoryId) : null,
+  };
+}
+
+async function syncDeviceScopeToStatus(deviceId, executor = null) {
+  const scope = await getDeviceScopeSnapshot(deviceId, executor);
+
+  await execute(
+    executor,
+    `
+      INSERT INTO device_status (
+        device_id,
+        organization_id,
+        patient_id,
+        device_assignment_history_id,
+        online
+      )
+      VALUES (?, ?, ?, ?, 0)
+      ON DUPLICATE KEY UPDATE
+        organization_id = VALUES(organization_id),
+        patient_id = VALUES(patient_id),
+        device_assignment_history_id = VALUES(device_assignment_history_id),
+        updated_at = CURRENT_TIMESTAMP
+    `,
+    [
+      deviceId,
+      scope.organizationId,
+      scope.patientId,
+      scope.assignmentHistoryId,
+    ],
+  );
+}
+
+async function getDeviceStatusSnapshot(deviceId, executor = null) {
+  const row = await one(
+    executor,
+    `
+      SELECT
+        d.id,
+        d.device_uid AS deviceUid,
+        d.device_identifier AS deviceIdentifier,
+        d.name,
+        d.location,
+        d.is_active AS isActive,
+        d.claim_status AS claimStatus,
+        d.claimed_at AS claimedAt,
+        d.current_assignment_history_id AS currentAssignmentHistoryId,
+        o.id AS organizationId,
+        o.name AS organizationName,
+        o.type AS organizationType,
+        p.id AS currentPatientId,
+        p.full_name AS currentPatientName,
+        ds.online,
+        ds.wifi_rssi AS wifiRssi,
+        ds.battery_percent AS batteryPercent,
+        ds.firmware_version AS firmwareVersion,
+        ds.last_seen_at AS lastSeenAt,
+        ds.updated_at AS statusUpdatedAt,
+        (
+          SELECT COUNT(*)
+          FROM alerts a
+          WHERE a.device_id = d.id
+            AND a.status IN ('open', 'acknowledged')
+        ) AS activeAlerts
+      FROM devices d
+      LEFT JOIN organizations o ON o.id = d.organization_id
+      LEFT JOIN patients p ON p.id = d.current_patient_id
+      LEFT JOIN device_status ds ON ds.device_id = d.id
+      WHERE d.id = ?
+    `,
+    [deviceId],
+  );
+
+  if (!row) {
+    throw new HttpError(404, "Dispositivo não encontrado.");
+  }
+
+  return mapDeviceRow(row);
+}
+
+async function getDeviceForUpdate(deviceId, executor = null) {
+  const row = await one(
+    executor,
+    `
+      SELECT *
+      FROM devices
+      WHERE id = ?
+      FOR UPDATE
+    `,
+    [deviceId],
+  );
+
+  if (!row) {
+    throw new HttpError(404, "Dispositivo não encontrado.");
+  }
+
+  return row;
+}
+
+async function getOrCreateDeviceByIdentity({ deviceUid, deviceIdentifier, name }, executor = null) {
+  const normalizedIdentifier = normalizeDeviceIdentifier(deviceIdentifier, "");
+  const normalizedUid = normalizeDeviceUid(deviceUid, normalizedIdentifier);
+  const fallbackName = normalizeDeviceIdentifier(name, normalizedIdentifier || normalizedUid);
+
+  await execute(
+    executor,
+    `
+      INSERT INTO devices (
+        device_uid,
+        device_identifier,
+        name,
+        claim_status,
+        is_active
+      )
+      VALUES (?, ?, ?, 'unclaimed', 1)
+      ON DUPLICATE KEY UPDATE
+        device_identifier = VALUES(device_identifier),
+        name = COALESCE(NULLIF(name, ''), VALUES(name)),
+        updated_at = CURRENT_TIMESTAMP
+    `,
+    [normalizedUid, normalizedIdentifier || normalizedUid, fallbackName],
+  );
+
+  const row = await one(
+    executor,
+    `
+      SELECT id
+      FROM devices
+      WHERE device_uid = ?
+    `,
+    [normalizedUid],
+  );
+
+  await ensureDeviceStatusRow(row.id, executor);
+  await syncDeviceScopeToStatus(row.id, executor);
+
+  return getDeviceStatusSnapshot(row.id, executor);
+}
+
+async function claimDeviceToOrganization(
+  {
+    deviceId,
+    organizationId,
+    claimedByUserId,
+    deviceIdentifier,
+    name,
+    location,
+  },
+  executor = null,
+) {
+  const current = await getDeviceForUpdate(deviceId, executor);
+
+  if (
+    current.claim_status === "claimed" &&
+    current.organization_id &&
+    Number(current.organization_id) !== Number(organizationId)
+  ) {
+    throw new HttpError(
+      409,
+      "Este dispositivo já está pareado com outra organização.",
+    );
+  }
+
+  const nextIdentifier = normalizeDeviceIdentifier(
+    deviceIdentifier,
+    current.device_identifier || current.device_uid,
+  );
+  const nextName = String(name || "").trim() || current.name || nextIdentifier;
+  const nextLocation = location !== undefined
+    ? String(location || "").trim() || null
+    : current.location;
+
+  await execute(
+    executor,
+    `
+      UPDATE devices
+      SET
+        organization_id = ?,
+        device_identifier = ?,
+        name = ?,
+        location = ?,
+        claim_status = 'claimed',
+        claimed_at = COALESCE(claimed_at, UTC_TIMESTAMP()),
+        claimed_by_user_id = COALESCE(claimed_by_user_id, ?),
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `,
+    [organizationId, nextIdentifier, nextName, nextLocation, claimedByUserId, deviceId],
+  );
+
+  await ensureDeviceStatusRow(deviceId, executor);
+  await syncDeviceScopeToStatus(deviceId, executor);
+
+  return getDeviceStatusSnapshot(deviceId, executor);
+}
+
+async function setDevicePatientAssignment(
+  {
+    deviceId,
+    organizationId,
+    patientId,
+    reason,
+    notes,
+    actorId,
+  },
+  executor = null,
+) {
+  const deviceRow = await getDeviceForUpdate(deviceId, executor);
+
+  if (deviceRow.claim_status !== "claimed") {
+    throw new HttpError(
+      409,
+      "O dispositivo precisa estar pareado antes de ser vinculado a um paciente.",
+    );
+  }
+
+  if (Number(deviceRow.organization_id) !== Number(organizationId)) {
+    throw new HttpError(
+      403,
+      "O dispositivo não pertence à organização ativa.",
+    );
+  }
+
+  const currentHistory = await one(
+    executor,
+    `
+      SELECT id, patient_id
+      FROM device_assignment_history
+      WHERE device_id = ?
+        AND assignment_ended_at IS NULL
+      ORDER BY assignment_started_at DESC, id DESC
+      LIMIT 1
+      FOR UPDATE
+    `,
+    [deviceId],
+  );
+
+  if (patientId == null) {
+    if (currentHistory) {
+      await execute(
+        executor,
+        `
+          UPDATE device_assignment_history
+          SET
+            assignment_ended_at = UTC_TIMESTAMP(),
+            reason = COALESCE(?, reason),
+            notes = COALESCE(?, notes)
+          WHERE id = ?
+        `,
+        [reason || "manual_unassign", notes || null, currentHistory.id],
+      );
+    }
+
+    await execute(
+      executor,
+      `
+        UPDATE devices
+        SET
+          current_patient_id = NULL,
+          current_assignment_history_id = NULL,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `,
+      [deviceId],
+    );
+
+    await syncDeviceScopeToStatus(deviceId, executor);
+    return getDeviceStatusSnapshot(deviceId, executor);
+  }
+
+  const patientRow = await one(
+    executor,
+    `
+      SELECT id, full_name
+      FROM patients
+      WHERE id = ?
+        AND organization_id = ?
+        AND status = 'active'
+      LIMIT 1
+      FOR UPDATE
+    `,
+    [patientId, organizationId],
+  );
+
+  if (!patientRow) {
+    throw new HttpError(404, "Paciente não encontrado na organização ativa.");
+  }
+
+  const conflictingDevice = await one(
+    executor,
+    `
+      SELECT id
+      FROM devices
+      WHERE current_patient_id = ?
+        AND organization_id = ?
+        AND claim_status = 'claimed'
+        AND id <> ?
+      LIMIT 1
+      FOR UPDATE
+    `,
+    [patientId, organizationId, deviceId],
+  );
+
+  if (conflictingDevice) {
+    throw new HttpError(
+      409,
+      "Este paciente já possui outro dispositivo ativo. Desvincule-o antes de continuar.",
+    );
+  }
+
+  if (currentHistory) {
+    await execute(
+      executor,
+      `
+        UPDATE device_assignment_history
+        SET assignment_ended_at = UTC_TIMESTAMP()
+        WHERE id = ?
+      `,
+      [currentHistory.id],
+    );
+  }
+
+  const historyResult = await execute(
+    executor,
+    `
+      INSERT INTO device_assignment_history (
+        device_id,
+        organization_id,
+        patient_id,
+        assigned_by_user_id,
+        assignment_started_at,
+        reason,
+        notes
+      )
+      VALUES (?, ?, ?, ?, UTC_TIMESTAMP(), ?, ?)
+    `,
+    [
+      deviceId,
+      organizationId,
+      patientId,
+      actorId || null,
+      reason || "manual_assign",
+      notes || null,
+    ],
+  );
+
+  await execute(
+    executor,
+    `
+      UPDATE devices
+      SET
+        current_patient_id = ?,
+        current_assignment_history_id = ?,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `,
+    [patientId, historyResult.insertId, deviceId],
+  );
+
+  await syncDeviceScopeToStatus(deviceId, executor);
+  return getDeviceStatusSnapshot(deviceId, executor);
+}
+
+async function upsertDeviceStatus(deviceId, fields, scope = null, executor = null) {
+  const status = {
+    online: fields.online === undefined ? true : Boolean(fields.online),
+    wifiRssi: toNullableNumber(fields.wifiRssi),
+    batteryPercent: toNullableNumber(fields.batteryPercent),
+    firmwareVersion: fields.firmwareVersion ? String(fields.firmwareVersion) : null,
+    lastSeenAt: fields.lastSeenAt || null,
+  };
+
+  const effectiveScope = scope || (await getDeviceScopeSnapshot(deviceId, executor));
+
+  await execute(
+    executor,
+    `
+      INSERT INTO device_status (
+        device_id,
+        organization_id,
+        patient_id,
+        device_assignment_history_id,
+        online,
+        wifi_rssi,
+        battery_percent,
+        firmware_version,
+        last_seen_at,
+        updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())
+      ON DUPLICATE KEY UPDATE
+        organization_id = VALUES(organization_id),
+        patient_id = VALUES(patient_id),
+        device_assignment_history_id = VALUES(device_assignment_history_id),
+        online = VALUES(online),
+        wifi_rssi = COALESCE(VALUES(wifi_rssi), wifi_rssi),
+        battery_percent = COALESCE(VALUES(battery_percent), battery_percent),
+        firmware_version = COALESCE(VALUES(firmware_version), firmware_version),
+        last_seen_at = COALESCE(VALUES(last_seen_at), last_seen_at),
+        updated_at = UTC_TIMESTAMP()
+    `,
+    [
+      deviceId,
+      effectiveScope.organizationId,
+      effectiveScope.patientId,
+      effectiveScope.assignmentHistoryId,
+      status.online ? 1 : 0,
+      status.wifiRssi,
+      status.batteryPercent,
+      status.firmwareVersion,
+      status.lastSeenAt,
+    ],
+  );
+
+  return getDeviceStatusSnapshot(deviceId, executor);
+}
+
+async function listDevices(filters = {}, accessContext) {
+  const pagination = getPagination(filters, 12, 100);
+  const { clauses, params } = buildScopeFilter(accessContext, {
+    organizationColumn: "d.organization_id",
+    patientColumn: "d.current_patient_id",
+  });
+
+  if (filters.search) {
+    const term = `%${filters.search.trim()}%`;
+    clauses.push(
+      `
+        (
+          d.device_identifier LIKE ?
+          OR d.device_uid LIKE ?
+          OR d.name LIKE ?
+          OR COALESCE(p.full_name, '') LIKE ?
+          OR COALESCE(d.location, '') LIKE ?
+        )
+      `,
+    );
+    params.push(term, term, term, term, term);
+  }
+
+  if (filters.status === "online") {
+    clauses.push("COALESCE(ds.online, 0) = 1");
+  }
+
+  if (filters.status === "offline") {
+    clauses.push("COALESCE(ds.online, 0) = 0");
+  }
+
+  if (filters.claimStatus) {
+    clauses.push("d.claim_status = ?");
+    params.push(filters.claimStatus);
+  }
+
+  const whereSql = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
+
+  const totalRow = await one(
+    null,
+    `
+      SELECT COUNT(*) AS total
+      FROM devices d
+      LEFT JOIN patients p ON p.id = d.current_patient_id
+      LEFT JOIN device_status ds ON ds.device_id = d.id
+      ${whereSql}
+    `,
+    params,
+  );
+
+  const rows = await execute(
+    null,
+    `
+      SELECT
+        d.id,
+        d.device_uid AS deviceUid,
+        d.device_identifier AS deviceIdentifier,
+        d.name,
+        d.location,
+        d.is_active AS isActive,
+        d.claim_status AS claimStatus,
+        d.claimed_at AS claimedAt,
+        d.current_assignment_history_id AS currentAssignmentHistoryId,
+        o.id AS organizationId,
+        o.name AS organizationName,
+        o.type AS organizationType,
+        p.id AS currentPatientId,
+        p.full_name AS currentPatientName,
+        ds.online,
+        ds.wifi_rssi AS wifiRssi,
+        ds.battery_percent AS batteryPercent,
+        ds.firmware_version AS firmwareVersion,
+        ds.last_seen_at AS lastSeenAt,
+        ds.updated_at AS statusUpdatedAt,
+        (
+          SELECT COUNT(*)
+          FROM alerts a
+          WHERE a.device_id = d.id
+            AND a.status IN ('open', 'acknowledged')
+        ) AS activeAlerts
+      FROM devices d
+      LEFT JOIN organizations o ON o.id = d.organization_id
+      LEFT JOIN patients p ON p.id = d.current_patient_id
+      LEFT JOIN device_status ds ON ds.device_id = d.id
+      ${whereSql}
+      ORDER BY
+        CASE d.claim_status
+          WHEN 'claimed' THEN 0
+          WHEN 'unclaimed' THEN 1
+          ELSE 2
+        END,
+        COALESCE(ds.online, 0) DESC,
+        ds.last_seen_at DESC,
+        d.updated_at DESC
+      LIMIT ? OFFSET ?
+    `,
+    [...params, pagination.limit, pagination.offset],
+  );
+
+  return {
+    items: rows.map(mapDeviceRow),
+    page: pagination.page,
+    limit: pagination.limit,
+    total: Number(totalRow.total),
+  };
+}
+
+async function ensureScopedDevice(deviceId, accessContext, executor = null) {
+  const device = await getDeviceStatusSnapshot(deviceId, executor);
+
+  if (
+    !canAccessScope(
+      accessContext,
+      device.organization?.id || null,
+      device.currentPatient?.id || null,
+    )
+  ) {
+    throw new HttpError(404, "Dispositivo não encontrado.");
+  }
+
+  return device;
+}
+
+async function getDeviceById(deviceId, accessContext) {
+  const device = await ensureScopedDevice(deviceId, accessContext);
+  const patientScoped =
+    accessContext.restrictToAssignedPatients &&
+    accessContext.assignedPatientIds.length > 0;
+  const patientPlaceholders = patientScoped
+    ? accessContext.assignedPatientIds.map(() => "?").join(", ")
+    : "";
+  const patientParams = patientScoped ? accessContext.assignedPatientIds : [];
+
+  const telemetryRows = await execute(
+    null,
+    `
+      SELECT *
+      FROM telemetry_logs
+      WHERE device_id = ?
+        ${patientScoped ? `AND patient_id IN (${patientPlaceholders})` : ""}
+      ORDER BY created_at DESC
+      LIMIT 30
+    `,
+    [deviceId, ...patientParams],
+  );
+
+  const eventRows = await execute(
+    null,
+    `
+      SELECT *
+      FROM events
+      WHERE device_id = ?
+        ${patientScoped ? `AND patient_id IN (${patientPlaceholders})` : ""}
+      ORDER BY event_time DESC, id DESC
+      LIMIT 15
+    `,
+    [deviceId, ...patientParams],
+  );
+
+  const alertRows = await execute(
+    null,
+    `
+      SELECT
+        a.id,
+        a.status,
+        a.organization_id,
+        a.patient_id,
+        a.created_at,
+        a.updated_at,
+        e.id AS event_id,
+        e.event_type,
+        e.severity,
+        e.intensity,
+        e.immobility,
+        e.message,
+        e.event_time,
+        e.raw_payload_json
+      FROM alerts a
+      INNER JOIN events e ON e.id = a.event_id
+      WHERE a.device_id = ?
+        ${patientScoped ? `AND a.patient_id IN (${patientPlaceholders})` : ""}
+      ORDER BY a.updated_at DESC
+      LIMIT 10
+    `,
+    [deviceId, ...patientParams],
+  );
+
+  const assignmentHistoryRows = await execute(
+    null,
+    `
+      SELECT
+        dah.id,
+        dah.patient_id,
+        p.full_name AS patient_name,
+        dah.assignment_started_at,
+        dah.assignment_ended_at,
+        dah.reason,
+        dah.notes,
+        u.id AS assigned_by_user_id,
+        u.name AS assigned_by_user_name
+      FROM device_assignment_history dah
+      LEFT JOIN patients p ON p.id = dah.patient_id
+      LEFT JOIN users u ON u.id = dah.assigned_by_user_id
+      WHERE dah.device_id = ?
+        ${patientScoped ? `AND dah.patient_id IN (${patientPlaceholders})` : ""}
+      ORDER BY dah.assignment_started_at DESC, dah.id DESC
+      LIMIT 20
+    `,
+    [deviceId, ...patientParams],
+  );
+
+  return {
+    device,
+    recentTelemetry: telemetryRows.reverse().map(mapTelemetryRow),
+    recentEvents: eventRows.map(mapDeviceEventRow),
+    recentAlerts: alertRows.map(mapDeviceAlertRow),
+    assignmentHistory: assignmentHistoryRows.map((row) => ({
+      id: Number(row.id),
+      patient: row.patient_id
+        ? {
+            id: Number(row.patient_id),
+            fullName: row.patient_name,
+          }
+        : null,
+      assignedBy: row.assigned_by_user_id
+        ? {
+            id: Number(row.assigned_by_user_id),
+            name: row.assigned_by_user_name,
+          }
+        : null,
+      assignmentStartedAt: toIso(row.assignment_started_at),
+      assignmentEndedAt: toIso(row.assignment_ended_at),
+      reason: row.reason || null,
+      notes: row.notes || null,
+    })),
+  };
+}
+
+async function createDevice(data, actorId, accessContext) {
+  assertRole(
+    accessContext,
+    ["organization_admin"],
+    "Somente administradores da organização podem cadastrar dispositivos manualmente.",
+  );
+
+  if (!accessContext.activeOrganizationId) {
+    throw new HttpError(400, "Nenhuma organização ativa foi selecionada.");
+  }
+
+  return transaction(async (connection) => {
+    const device = await getOrCreateDeviceByIdentity(
+      {
+        deviceUid: data.deviceUid,
+        deviceIdentifier: data.deviceIdentifier,
+        name: data.name,
+      },
+      connection,
+    );
+
+    const claimedDevice = await claimDeviceToOrganization(
+      {
+        deviceId: device.id,
+        organizationId: accessContext.activeOrganizationId,
+        claimedByUserId: actorId,
+        deviceIdentifier: data.deviceIdentifier,
+        name: data.name,
+        location: data.location,
+      },
+      connection,
+    );
+
+    if (data.patientId) {
+      await setDevicePatientAssignment(
+        {
+          deviceId: claimedDevice.id,
+          organizationId: accessContext.activeOrganizationId,
+          patientId: Number(data.patientId),
+          reason: "manual_create_assign",
+          notes: "Vínculo criado durante cadastro manual do dispositivo.",
+          actorId,
+        },
+        connection,
+      );
+    }
+
+    const finalDevice = await getDeviceStatusSnapshot(claimedDevice.id, connection);
+
+    await createAuditLog(
+      {
+        organizationId: accessContext.activeOrganizationId,
+        userId: actorId,
+        action: "device.create",
+        entityType: "device",
+        entityId: finalDevice.id,
+        metadata: {
+          deviceUid: finalDevice.deviceUid,
+          organizationId: accessContext.activeOrganizationId,
+        },
+      },
+      connection,
+    );
+
+    return finalDevice;
+  });
+}
+
+async function updateDevice(deviceId, data, actorId, accessContext) {
+  assertRole(
+    accessContext,
+    ["organization_admin"],
+    "Somente administradores da organização podem editar dispositivos.",
+  );
+
+  return transaction(async (connection) => {
+    const current = await ensureScopedDevice(deviceId, accessContext, connection);
+
+    await execute(
+      connection,
+      `
+        UPDATE devices
+        SET
+          name = ?,
+          location = ?,
+          is_active = ?,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `,
+      [
+        data.name ? String(data.name).trim() : current.name,
+        data.location !== undefined ? String(data.location || "").trim() : current.location,
+        data.isActive === undefined ? (current.isActive ? 1 : 0) : (data.isActive ? 1 : 0),
+        deviceId,
+      ],
+    );
+
+    const updated = await getDeviceStatusSnapshot(deviceId, connection);
+
+    await createAuditLog(
+      {
+        organizationId: accessContext.activeOrganizationId,
+        userId: actorId,
+        action: "device.update",
+        entityType: "device",
+        entityId: updated.id,
+        metadata: {
+          before: current,
+          after: updated,
+        },
+      },
+      connection,
+    );
+
+    return updated;
+  });
+}
+
+async function assignDeviceToPatient(deviceId, data, accessContext, actorId) {
+  assertRole(
+    accessContext,
+    ["organization_admin"],
+    "Somente administradores da organização podem mudar o vínculo do dispositivo.",
+  );
+
+  if (!accessContext.activeOrganizationId) {
+    throw new HttpError(400, "Nenhuma organização ativa foi selecionada.");
+  }
+
+  return transaction(async (connection) => {
+    const current = await ensureScopedDevice(deviceId, accessContext, connection);
+    const updated = await setDevicePatientAssignment(
+      {
+        deviceId,
+        organizationId: accessContext.activeOrganizationId,
+        patientId: data.patientId ? Number(data.patientId) : null,
+        reason: data.reason || (data.patientId ? "manual_assign" : "manual_unassign"),
+        notes: data.notes || null,
+        actorId,
+      },
+      connection,
+    );
+
+    await createAuditLog(
+      {
+        organizationId: accessContext.activeOrganizationId,
+        userId: actorId,
+        action: "device.assignment.update",
+        entityType: "device",
+        entityId: deviceId,
+        metadata: {
+          before: current.currentPatient,
+          after: updated.currentPatient,
+          reason: data.reason || null,
+        },
+      },
+      connection,
+    );
+
+    return updated;
+  });
+}
+
+async function deleteDevice(deviceId, actorId, accessContext) {
+  assertRole(
+    accessContext,
+    ["organization_admin"],
+    "Somente administradores da organização podem remover dispositivos.",
+  );
+
+  return transaction(async (connection) => {
+    const current = await ensureScopedDevice(deviceId, accessContext, connection);
+
+    await createAuditLog(
+      {
+        organizationId: accessContext.activeOrganizationId,
+        userId: actorId,
+        action: "device.delete",
+        entityType: "device",
+        entityId: current.id,
+        metadata: current,
+      },
+      connection,
+    );
+
+    await execute(
+      connection,
+      `
+        DELETE FROM devices
+        WHERE id = ?
+      `,
+      [deviceId],
+    );
+
+    return current;
+  });
+}
+
+async function listDeviceStatus(accessContext) {
+  const result = await listDevices(
+    {
+      limit: 100,
+    },
+    accessContext,
+  );
+
+  return result.items;
+}
+
+async function markDevicesOffline(cutoffDate) {
+  const staleRows = await execute(
+    null,
+    `
+      SELECT
+        d.id,
+        d.device_uid AS deviceUid,
+        d.device_identifier AS deviceIdentifier,
+        d.name,
+        d.location,
+        d.is_active AS isActive,
+        d.claim_status AS claimStatus,
+        d.claimed_at AS claimedAt,
+        d.current_assignment_history_id AS currentAssignmentHistoryId,
+        o.id AS organizationId,
+        o.name AS organizationName,
+        o.type AS organizationType,
+        p.id AS currentPatientId,
+        p.full_name AS currentPatientName,
+        ds.online,
+        ds.wifi_rssi AS wifiRssi,
+        ds.battery_percent AS batteryPercent,
+        ds.firmware_version AS firmwareVersion,
+        ds.last_seen_at AS lastSeenAt,
+        ds.updated_at AS statusUpdatedAt,
+        (
+          SELECT COUNT(*)
+          FROM alerts a
+          WHERE a.device_id = d.id
+            AND a.status IN ('open', 'acknowledged')
+        ) AS activeAlerts
+      FROM device_status ds
+      INNER JOIN devices d ON d.id = ds.device_id
+      LEFT JOIN organizations o ON o.id = d.organization_id
+      LEFT JOIN patients p ON p.id = d.current_patient_id
+      WHERE ds.online = 1
+        AND ds.last_seen_at IS NOT NULL
+        AND ds.last_seen_at < ?
+    `,
+    [cutoffDate],
+  );
+
+  if (!staleRows.length) {
+    return [];
+  }
+
+  await execute(
+    null,
+    `
+      UPDATE device_status
+      SET online = 0, updated_at = UTC_TIMESTAMP()
+      WHERE online = 1
+        AND last_seen_at IS NOT NULL
+        AND last_seen_at < ?
+    `,
+    [cutoffDate],
+  );
+
+  return staleRows.map((row) =>
+    mapDeviceRow({
+      ...row,
+      online: 0,
+    }),
+  );
+}
+
+module.exports = {
+  assignDeviceToPatient,
+  claimDeviceToOrganization,
+  createDevice,
+  deleteDevice,
+  ensureDeviceStatusRow,
+  getDeviceById,
+  getDeviceScopeSnapshot,
+  getDeviceStatusSnapshot,
+  getOrCreateDeviceByIdentity,
+  listDevices,
+  listDeviceStatus,
+  mapTelemetryRow,
+  markDevicesOffline,
+  setDevicePatientAssignment,
+  syncDeviceScopeToStatus,
+  upsertDeviceStatus,
+  updateDevice,
+};

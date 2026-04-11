@@ -1,0 +1,76 @@
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color: #223731;
+    background:
+      radial-gradient(circle at top left, rgba(79, 115, 103, 0.18), transparent 28%),
+      radial-gradient(circle at top right, rgba(241, 165, 58, 0.12), transparent 22%),
+      #f6f7f4;
+    font-family: "Manrope", "Segoe UI", sans-serif;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  * {
+    @apply border-surface-200;
+  }
+
+  html {
+    @apply scroll-smooth;
+  }
+
+  body {
+    @apply m-0 min-h-screen bg-transparent text-surface-900;
+    background-size: auto, auto, cover;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    font: inherit;
+  }
+
+  #root {
+    @apply min-h-screen;
+  }
+}
+
+@layer components {
+  .panel {
+    @apply rounded-3xl border border-white/70 bg-white/85 shadow-panel backdrop-blur;
+  }
+
+  .panel-soft {
+    @apply rounded-3xl border border-surface-100 bg-surface-50/70 shadow-panel;
+  }
+
+  .field {
+    @apply w-full rounded-2xl border border-surface-200 bg-white px-4 py-3 text-sm text-surface-900 outline-none transition focus:border-surface-400 focus:ring-4 focus:ring-surface-100;
+  }
+
+  .label {
+    @apply mb-2 block text-sm font-semibold text-surface-700;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(79, 115, 103, 0.28);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}

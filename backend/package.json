@@ -1,0 +1,39 @@
+{
+  "name": "backend",
+  "version": "0.8.2",
+  "description": "Backend MQTT + API REST do sistema de monitoramento de quedas com ESP32",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "check": "node scripts/check.js",
+    "mock:publisher": "node scripts/mockPublisher.js",
+    "dev:broker": "node scripts/devBroker.js",
+    "db:init": "node scripts/initDb.js"
+  },
+  "keywords": [
+    "esp32",
+    "mqtt",
+    "express",
+    "mysql",
+    "iot",
+    "quedas"
+  ],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "aedes": "^1.0.2",
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.1",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "mqtt": "^5.15.1",
+    "mysql2": "^3.20.0",
+    "socket.io": "^4.8.3"
+  }
+}

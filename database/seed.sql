@@ -1,0 +1,204 @@
+-- Ambiente demo multi-organizacao:
+-- usuario admin: admin@queda.local
+-- senha: Admin@123
+
+USE queda_monitor;
+
+INSERT INTO users (name, email, password_hash, global_role, status)
+VALUES (
+  'Administradora Demo',
+  'admin@queda.local',
+  '$2b$10$6rr3vuhijE5a7A3wlBnKJOnYiaLD8rBsJ0V8vhxCAQh/TZh6Kijgu',
+  'user',
+  'active'
+);
+
+SET @demo_user_id = LAST_INSERT_ID();
+
+INSERT INTO organizations (name, type, status)
+VALUES ('Familia Demo', 'family', 'active');
+
+SET @demo_org_id = LAST_INSERT_ID();
+
+INSERT INTO organization_members (
+  organization_id,
+  user_id,
+  role,
+  status
+)
+VALUES (@demo_org_id, @demo_user_id, 'organization_admin', 'active');
+
+SET @demo_member_id = LAST_INSERT_ID();
+
+INSERT INTO patients (
+  organization_id,
+  full_name,
+  birth_date,
+  weight_kg,
+  height_cm,
+  notes,
+  status
+)
+VALUES (
+  @demo_org_id,
+  'Paciente Demo',
+  '1948-08-18',
+  72.50,
+  168.00,
+  'Paciente inicial para demonstracao multi-tenant.',
+  'active'
+);
+
+SET @demo_patient_id = LAST_INSERT_ID();
+
+INSERT INTO caregiver_assignments (organization_member_id, patient_id)
+VALUES (@demo_member_id, @demo_patient_id);
+
+INSERT INTO devices (
+  organization_id,
+  current_patient_id,
+  device_uid,
+  device_identifier,
+  name,
+  location,
+  claim_status,
+  claimed_at,
+  claimed_by_user_id,
+  is_active
+)
+VALUES (
+  @demo_org_id,
+  @demo_patient_id,
+  'legacy:esp32_01',
+  'esp32_01',
+  'Pulseira ESP32 Principal',
+  'Quarto 01',
+  'claimed',
+  UTC_TIMESTAMP(),
+  @demo_user_id,
+  1
+);
+
+SET @demo_device_id = LAST_INSERT_ID();
+
+INSERT INTO device_assignment_history (
+  device_id,
+  organization_id,
+  patient_id,
+  assigned_by_user_id,
+  assignment_started_at,
+  reason,
+  notes
+)
+VALUES (
+  @demo_device_id,
+  @demo_org_id,
+  @demo_patient_id,
+  @demo_user_id,
+  UTC_TIMESTAMP(),
+  'seed_initial_assignment',
+  'Vinculo inicial do ambiente demo.'
+);
+
+SET @demo_assignment_id = LAST_INSERT_ID();
+
+UPDATE devices
+SET current_assignment_history_id = @demo_assignment_id
+WHERE id = @demo_device_id;
+
+INSERT INTO device_status (
+  device_id,
+  organization_id,
+  patient_id,
+  device_assignment_history_id,
+  online,
+  wifi_rssi,
+  battery_percent,
+  firmware_version,
+  last_seen_at
+)
+VALUES (
+  @demo_device_id,
+  @demo_org_id,
+  @demo_patient_id,
+  @demo_assignment_id,
+  1,
+  -58,
+  86,
+  '1.0.0',
+  UTC_TIMESTAMP()
+);
+
+INSERT INTO telemetry_logs (
+  organization_id,
+  patient_id,
+  device_id,
+  device_assignment_history_id,
+  ax,
+  ay,
+  az,
+  gx,
+  gy,
+  gz,
+  accel_magnitude,
+  gyro_magnitude,
+  pitch_deg,
+  roll_deg,
+  created_at
+)
+VALUES
+  (@demo_org_id, @demo_patient_id, @demo_device_id, @demo_assignment_id, 0.04, -0.02, 0.98, 5.2, -1.1, 3.6, 0.98, 6.4, -3.1, 2.7, UTC_TIMESTAMP()),
+  (@demo_org_id, @demo_patient_id, @demo_device_id, @demo_assignment_id, 0.06, 0.01, 1.01, 6.8, 1.9, 2.5, 1.01, 7.5, -1.6, 3.3, UTC_TIMESTAMP());
+
+INSERT INTO events (
+  organization_id,
+  patient_id,
+  device_id,
+  device_assignment_history_id,
+  event_type,
+  severity,
+  intensity,
+  immobility,
+  message,
+  event_time,
+  raw_payload_json
+)
+VALUES (
+  @demo_org_id,
+  @demo_patient_id,
+  @demo_device_id,
+  @demo_assignment_id,
+  'fall_detected',
+  'critical',
+  3.74,
+  1,
+  'Queda simulada para demonstracao multi-organizacao.',
+  UTC_TIMESTAMP(),
+  JSON_OBJECT(
+    'device_uid', 'legacy:esp32_01',
+    'device_id', 'esp32_01',
+    'event_type', 'fall_detected',
+    'timestamp', UNIX_TIMESTAMP(UTC_TIMESTAMP()),
+    'accel_magnitude', 3.74,
+    'gyro_magnitude', 182.5,
+    'immobility_confirmed', TRUE,
+    'battery_level', 86
+  )
+);
+
+SET @demo_event_id = LAST_INSERT_ID();
+
+INSERT INTO alerts (
+  organization_id,
+  patient_id,
+  event_id,
+  device_id,
+  status
+)
+VALUES (
+  @demo_org_id,
+  @demo_patient_id,
+  @demo_event_id,
+  @demo_device_id,
+  'open'
+);
