@@ -1,5 +1,30 @@
 # Changelog
 
+## [v0.8.3] - 2026-04-11
+### Adicionado
+- governanca minima do repositorio com `AGENTS.md`, `docs/commit-guidelines.md` e `docs/release-rules.md`
+- template de PR em `.github/pull_request_template.md` com checklist de seguranca e validacao
+
+### Alterado
+- versao alinhada para `0.8.3` em `CHANGELOG.md`, `package.json` da raiz, `backend/package.json` e `frontend/package.json`
+- normalizacao do `backendApiBaseUrl` no firmware para tolerar esquema HTTP/HTTPS com capitalizacao variada e remover barra final
+
+### Corrigido
+- o portal do ESP32 passa a aceitar URLs locais validas mesmo quando o esquema vem capitalizado via celular ou QR
+
+### Pendente / Faltando
+- nenhuma pendencia nova registrada nesta rodada
+
+### Limitacoes conhecidas
+- o scanner de QR do portal depende de suporte de camera/navegador e pode nao funcionar em captive portal HTTP
+- `battery_level` do firmware real ainda e placeholder fixo em `100`
+
+### Divida tecnica / Pontos fracos
+- o portal do ESP32 ainda concentra HTML inline em `setup_portal.cpp`
+
+### Proximos passos sugeridos
+- validar o pairing em rede real com celulares que autocapitalizam URLs e registrar o fluxo no manual de testes
+
 ## [v0.8.2] - 2026-04-10
 ### Adicionado
 - gating simples de logs no firmware via `FIRMWARE_LOG_LEVEL` e flags de debug em `include/app_config.h`

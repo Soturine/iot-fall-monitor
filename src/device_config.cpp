@@ -23,6 +23,12 @@ String normalizeIdentifier(const String& value, const char* fallback) {
 
 String normalizeBaseUrl(const String& value) {
   String normalized = trimValue(value);
+  const int schemeIndex = normalized.indexOf("://");
+  if (schemeIndex > 0) {
+    String scheme = normalized.substring(0, schemeIndex);
+    scheme.toLowerCase();
+    normalized = scheme + normalized.substring(schemeIndex);
+  }
   while (normalized.endsWith("/")) {
     normalized.remove(normalized.length() - 1);
   }
