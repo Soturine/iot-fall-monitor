@@ -1,6 +1,13 @@
+const { execFileSync } = require("child_process");
 const os = require("os");
 
 const { env } = require("../config/env");
+
+const WINDOWS_HINTS_TTL_MS = 5000;
+let windowsInterfaceHintsCache = {
+  expiresAt: 0,
+  value: new Map(),
+};
 
 function isLoopback(address) {
   return address === "127.0.0.1" || address === "::1" || address === "localhost";
@@ -18,6 +25,10 @@ function isCarrierGradeNat(address) {
 
   const secondOctet = Number(match[1]);
   return secondOctet >= 64 && secondOctet <= 127;
+}
+
+function normalizeInterfaceName(name) {
+  return String(name || "").trim().toLowerCase();
 }
 
 function isPrivateIpv4(address) {
@@ -39,7 +50,7 @@ function isPrivateIpv4(address) {
 }
 
 function isVirtualOrVpnInterface(name) {
-  const normalized = String(name || "").toLowerCase();
+  const normalized = normalizeInterfaceName(name);
 
   return (
     normalized.includes("docker") ||
@@ -58,15 +69,175 @@ function isVirtualOrVpnInterface(name) {
     normalized.includes("host only") ||
     normalized.includes("tunnel") ||
     normalized.includes("tun") ||
-    normalized.includes("tap")
+    normalized.includes("tap") ||
+    normalized.includes("virtual")
   );
 }
 
-function interfacePriority(name) {
-  const normalized = String(name || "").toLowerCase();
+function toArray(value) {
+  if (!value) {
+    return [];
+  }
+
+  return Array.isArray(value) ? value : [value];
+}
+
+function getOrCreateWindowsHint(hints, interfaceName) {
+  const normalized = normalizeInterfaceName(interfaceName);
+  if (!normalized) {
+    return null;
+  }
+
+  if (!hints.has(normalized)) {
+    hints.set(normalized, {
+      interfaceName,
+      isUp: null,
+      hasDefaultRoute: false,
+      defaultRouteRank: Number.POSITIVE_INFINITY,
+      routeMetric: Number.POSITIVE_INFINITY,
+      interfaceMetric: Number.POSITIVE_INFINITY,
+      ipv4Connectivity: "",
+    });
+  }
+
+  return hints.get(normalized);
+}
+
+function readWindowsInterfaceHints() {
+  if (process.platform !== "win32") {
+    return new Map();
+  }
+
+  const now = Date.now();
+  if (windowsInterfaceHintsCache.expiresAt > now) {
+    return windowsInterfaceHintsCache.value;
+  }
+
+  try {
+    const script = [
+      "$adapters = Get-NetAdapter | Select-Object InterfaceAlias, InterfaceIndex, Status;",
+      "$routes = Get-NetRoute -AddressFamily IPv4 -DestinationPrefix '0.0.0.0/0' | Select-Object ifIndex, InterfaceAlias, RouteMetric, InterfaceMetric, NextHop;",
+      "$profiles = Get-NetConnectionProfile | Select-Object InterfaceIndex, InterfaceAlias, IPv4Connectivity;",
+      "[PSCustomObject]@{ adapters = $adapters; routes = $routes; profiles = $profiles } | ConvertTo-Json -Depth 4 -Compress",
+    ].join(" ");
+
+    const raw = execFileSync(
+      "powershell.exe",
+      ["-NoProfile", "-Command", script],
+      {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+        timeout: 4000,
+        windowsHide: true,
+      },
+    );
+
+    const parsed = JSON.parse(String(raw || "").trim() || "{}");
+    const hints = new Map();
+
+    toArray(parsed.adapters).forEach((adapter) => {
+      const hint = getOrCreateWindowsHint(hints, adapter.InterfaceAlias);
+      if (!hint) {
+        return;
+      }
+
+      hint.isUp = String(adapter.Status || "").toLowerCase() === "up";
+    });
+
+    toArray(parsed.profiles).forEach((profile) => {
+      const hint = getOrCreateWindowsHint(hints, profile.InterfaceAlias);
+      if (!hint) {
+        return;
+      }
+
+      hint.ipv4Connectivity = String(profile.IPv4Connectivity || "");
+    });
+
+    const orderedRoutes = toArray(parsed.routes).sort((left, right) => {
+      return (
+        Number(left.RouteMetric ?? Number.POSITIVE_INFINITY) -
+          Number(right.RouteMetric ?? Number.POSITIVE_INFINITY) ||
+        Number(left.InterfaceMetric ?? Number.POSITIVE_INFINITY) -
+          Number(right.InterfaceMetric ?? Number.POSITIVE_INFINITY) ||
+        Number(left.ifIndex ?? Number.POSITIVE_INFINITY) -
+          Number(right.ifIndex ?? Number.POSITIVE_INFINITY)
+      );
+    });
+
+    orderedRoutes.forEach((route, index) => {
+      const hint = getOrCreateWindowsHint(hints, route.InterfaceAlias);
+      if (!hint) {
+        return;
+      }
+
+      hint.hasDefaultRoute = true;
+      hint.defaultRouteRank = Math.min(hint.defaultRouteRank, index);
+      hint.routeMetric = Math.min(
+        hint.routeMetric,
+        Number(route.RouteMetric ?? Number.POSITIVE_INFINITY),
+      );
+      hint.interfaceMetric = Math.min(
+        hint.interfaceMetric,
+        Number(route.InterfaceMetric ?? Number.POSITIVE_INFINITY),
+      );
+    });
+
+    windowsInterfaceHintsCache = {
+      expiresAt: now + WINDOWS_HINTS_TTL_MS,
+      value: hints,
+    };
+  } catch {
+    windowsInterfaceHintsCache = {
+      expiresAt: now + WINDOWS_HINTS_TTL_MS,
+      value: new Map(),
+    };
+  }
+
+  return windowsInterfaceHintsCache.value;
+}
+
+function connectivityPriority(interfaceHint = null) {
+  if (interfaceHint?.isUp && interfaceHint?.hasDefaultRoute) {
+    return 0;
+  }
+
+  if (interfaceHint?.isUp) {
+    return 1;
+  }
+
+  if (
+    interfaceHint?.ipv4Connectivity === "Internet" ||
+    interfaceHint?.ipv4Connectivity === "LocalNetwork" ||
+    interfaceHint?.ipv4Connectivity === "Subnet"
+  ) {
+    return 2;
+  }
+
+  return 10;
+}
+
+function interfacePriority(name, interfaceHint = null) {
+  const normalized = normalizeInterfaceName(name);
 
   if (isVirtualOrVpnInterface(normalized)) {
-    return 40;
+    return 100;
+  }
+
+  if (interfaceHint?.isUp && interfaceHint?.hasDefaultRoute) {
+    return (
+      -40 +
+      Math.min(interfaceHint.defaultRouteRank, 10) +
+      Math.min(interfaceHint.routeMetric, 10) +
+      Math.min(interfaceHint.interfaceMetric, 10)
+    );
+  }
+
+  if (interfaceHint?.isUp) {
+    return -10;
+  }
+
+  if (normalized.includes("ethernet") || normalized.includes("eth")) {
+    return 0;
   }
 
   if (
@@ -74,11 +245,7 @@ function interfacePriority(name) {
     normalized.includes("wifi") ||
     normalized.includes("wlan")
   ) {
-    return 0;
-  }
-
-  if (normalized.includes("ethernet") || normalized.includes("eth")) {
-    return 5;
+    return 1;
   }
 
   return 10;
@@ -105,8 +272,16 @@ function addressPriority(address) {
 }
 
 function sortCandidates(left, right) {
+  const connectivityDelta =
+    connectivityPriority(left.interfaceHint) - connectivityPriority(right.interfaceHint);
+
+  if (connectivityDelta !== 0) {
+    return connectivityDelta;
+  }
+
   const interfaceDelta =
-    interfacePriority(left.interfaceName) - interfacePriority(right.interfaceName);
+    interfacePriority(left.interfaceName, left.interfaceHint) -
+    interfacePriority(right.interfaceName, right.interfaceHint);
 
   if (interfaceDelta !== 0) {
     return interfaceDelta;
@@ -117,7 +292,9 @@ function sortCandidates(left, right) {
 
 function listCandidateBackendApiBaseUrls() {
   const interfaces = os.networkInterfaces();
-  const primaryCandidates = [];
+  const interfaceHints = readWindowsInterfaceHints();
+  const preferredCandidates = [];
+  const connectedCandidates = [];
   const fallbackCandidates = [];
   const lastResortCandidates = [];
 
@@ -137,10 +314,26 @@ function listCandidateBackendApiBaseUrls() {
       const candidate = {
         interfaceName,
         address: entry.address,
+        interfaceHint: interfaceHints.get(normalizeInterfaceName(interfaceName)) || null,
       };
 
       if (isPrivateIpv4(entry.address) && !isVirtualOrVpnInterface(interfaceName)) {
-        primaryCandidates.push(candidate);
+        if (candidate.interfaceHint?.isUp && candidate.interfaceHint?.hasDefaultRoute) {
+          preferredCandidates.push(candidate);
+          return;
+        }
+
+        if (
+          candidate.interfaceHint?.isUp ||
+          candidate.interfaceHint?.ipv4Connectivity === "Internet" ||
+          candidate.interfaceHint?.ipv4Connectivity === "LocalNetwork" ||
+          candidate.interfaceHint?.ipv4Connectivity === "Subnet"
+        ) {
+          connectedCandidates.push(candidate);
+          return;
+        }
+
+        fallbackCandidates.push(candidate);
         return;
       }
 
@@ -154,7 +347,8 @@ function listCandidateBackendApiBaseUrls() {
   });
 
   const orderedCandidates = [
-    ...primaryCandidates.sort(sortCandidates),
+    ...preferredCandidates.sort(sortCandidates),
+    ...connectedCandidates.sort(sortCandidates),
     ...fallbackCandidates.sort(sortCandidates),
     ...lastResortCandidates.sort(sortCandidates),
   ];

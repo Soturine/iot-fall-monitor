@@ -91,13 +91,21 @@ String buildPairingFailureMessage(int httpStatus, const String& responseBody) {
     return "Este dispositivo ja esta pareado com outra organizacao.";
   }
 
-  if (httpStatus >= 500) {
-    return "O backend respondeu com erro interno. Confirme se ele esta online e acessivel nessa rede.";
+  if (errorCode == "PAIRING_SCHEMA_MISMATCH") {
+    return "O backend de pairing parece estar com o banco desatualizado. Atualize o schema antes de tentar novamente.";
+  }
+
+  if (errorCode == "PAIRING_DATA_INTEGRITY_ERROR") {
+    return "O backend recusou o claim por uma inconsistencia de dados. Revise o banco e tente novamente.";
   }
 
   const String backendMessage = extractBackendErrorMessage(responseBody);
   if (!backendMessage.isEmpty()) {
     return backendMessage;
+  }
+
+  if (httpStatus >= 500) {
+    return "O backend respondeu com erro interno. Confirme se ele esta online e acessivel nessa rede.";
   }
 
   return "Nao foi possivel concluir o pareamento. Revise a URL do backend e tente novamente.";
