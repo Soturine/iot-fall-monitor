@@ -95,11 +95,11 @@ Fluxo atual:
 
 1. um `organization_admin` abre a tela de dispositivos
 2. gera um codigo temporario de pareamento
-3. o frontend consulta `GET /api/system/network-info` para sugerir a URL local do backend acessivel na rede
-4. o modal mostra `pairingCode`, `suggestedBackendApiBaseUrl`, botoes de copia e um QR com ambos
-5. o usuario informa esses dados no portal local do ESP32 escaneando o QR ou preenchendo URL + codigo manualmente
+3. o frontend consulta `GET /api/system/network-info` para destacar uma URL principal recomendada para a rede atual e guardar fallbacks opcionais
+4. o modal mostra o `pairingCode`, a URL principal, estado de expiracao e as outras URLs apenas em `Outras opcoes de rede`
+5. o usuario abre o portal local do ESP32 e informa manualmente a URL do backend e o codigo temporario
 6. o ESP32 envia `device_uid`, `device_id` e `pairing_code` para `POST /api/pairing/claim`
-7. o backend valida expiracao, uso unico e organizacao
+7. o backend valida expiracao, uso unico e organizacao e devolve erros especificos para invalido, expirado ou ja utilizado
 8. o backend faz o claim transacional, devolve `deviceSyncToken` e o perfil resumido do paciente atual
 9. o device passa para `claimed` e fica locked no tenant
 10. opcionalmente o codigo de pairing ja pode definir o paciente inicial
@@ -126,7 +126,7 @@ Nesta rodada, o firmware tambem passou a:
 - manter um snapshot pequeno dos eventos criticos pendentes em `NVS` para reduzir perda apos reboot rapido
 - aceitar preparacao opt-in para `MQTT/TLS`, preservando `mqtt://` sem TLS como comportamento padrao
 
-O portal local preserva o preenchimento manual atual, mas agora tambem consegue importar os dados do QR do dashboard e tentar a leitura via camera como recurso opcional. O backend continua sendo a fonte da verdade para os dados do paciente; o ESP32 apenas persiste uma copia resumida para uso local futuro.
+O portal local agora fica focado no fluxo manual confiavel de pairing: `BACKEND_API_BASE_URL`, codigo temporario e botao `Parear agora`. O backend continua sendo a fonte da verdade para os dados do paciente; o ESP32 apenas persiste uma copia resumida para uso local futuro.
 
 Para bancada, o firmware agora tambem possui um caminho explicito para forcar o portal local no boot com `FORCE_SETUP_MODE_ON_BOOT = true`. Isso facilita validar o AP `Queda-Setup-*` sem depender de falha real de Wi-Fi ou MQTT.
 

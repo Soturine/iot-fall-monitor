@@ -125,11 +125,11 @@ O pairing nao acontece via MQTT. Ele acontece por HTTP entre o portal do ESP32 e
 1. o `organization_admin` abre a tela de devices
 2. o frontend chama `POST /api/devices/pairing-sessions`
 3. o frontend consulta `GET /api/system/network-info` para sugerir a melhor URL local do backend na rede atual
-4. o modal mostra `pairingCode`, `suggestedBackendApiBaseUrl` e um QR com ambos
+4. o modal destaca uma `primaryBackendApiBaseUrl`, mostra expiracao do codigo e deixa as demais URLs em fallback opcional
 5. o usuario abre o portal local do ESP32
-6. informa `BACKEND_API_BASE_URL` e o codigo manualmente, usa o scanner opcional por camera quando suportado ou, em cenarios tecnicos, importa os dados do QR
+6. informa `BACKEND_API_BASE_URL` e o codigo manualmente no portal local
 7. o ESP32 chama `POST /api/pairing/claim`
-8. o backend valida o codigo e faz o claim transacional
+8. o backend valida o codigo, classifica erros de invalido/expirado/ja usado e faz o claim transacional
 9. o backend devolve `deviceSyncToken` e um `patientProfile` resumido
 10. o device passa para `claimed` e fica locked na organizacao
 11. se o pairing session tiver um `patient_id`, o backend cria tambem o assignment inicial
@@ -176,6 +176,10 @@ Resposta esperada:
 ```json
 {
   "suggestedBackendApiBaseUrl": "http://192.168.0.15:4000",
+  "primaryBackendApiBaseUrl": "http://192.168.0.15:4000",
+  "fallbackBackendApiBaseUrls": [
+    "http://10.0.0.8:4000"
+  ],
   "candidateBackendApiBaseUrls": [
     "http://192.168.0.15:4000",
     "http://10.0.0.8:4000"
@@ -183,7 +187,7 @@ Resposta esperada:
 }
 ```
 
-Esse endpoint ignora loopback e ajuda o frontend a gerar o QR com uma URL que faca sentido para o ESP32 naquela rede.
+Esse endpoint ignora loopback, prioriza interfaces reais da rede atual e ajuda o frontend a destacar uma URL principal confiavel para o ESP32, mantendo fallbacks apenas quando fizer sentido.
 
 ### Sincronizacao resumida do paciente para o ESP32
 

@@ -20,6 +20,89 @@ uint16_t parsePortOrDefault(const String& value, uint16_t fallback) {
   return static_cast<uint16_t>(parsed);
 }
 
+String readJsonStringMember(const JsonVariantConst& value) {
+  if (!value.is<const char*>()) {
+    return "";
+  }
+
+  return String(value.as<const char*>());
+}
+
+String extractBackendErrorCode(const String& responseBody) {
+  if (responseBody.isEmpty()) {
+    return "";
+  }
+
+  StaticJsonDocument<512> doc;
+  if (deserializeJson(doc, responseBody) != DeserializationError::Ok) {
+    return "";
+  }
+
+  const String detailsCode = readJsonStringMember(doc["details"]["code"]);
+  if (!detailsCode.isEmpty()) {
+    return detailsCode;
+  }
+
+  const String errorCode = readJsonStringMember(doc["error"]["code"]);
+  if (!errorCode.isEmpty()) {
+    return errorCode;
+  }
+
+  return readJsonStringMember(doc["code"]);
+}
+
+String extractBackendErrorMessage(const String& responseBody) {
+  if (responseBody.isEmpty()) {
+    return "";
+  }
+
+  StaticJsonDocument<512> doc;
+  if (deserializeJson(doc, responseBody) != DeserializationError::Ok) {
+    return "";
+  }
+
+  const String message = readJsonStringMember(doc["message"]);
+  if (!message.isEmpty()) {
+    return message;
+  }
+
+  return readJsonStringMember(doc["error"]["message"]);
+}
+
+String buildPairingFailureMessage(int httpStatus, const String& responseBody) {
+  if (httpStatus <= 0) {
+    return "Nao foi possivel alcancar o backend nessa URL. Use o IP real do notebook na rede atual.";
+  }
+
+  const String errorCode = extractBackendErrorCode(responseBody);
+  if (errorCode == "PAIRING_CODE_EXPIRED") {
+    return "Codigo expirado. Gere um novo no dashboard.";
+  }
+
+  if (errorCode == "PAIRING_CODE_INVALID" || errorCode == "PAIRING_CODE_REQUIRED") {
+    return "Codigo invalido. Confira o valor informado.";
+  }
+
+  if (errorCode == "PAIRING_CODE_USED") {
+    return "Codigo ja utilizado. Gere outro codigo.";
+  }
+
+  if (errorCode == "DEVICE_CLAIMED_ELSEWHERE") {
+    return "Este dispositivo ja esta pareado com outra organizacao.";
+  }
+
+  if (httpStatus >= 500) {
+    return "O backend respondeu com erro interno. Confirme se ele esta online e acessivel nessa rede.";
+  }
+
+  const String backendMessage = extractBackendErrorMessage(responseBody);
+  if (!backendMessage.isEmpty()) {
+    return backendMessage;
+  }
+
+  return "Nao foi possivel concluir o pareamento. Revise a URL do backend e tente novamente.";
+}
+
 }  // namespace
 
 SetupPortal::SetupPortal(ConfigStore& configStore) : configStore_(configStore) {}
@@ -231,7 +314,7 @@ void SetupPortal::handlePairDevice() {
 
   if (!DeviceSettings::hasValidBackendApiBaseUrl(updated)) {
     flashMessage_ =
-        "Backend API invalida. Use a URL HTTP/HTTPS real do backend e nunca localhost no ESP32.";
+        "Backend API invalida. Use o IP real do notebook na rede atual com http:// ou https://.";
     flashTone_ = "error";
     redirectToPortal();
     return;
@@ -258,7 +341,8 @@ void SetupPortal::handlePairDevice() {
   serializeJson(doc, payload);
 
   if (!httpClient.begin(endpoint)) {
-    flashMessage_ = "Nao foi possivel preparar a conexao HTTP com o backend para pareamento.";
+    flashMessage_ =
+        "Nao foi possivel alcancar o backend nessa URL. Use o IP real do notebook na rede atual.";
     flashTone_ = "error";
     redirectToPortal();
     return;
@@ -268,6 +352,14 @@ void SetupPortal::handlePairDevice() {
   const int httpStatus = httpClient.POST(payload);
   const String responseBody = httpClient.getString();
   httpClient.end();
+
+  if (httpStatus <= 0) {
+    flashMessage_ =
+        "Nao foi possivel alcancar o backend nessa URL. Use o IP real do notebook na rede atual.";
+    flashTone_ = "error";
+    redirectToPortal();
+    return;
+  }
 
   if (httpStatus >= 200 && httpStatus < 300) {
     String pairingDetails;
@@ -299,11 +391,7 @@ void SetupPortal::handlePairDevice() {
     return;
   }
 
-  flashMessage_ = "Pareamento falhou. Backend respondeu HTTP " + String(httpStatus) +
-                  ". Revise o codigo, a URL do backend e se o notebook esta acessivel na rede atual.";
-  if (!responseBody.isEmpty()) {
-    flashMessage_ += " Resposta: " + responseBody;
-  }
+  flashMessage_ = buildPairingFailureMessage(httpStatus, responseBody);
   flashTone_ = "error";
   redirectToPortal();
 }
@@ -494,16 +582,12 @@ void SetupPortal::appendPairingCard(String& html) const {
   html += "<p class='muted'>Device UID tecnico deste ESP32: <span class='mono'>";
   html += htmlEscape(DeviceSettings::technicalDeviceUid());
   html += "</span></p>";
-  html += "<div class='grid' style='margin-top:14px;'><div><label>Importar dados do QR</label><textarea id='pairing_qr_payload' placeholder='Cole aqui o JSON do QR gerado no dashboard. Ex.: {\"backendApiBaseUrl\":\"http://192.168.x.x:4000\",\"pairingCode\":\"ABC123\"}'></textarea></div>";
-  html += "<div class='row'><button class='secondary' id='import_qr_payload_button' type='button'>Importar dados do QR</button><button class='secondary' id='scan_qr_button' type='button'>Escanear QR</button></div>";
-  html += "<p class='hint' id='qr_import_status'>Se a camera nao estiver disponivel no navegador ou na rede atual, continue usando a colagem do payload do QR ou o preenchimento manual.</p>";
-  html += "<div class='hidden' id='qr_scanner_panel'><video autoplay id='qr_scanner_video' muted playsinline></video><div class='row'><button class='secondary' id='stop_qr_scan_button' type='button'>Parar scanner</button></div></div></div>";
   html += "<form method='post' action='/pair' class='grid'>";
   html += "<div class='two grid'><div><label>Backend API base URL</label><input id='pairing_backend_api_base_url' name='backend_api_base_url' value='";
   html += htmlEscape(config_.mqtt.backendApiBaseUrl);
   html += "' placeholder='http://IP-DO-NOTEBOOK:4000' required></div>";
   html += "<div><label>Codigo de pareamento</label><input id='pairing_code' name='pairing_code' placeholder='ABC123' required></div></div>";
-  html += "<p class='muted'>Use o codigo temporario gerado no dashboard. O backend valida expiracao, uso unico e organizacao antes de dar claim definitivo ao device.</p>";
+  html += "<p class='muted'>Use a URL principal recomendada no dashboard e o codigo temporario ainda valido. O backend valida expiracao, uso unico e organizacao antes de concluir o claim.</p>";
   html += "<div class='row'><button class='primary' type='submit'>Parear agora</button></div></form>";
   html += "</div>";
 
@@ -518,21 +602,6 @@ void SetupPortal::appendRestartCard(String& html) const {
   html += "</div>";
 }
 
-void SetupPortal::appendPortalScript(String& html) const {
-  html += "<script>";
-  html += "(()=>{const importButton=document.getElementById('import_qr_payload_button');const scanButton=document.getElementById('scan_qr_button');const stopScanButton=document.getElementById('stop_qr_scan_button');const status=document.getElementById('qr_import_status');const payloadField=document.getElementById('pairing_qr_payload');const pairingCodeField=document.getElementById('pairing_code');const pairingBackendField=document.getElementById('pairing_backend_api_base_url');const generalBackendField=document.getElementById('general_backend_api_base_url');const scannerPanel=document.getElementById('qr_scanner_panel');const scannerVideo=document.getElementById('qr_scanner_video');let stream=null;let detector=null;let scanTimer=null;";
-  html += "const setStatus=(message,tone)=>{status.textContent=message;status.className='hint '+(tone||'');};";
-  html += "const isLoopbackHost=(host)=>['localhost','127.0.0.1','::1'].includes(String(host||'').toLowerCase());";
-  html += "const normalizeBackendUrl=(value)=>{let parsed;const raw=String(value||'').trim();try{parsed=new URL(raw);}catch{return {error:'Informe uma backendApiBaseUrl HTTP/HTTPS valida.'};}if(!/^https?:$/.test(parsed.protocol)){return {error:'Use http:// ou https:// na backendApiBaseUrl.'};}if(isLoopbackHost(parsed.hostname)){return {error:'Nao use localhost/127.0.0.1/::1 no ESP32.'};}const normalized=parsed.href.replace(/\\/+$/,'');return {value:normalized};};";
-  html += "const applyPayload=(payload)=>{if(!payload||typeof payload!=='object'){throw new Error('O payload do QR precisa ser um JSON com backendApiBaseUrl e pairingCode.');}const parsedBackend=normalizeBackendUrl(payload.backendApiBaseUrl);if(parsedBackend.error){throw new Error(parsedBackend.error);}const backendApiBaseUrl=parsedBackend.value;const pairingCode=String(payload.pairingCode||'').trim();if(!pairingCode){throw new Error('O pairingCode do QR veio vazio.');}pairingBackendField.value=backendApiBaseUrl;generalBackendField.value=backendApiBaseUrl;pairingCodeField.value=pairingCode.toUpperCase();setStatus('Dados do QR importados. Revise e clique em Parear agora.','success');};";
-  html += "importButton?.addEventListener('click',()=>{try{applyPayload(JSON.parse(payloadField.value));}catch(error){setStatus(error instanceof Error?error.message:'Nao foi possivel importar o payload do QR.','error');}});";
-  html += "const stopScanner=()=>{if(scanTimer){clearInterval(scanTimer);scanTimer=null;}if(stream){stream.getTracks().forEach((track)=>track.stop());stream=null;}scannerPanel.classList.add('hidden');};";
-  html += "stopScanButton?.addEventListener('click',stopScanner);";
-  html += "scanButton?.addEventListener('click',async()=>{if(!(window.isSecureContext&&navigator.mediaDevices&&navigator.mediaDevices.getUserMedia&&'BarcodeDetector' in window)){setStatus('Scanner indisponivel neste navegador/rede. Continue com a colagem do payload do QR.','error');return;}try{const formats=await window.BarcodeDetector.getSupportedFormats();if(!formats.includes('qr_code')){setStatus('O navegador nao oferece leitura nativa de QR code aqui. Use a colagem do payload.','error');return;}detector=new window.BarcodeDetector({formats:['qr_code']});stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});scannerVideo.srcObject=stream;scannerPanel.classList.remove('hidden');setStatus('Aponte a camera para o QR do dashboard.','success');scanTimer=setInterval(async()=>{if(!detector||!scannerVideo||scannerVideo.readyState<2){return;}try{const codes=await detector.detect(scannerVideo);if(!codes.length||!codes[0].rawValue){return;}payloadField.value=codes[0].rawValue;applyPayload(JSON.parse(codes[0].rawValue));stopScanner();}catch(error){setStatus('Nao foi possivel interpretar o QR pela camera. Use a colagem manual.','error');stopScanner();}},900);}catch(error){setStatus('Nao foi possivel abrir a camera. Use a colagem do payload do QR.','error');stopScanner();}});";
-  html += "})();";
-  html += "</script>";
-}
-
 String SetupPortal::renderPage() const {
   String html;
   html.reserve(16384);
@@ -544,7 +613,6 @@ String SetupPortal::renderPage() const {
   appendMqttCard(html);
   appendPairingCard(html);
   appendRestartCard(html);
-  appendPortalScript(html);
   html += "</div></body></html>";
   return html;
 }

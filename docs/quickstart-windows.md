@@ -251,15 +251,16 @@ No site:
 2. clique em `Parear dispositivo`
 3. opcionalmente escolha um paciente inicial
 4. gere o codigo temporario
+5. copie primeiro a URL principal recomendada para a rede atual
 
 ### Passo 4: concluir o claim no portal do ESP32
 
 No portal do ESP32:
 
 1. abra a secao de pairing
-2. confirme `BACKEND_API_BASE_URL`
+2. preencha `BACKEND_API_BASE_URL` com a URL principal recomendada
 3. cole o codigo temporario
-4. envie
+4. clique em `Parear agora`
 
 Se tudo estiver correto:
 
@@ -269,19 +270,15 @@ Se tudo estiver correto:
 - se o pairing code tinha paciente inicial, o assignment ja fica criado
 - o ESP32 salva `deviceSyncToken` e o perfil resumido do paciente atual em `NVS`
 
-### Opcao rapida com QR
+### Se a URL principal nao funcionar
 
-O modal `Parear dispositivo` agora tambem mostra:
+O modal `Parear dispositivo` mostra uma URL principal recomendada e, quando necessario, uma area `Outras opcoes de rede`.
 
-- `pairingCode`
-- URL sugerida do backend na rede atual
-- QR code
+Use as URLs secundarias apenas se:
 
-No portal do ESP32 voce pode:
-
-1. escanear o QR quando o navegador suportar camera
-2. usar `Importar dados do QR` em cenarios tecnicos
-3. ou continuar no fluxo manual de URL + codigo
+1. o celular nao alcancar o backend pela URL principal
+2. o notebook estiver em outra interface da mesma rede
+3. a rede atual tiver uma topologia incomum
 
 ## 12. Como preencher MQTT e backend corretamente no ESP32
 

@@ -1,7 +1,7 @@
 {
   "name": "frontend",
   "private": true,
-  "version": "0.8.3",
+  "version": "0.8.4",
   "type": "module",
   "engines": {
     "node": ">=20.0.0"
@@ -15,7 +15,6 @@
   "dependencies": {
     "axios": "^1.14.0",
     "lucide-react": "^1.7.0",
-    "qrcode.react": "^4.2.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-hot-toast": "^2.6.0",

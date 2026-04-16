@@ -125,8 +125,6 @@ O portal local do ESP32 agora cobre:
 - `MQTT_CLIENT_ID`
 - `BACKEND_API_BASE_URL`
 - claim por codigo temporario
-- importacao dos dados do QR gerado no dashboard
-- leitura opcional do QR por camera como progressive enhancement
 - visualizacao do perfil resumido do paciente sincronizado
 
 Fluxo oficial:
@@ -255,7 +253,6 @@ O portal possui uma secao especifica de pairing.
 
 - `BACKEND_API_BASE_URL`
 - `pairing_code`
-- opcionalmente os dados do QR gerado no dashboard
 
 ### O que o firmware envia
 
@@ -272,33 +269,21 @@ O portal possui uma secao especifica de pairing.
 - o device fica locked naquela organizacao
 - se o codigo foi gerado com paciente inicial, o backend tambem cria o vinculo inicial
 
-### Importar QR no portal
+### UX atual do pairing no portal
 
-O portal preserva o preenchimento manual, mas agora tambem aceita:
+O portal foi simplificado para o caminho que funciona de forma mais consistente em captive portal HTTP e no uso por celular:
 
-- colar os dados do QR
-- validar `backendApiBaseUrl`
-- rejeitar loopback (`localhost`, `127.0.0.1`, `::1`)
-- preencher automaticamente `BACKEND_API_BASE_URL` e `pairing_code`
+- preencher `BACKEND_API_BASE_URL`
+- preencher `pairing_code`
+- clicar em `Parear agora`
 
-Formato esperado:
+Mensagens esperadas no portal:
 
-```json
-{
-  "backendApiBaseUrl": "http://192.168.0.15:4000",
-  "pairingCode": "ABC123"
-}
-```
-
-### Scanner de QR por camera
-
-O botao `Escanear QR` e opcional.
-
-Na pratica:
-
-- ele tenta usar camera apenas quando o navegador suportar esse fluxo
-- captive portal por HTTP pode limitar camera em alguns navegadores
-- o fallback obrigatorio continua sendo preencher manualmente; a colagem dos dados do QR fica como recurso tecnico complementar
+- `Codigo expirado. Gere um novo no dashboard.`
+- `Codigo invalido. Confira o valor informado.`
+- `Codigo ja utilizado. Gere outro codigo.`
+- `Nao foi possivel alcancar o backend nessa URL. Use o IP real do notebook na rede atual.`
+- `Backend API invalida. Use o IP real do notebook na rede atual com http:// ou https://.`
 
 ## Perfil resumido do paciente no ESP32
 

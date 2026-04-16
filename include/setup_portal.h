@@ -55,7 +55,6 @@ class SetupPortal {
   void appendWifiCard(String& html) const;
   void appendMqttCard(String& html) const;
   void appendPairingCard(String& html) const;
-  void appendPortalScript(String& html) const;
   void appendRestartCard(String& html) const;
 
   ConfigStore& configStore_;

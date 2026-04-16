@@ -62,6 +62,8 @@ export interface PatientProfileSummary {
 
 export interface NetworkInfoResponse {
   suggestedBackendApiBaseUrl: string | null;
+  primaryBackendApiBaseUrl?: string | null;
+  fallbackBackendApiBaseUrls?: string[];
   candidateBackendApiBaseUrls: string[];
 }
 

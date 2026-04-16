@@ -1,5 +1,35 @@
 # Changelog
 
+## [v0.8.4] - 2026-04-15
+### Adicionado
+- `primaryBackendApiBaseUrl` e `fallbackBackendApiBaseUrls` em `GET /api/system/network-info` para a UI tratar uma URL principal e fallbacks de rede sem quebrar compatibilidade com `suggestedBackendApiBaseUrl`
+
+### Alterado
+- versao alinhada para `0.8.4` em `CHANGELOG.md`, `package.json` da raiz, `backend/package.json` e `frontend/package.json`
+- modal de pairing do dashboard passou a destacar uma URL principal recomendada, mostrar expiracao do codigo e esconder URLs secundarias em `Outras opcoes de rede`
+- portal local do ESP32 foi simplificado para o fluxo manual confiavel de `BACKEND_API_BASE_URL` + codigo temporario + `Parear agora`
+- `README.md`, `frontend/README.md`, `docs/integration.md`, `docs/firmware-hardware.md` e `docs/quickstart-windows.md` foram alinhados ao fluxo simplificado
+- o frontend deixou de depender de `qrcode.react`, removendo uma dependencia que ja nao fazia parte da UX real
+
+### Corrigido
+- heuristica de `network-info` agora prioriza interfaces LAN reais e desprioriza adaptadores virtuais, host-only e VPN ao sugerir a URL principal
+- o backend passou a classificar erros de pairing com codigos mais claros para invalido, expirado, ja usado e device ja pareado em outra organizacao
+- o portal do ESP32 agora traduz falhas de pairing em mensagens mais objetivas para backend inacessivel, URL invalida e codigos rejeitados
+
+### Pendente / Faltando
+- validar o fluxo completo em hardware real com celular e notebook na mesma rede para confirmar a heuristica da URL principal em cenarios reais
+
+### Limitacoes conhecidas
+- o pairing ainda depende de o notebook/backend estar acessivel pelo ESP32 na mesma rede ou em uma rota permitida
+- `battery_level` do firmware real ainda e placeholder fixo em `100`
+
+### Divida tecnica / Pontos fracos
+- `src/setup_portal.cpp` ainda concentra HTML inline e mensagens de UX embarcada
+- a heuristica de escolha da URL principal continua sendo best effort e pode exigir fallback em redes muito incomuns
+
+### Proximos passos sugeridos
+- validar em bancada com Android e iPhone se a URL principal sugerida reduz tentativas manuais na maioria dos cenarios
+- considerar uma telemetria administrativa simples para registrar falhas de pairing por tipo de erro no backend
 ## [v0.8.3] - 2026-04-11
 ### Adicionado
 - governanca minima do repositorio com `AGENTS.md`, `docs/commit-guidelines.md` e `docs/release-rules.md`

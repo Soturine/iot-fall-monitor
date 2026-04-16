@@ -1,8 +1,7 @@
 import { useDeferredValue, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Copy, Edit3, QrCode, ShieldCheck, UsersRound } from "lucide-react";
+import { Copy, Edit3, ShieldCheck, UsersRound } from "lucide-react";
 import toast from "react-hot-toast";
-import { QRCodeSVG } from "qrcode.react";
 
 import { DeviceFormModal, type DeviceFormValues } from "../components/devices/DeviceFormModal";
 import { Badge } from "../components/ui/Badge";
@@ -42,6 +41,40 @@ const emptyAssignmentForm: AssignmentFormState = {
   reason: "",
 };
 
+function formatPairingCountdown(expiresAt?: string | null, nowMs = Date.now()) {
+  if (!expiresAt) {
+    return {
+      expired: false,
+      label: "Validade nao informada",
+    };
+  }
+
+  const expiresAtMs = new Date(expiresAt).getTime();
+  if (Number.isNaN(expiresAtMs)) {
+    return {
+      expired: false,
+      label: "Validade invalida",
+    };
+  }
+
+  const remainingMs = expiresAtMs - nowMs;
+  if (remainingMs <= 0) {
+    return {
+      expired: true,
+      label: "Expirado",
+    };
+  }
+
+  const remainingSeconds = Math.ceil(remainingMs / 1000);
+  const minutes = Math.floor(remainingSeconds / 60);
+  const seconds = remainingSeconds % 60;
+
+  return {
+    expired: false,
+    label: minutes > 0 ? `${minutes} min ${seconds}s restantes` : `${seconds}s restantes`,
+  };
+}
+
 export function DevicesPage() {
   const { socket } = useRealtime();
   const { activeRole, user } = useAuth();
@@ -66,21 +99,23 @@ export function DevicesPage() {
   const [networkInfoLoading, setNetworkInfoLoading] = useState(false);
   const [networkInfoError, setNetworkInfoError] = useState("");
   const [selectedBackendApiBaseUrl, setSelectedBackendApiBaseUrl] = useState("");
+  const [pairingNowMs, setPairingNowMs] = useState(Date.now());
   const deferredSearch = useDeferredValue(search);
 
   const canManageDevices =
     activeRole === "organization_admin" || user?.globalRole === "platform_admin";
-  const pairingQrPayload =
-    latestPairingSession && selectedBackendApiBaseUrl
-      ? JSON.stringify(
-          {
-            backendApiBaseUrl: selectedBackendApiBaseUrl,
-            pairingCode: latestPairingSession.pairingCode,
-          },
-          null,
-          2,
-        )
-      : "";
+  const primaryBackendApiBaseUrl =
+    networkInfo?.primaryBackendApiBaseUrl ||
+    networkInfo?.suggestedBackendApiBaseUrl ||
+    networkInfo?.candidateBackendApiBaseUrls[0] ||
+    "";
+  const fallbackBackendApiBaseUrls =
+    networkInfo?.fallbackBackendApiBaseUrls ||
+    networkInfo?.candidateBackendApiBaseUrls.filter(
+      (candidate) => candidate !== primaryBackendApiBaseUrl,
+    ) ||
+    [];
+  const pairingStatus = formatPairingCountdown(latestPairingSession?.expiresAt, pairingNowMs);
 
   async function copyToClipboard(value: string, successMessage: string) {
     if (!value) {
@@ -100,6 +135,11 @@ export function DevicesPage() {
     setLatestPairingSession(null);
     setPairingForm(emptyPairingForm);
     setPairingModalOpen(true);
+  }
+
+  function resetGeneratedPairingCode() {
+    setLatestPairingSession(null);
+    setPairingNowMs(Date.now());
   }
 
   useEffect(() => {
@@ -177,7 +217,8 @@ export function DevicesPage() {
 
         setNetworkInfo(response.data);
         setSelectedBackendApiBaseUrl(
-          response.data.suggestedBackendApiBaseUrl ||
+          response.data.primaryBackendApiBaseUrl ||
+            response.data.suggestedBackendApiBaseUrl ||
             response.data.candidateBackendApiBaseUrls[0] ||
             "",
         );
@@ -202,6 +243,22 @@ export function DevicesPage() {
       active = false;
     };
   }, [canManageDevices, pairingModalOpen]);
+
+  useEffect(() => {
+    if (!pairingModalOpen || !latestPairingSession?.expiresAt) {
+      return;
+    }
+
+    setPairingNowMs(Date.now());
+
+    const timer = window.setInterval(() => {
+      setPairingNowMs(Date.now());
+    }, 1000);
+
+    return () => {
+      window.clearInterval(timer);
+    };
+  }, [latestPairingSession?.expiresAt, pairingModalOpen]);
 
   async function submitDevice(values: DeviceFormValues) {
     if (!editingDevice) {
@@ -244,6 +301,7 @@ export function DevicesPage() {
       );
 
       setLatestPairingSession(response.data.session);
+      setPairingNowMs(Date.now());
       toast.success("Código de pareamento gerado.");
     } catch (error) {
       toast.error(getErrorMessage(error));
@@ -502,6 +560,13 @@ export function DevicesPage() {
           latestPairingSession ? (
             <div className="flex items-center justify-end gap-3">
               <Button
+                onClick={resetGeneratedPairingCode}
+                type="button"
+                variant="secondary"
+              >
+                Gerar novo codigo
+              </Button>
+              <Button
                 onClick={() => {
                   setPairingModalOpen(false);
                   setLatestPairingSession(null);
@@ -537,36 +602,105 @@ export function DevicesPage() {
       >
         {latestPairingSession ? (
           <div className="space-y-4">
-            <div className="rounded-[28px] border border-emerald-200 bg-emerald-50 p-6 text-center">
-              <p className="text-xs font-bold uppercase tracking-[0.3em] text-emerald-700">
+            <div
+              className={`rounded-[28px] border p-6 text-center ${
+                pairingStatus.expired
+                  ? "border-amber-200 bg-amber-50"
+                  : "border-emerald-200 bg-emerald-50"
+              }`}
+            >
+              <div className="flex flex-wrap items-center justify-between gap-3 text-left">
+                <div>
+                  <p
+                    className={`text-xs font-bold uppercase tracking-[0.3em] ${
+                      pairingStatus.expired ? "text-amber-700" : "text-emerald-700"
+                    }`}
+                  >
+                    Codigo temporario
+                  </p>
+                  <p
+                    className={`mt-2 text-sm font-semibold ${
+                      pairingStatus.expired ? "text-amber-900" : "text-emerald-900"
+                    }`}
+                  >
+                    {pairingStatus.expired ? "Expirado" : "Valido agora"}
+                  </p>
+                </div>
+                <Button
+                  onClick={() =>
+                    copyToClipboard(
+                      latestPairingSession.pairingCode,
+                      "Codigo de pairing copiado.",
+                    )
+                  }
+                  type="button"
+                  variant="secondary"
+                >
+                  <Copy className="h-4 w-4" />
+                  Copiar codigo
+                </Button>
+              </div>
+              <p
+                className={`text-xs font-bold uppercase tracking-[0.3em] ${
+                  pairingStatus.expired ? "text-amber-700" : "text-emerald-700"
+                }`}
+              >
                 Código de pareamento
               </p>
-              <p className="mt-4 font-display text-5xl text-emerald-900">
+              <p
+                className={`mt-4 font-display text-5xl ${
+                  pairingStatus.expired ? "text-amber-900" : "text-emerald-900"
+                }`}
+              >
                 {latestPairingSession.pairingCode}
               </p>
-              <p className="mt-4 text-sm text-emerald-900">
+              <p
+                className={`mt-4 text-sm ${
+                  pairingStatus.expired ? "text-amber-900" : "text-emerald-900"
+                }`}
+              >
                 Expira em {formatDateTime(latestPairingSession.expiresAt)}.
               </p>
+              <p
+                className={`mt-2 text-sm font-semibold ${
+                  pairingStatus.expired ? "text-amber-900" : "text-emerald-900"
+                }`}
+              >
+                {pairingStatus.label}
+              </p>
               {latestPairingSession.patientName ? (
-                <p className="mt-2 text-sm text-emerald-900">
+                <p
+                  className={`mt-2 text-sm ${
+                    pairingStatus.expired ? "text-amber-900" : "text-emerald-900"
+                  }`}
+                >
                   Paciente inicial: {latestPairingSession.patientName}
                 </p>
               ) : null}
+              {pairingStatus.expired ? (
+                <p className="mt-3 text-sm text-amber-900">
+                  Gere um novo codigo no dashboard antes de tentar novamente.
+                </p>
+              ) : null}
             </div>
-            <div className="grid gap-4 lg:grid-cols-[1fr_260px]">
+            <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
               <div className="space-y-4">
                 <div className="rounded-[24px] border border-surface-200 bg-white p-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <p className="text-xs font-bold uppercase tracking-[0.28em] text-surface-500">
-                        Backend sugerido para o ESP32
+                        URL principal recomendada
                       </p>
                       <p className="mt-2 break-all text-sm font-semibold text-surface-900">
-                        {selectedBackendApiBaseUrl || "Nao foi possivel sugerir um IP automaticamente."}
+                        {primaryBackendApiBaseUrl || "Nao foi possivel detectar a melhor URL automaticamente."}
+                      </p>
+                      <p className="mt-2 text-sm text-surface-600">
+                        Use esta URL primeiro. As outras opcoes ficam abaixo apenas como fallback.
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <Button
+                        disabled={!selectedBackendApiBaseUrl}
                         onClick={() =>
                           copyToClipboard(
                             selectedBackendApiBaseUrl,
@@ -605,7 +739,7 @@ export function DevicesPage() {
 
                   {networkInfoLoading ? (
                     <p className="mt-3 text-sm text-surface-500">
-                      Descobrindo IPs locais candidatos do backend...
+                      Detectando a melhor URL do backend para esta rede...
                     </p>
                   ) : null}
 
@@ -615,62 +749,65 @@ export function DevicesPage() {
                     </p>
                   ) : null}
 
-                  {networkInfo?.candidateBackendApiBaseUrls.length ? (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {networkInfo.candidateBackendApiBaseUrls.map((candidate) => (
-                        <button
-                          key={candidate}
-                          className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-                            candidate === selectedBackendApiBaseUrl
-                              ? "border-surface-900 bg-surface-900 text-white"
-                              : "border-surface-200 bg-surface-50 text-surface-700 hover:border-surface-300"
-                          }`}
-                          onClick={() => setSelectedBackendApiBaseUrl(candidate)}
-                          type="button"
-                        >
-                          {candidate}
-                        </button>
-                      ))}
-                    </div>
+                  {fallbackBackendApiBaseUrls.length ? (
+                    <details className="mt-4 rounded-[20px] border border-surface-200 bg-surface-50 px-4 py-3">
+                      <summary className="cursor-pointer list-none text-sm font-semibold text-surface-900">
+                        Outras opcoes de rede
+                      </summary>
+                      <p className="mt-2 text-sm text-surface-600">
+                        Use estas URLs apenas se a principal nao responder no celular ou no portal
+                        do ESP32.
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {fallbackBackendApiBaseUrls.map((candidate) => (
+                          <button
+                            key={candidate}
+                            className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                              candidate === selectedBackendApiBaseUrl
+                                ? "border-surface-900 bg-surface-900 text-white"
+                                : "border-surface-200 bg-white text-surface-700 hover:border-surface-300"
+                            }`}
+                            onClick={() => setSelectedBackendApiBaseUrl(candidate)}
+                            type="button"
+                          >
+                            {candidate}
+                          </button>
+                        ))}
+                      </div>
+                    </details>
                   ) : null}
                 </div>
 
               </div>
 
               <div className="rounded-[28px] border border-surface-200 bg-white p-5">
-                <div className="flex items-center gap-2 text-surface-700">
-                  <QrCode className="h-5 w-5" />
-                  <p className="text-sm font-semibold">QR do pairing</p>
+                <p className="text-sm font-semibold text-surface-900">
+                  Como concluir no portal do ESP32
+                </p>
+                <ol className="mt-4 list-decimal space-y-3 pl-5 text-sm text-surface-700">
+                  <li>Abra o portal local do ESP32.</li>
+                  <li>Preencha o campo Backend API base URL com a URL principal recomendada.</li>
+                  <li>Digite o codigo temporario mostrado acima.</li>
+                  <li>Clique em Parear agora.</li>
+                </ol>
+                <div className="mt-4 rounded-[20px] bg-surface-50 p-4 text-sm text-surface-700">
+                  <p className="font-semibold text-surface-900">Avisos importantes</p>
+                  <ul className="mt-3 space-y-2">
+                    <li>O codigo expira rapido e pode ser usado uma unica vez.</li>
+                    <li>Se o portal nao alcancar o backend, troque para uma URL de fallback.</li>
+                    <li>Nao use localhost ou IP de adaptador virtual no ESP32.</li>
+                  </ul>
                 </div>
-                {pairingQrPayload ? (
-                  <div className="mt-4 flex flex-col items-center gap-4">
-                    <div className="rounded-[24px] border border-surface-100 bg-white p-4">
-                      <QRCodeSVG
-                        bgColor="#ffffff"
-                        fgColor="#15312a"
-                        includeMargin
-                        size={190}
-                        value={pairingQrPayload}
-                      />
-                    </div>
-                    <p className="max-w-xs text-center text-sm text-surface-600">
-                      Escaneie o QR ou preencha a URL e o codigo no portal do ESP32.
-                    </p>
-                  </div>
-                ) : (
-                  <p className="mt-4 text-sm text-surface-500">
-                    Informe ou escolha uma URL valida do backend para gerar o QR.
-                  </p>
-                )}
               </div>
             </div>
             <div className="rounded-[24px] bg-surface-50 p-4 text-sm text-surface-700">
               <p className="font-semibold text-surface-900">Como usar</p>
               <ol className="mt-3 list-decimal space-y-2 pl-5">
                 <li>Abra o portal local do ESP32.</li>
-                <li>Preencha a URL real do backend acessível na rede.</li>
-                <li>Digite este código temporário.</li>
-                <li>O backend fará o claim transacional do device para a organização.</li>
+                <li>Use primeiro a URL principal recomendada para a rede atual.</li>
+                <li>Digite este codigo temporario antes da expiracao.</li>
+                <li>Se necessario, abra Outras opcoes de rede e tente uma URL de fallback.</li>
+                <li>O backend valida expiracao, uso unico e faz o claim do device na organizacao.</li>
               </ol>
             </div>
           </div>

@@ -12,7 +12,6 @@ Dashboard web responsivo para autenticacao, operacao multi-tenant, gestao de pac
 - `Axios`
 - `Socket.IO Client`
 - `Recharts`
-- `qrcode.react`
 
 Ambiente de desenvolvimento recomendado nesta fase:
 
@@ -127,7 +126,7 @@ Esse fluxo foi adicionado porque a migracao para multi-tenant pode deixar navega
 - `login`: entrar com usuario existente ou criar uma nova organizacao
 - `dashboard`: metricas, dispositivos, alertas e eventos do escopo ativo
 - `patients`: pacientes da organizacao, status, notas e caregivers atribuidos
-- `devices`: inventario de devices, claim status, pairing code, QR de onboarding e vinculo com paciente
+- `devices`: inventario de devices, claim status, pairing code, URL recomendada de onboarding e vinculo com paciente
 - `devices/:id`: telemetria, eventos, alertas e historico de assignment do device
 - `alerts`: fila operacional e historico do escopo ativo
 - `organization`: organizacao atual, memberships e criacao de novos membros
@@ -146,9 +145,9 @@ Na tela `/devices`, o admin consegue:
 
 1. gerar um codigo temporario de pareamento
 2. opcionalmente associar um paciente inicial nesse codigo
-3. ver a URL sugerida do backend na rede atual via `GET /api/system/network-info`
+3. ver a URL principal recomendada do backend na rede atual via `GET /api/system/network-info`
 4. copiar URL e codigo
-5. mostrar um QR com os dados de pairing (`backendApiBaseUrl + pairingCode`)
+5. acompanhar expiracao do codigo e abrir fallbacks de rede apenas quando necessario
 6. acompanhar o device passando de `unclaimed` para `claimed`
 7. ajustar depois o vinculo com paciente
 
@@ -174,7 +173,7 @@ O portal do ESP32 nao substitui o frontend principal.
 Na pratica:
 
 - o portal do ESP32 serve para rede, MQTT, `BACKEND_API_BASE_URL` e pareamento
-- ele agora tambem aceita importar os dados do QR e tentar leitura por camera quando o navegador suportar esse recurso
+- o portal do ESP32 foi simplificado para URL do backend + codigo de pareamento + botao de envio
 - o dashboard principal continua sendo a interface de operacao humana
 - o modo de teste `MPU6050 + buzzer` segue sendo apenas local ao firmware e nao cria telas novas aqui
 - o AP `Queda-Setup-*` so aparece quando o firmware entra em `SETUP_MODE` ou quando `FORCE_SETUP_MODE_ON_BOOT = true`

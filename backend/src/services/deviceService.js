@@ -334,10 +334,9 @@ async function claimDeviceToOrganization(
     current.organization_id &&
     Number(current.organization_id) !== Number(organizationId)
   ) {
-    throw new HttpError(
-      409,
-      "Este dispositivo já está pareado com outra organização.",
-    );
+    throw new HttpError(409, "Este dispositivo ja esta pareado com outra organizacao.", {
+      code: "DEVICE_CLAIMED_ELSEWHERE",
+    });
   }
 
   const nextIdentifier = normalizeDeviceIdentifier(

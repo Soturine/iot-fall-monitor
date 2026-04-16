@@ -204,8 +204,11 @@ async function claimDeviceWithPairingCode({
 }) {
   const normalizedPairingCode = String(pairingCode || "").trim().toUpperCase();
   if (!normalizedPairingCode) {
-    throw new HttpError(400, "Informe um pairing_code válido.");
+    throw new HttpError(400, "Informe um pairing_code valido.", {
+      code: "PAIRING_CODE_REQUIRED",
+    });
   }
+  const pairingCodeHash = hashPairingCode(normalizedPairingCode);
 
   return transaction(async (connection) => {
     const session = await one(
@@ -224,19 +227,24 @@ async function claimDeviceWithPairingCode({
         WHERE dps.pairing_code_hash = ?
         FOR UPDATE
       `,
-      [hashPairingCode(normalizedPairingCode)],
+      [pairingCodeHash],
     );
-
     if (!session) {
-      throw new HttpError(400, "Código de pareamento inválido.");
+      throw new HttpError(400, "Codigo invalido. Confira o valor informado.", {
+        code: "PAIRING_CODE_INVALID",
+      });
     }
 
     if (session.used_at) {
-      throw new HttpError(409, "Este código de pareamento já foi utilizado.");
+      throw new HttpError(409, "Codigo ja utilizado. Gere outro codigo.", {
+        code: "PAIRING_CODE_USED",
+      });
     }
 
     if (new Date(session.expires_at).getTime() < Date.now()) {
-      throw new HttpError(409, "Este código de pareamento expirou.");
+      throw new HttpError(409, "Codigo expirado. Gere um novo no dashboard.", {
+        code: "PAIRING_CODE_EXPIRED",
+      });
     }
 
     const device = await getOrCreateDeviceByIdentity(
