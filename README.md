@@ -2,7 +2,7 @@
 
 Projeto academico full-stack para monitoramento de quedas e imobilidade com firmware `ESP32 + MPU6050`, backend `Node.js + Express + MySQL + MQTT + Socket.IO` e frontend `React + Vite + TypeScript + Tailwind`.
 
-Baseline atual do repositório: `v0.8.2`. Para a experiencia local prevista nesta fase, o projeto foi estabilizado para `Node.js 20+`.
+Baseline atual do repositório: `v0.8.5`. Para a experiencia local prevista nesta fase, o projeto foi estabilizado para `Node.js 20+`.
 
 ## Visao geral
 

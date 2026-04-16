@@ -1,5 +1,34 @@
 # Changelog
 
+## [v0.8.5] - 2026-04-16
+### Adicionado
+- `details.stage` e codigos diagnosticos no backend para facilitar a identificacao objetiva da etapa que falhou em `POST /api/pairing/claim`
+
+### Alterado
+- versao alinhada para `0.8.5` em `CHANGELOG.md`, `README.md`, `package.json` da raiz, `backend/package.json`, `frontend/package.json` e `frontend/package-lock.json`
+- o portal do ESP32 passou a diferenciar melhor falhas internas de pairing, schema desatualizado e inconsistencias de dados vindas do backend
+
+### Corrigido
+- heuristica de `network-info` passou a priorizar com mais consistencia a interface realmente ativa na rede atual, reduzindo casos em que IP host-only ou virtual aparecia como URL principal recomendada
+- o fluxo de claim do ESP32 no backend agora devolve diagnostico mais claro quando a falha acontece em etapa interna do pairing, em vez de cair apenas em erro generico
+- as mensagens do portal do ESP32 ficaram mais objetivas para diferenciar erro interno, schema de banco desatualizado e inconsistencias de dados
+
+### Pendente / Faltando
+- repetir o teste ponta a ponta do pairing em hardware real para confirmar a etapa reportada pelo backend no ambiente de uso
+- alinhar o banco real com `database/schema.sql` caso o backend ainda devolva `PAIRING_SCHEMA_MISMATCH`
+
+### Limitacoes conhecidas
+- a heuristica da URL principal continua sendo `best effort` e pode exigir fallback manual em redes Windows muito fora do padrao
+- o claim do ESP32 continua dependente de o schema real do banco estar alinhado com a versao atual do backend
+
+### Divida tecnica / Pontos fracos
+- o fluxo transacional de pairing ainda concentra varias etapas em `backend/src/services/pairingService.js`, o que aumenta o acoplamento com o schema real do banco
+- o portal do ESP32 ainda depende de HTML inline em `src/setup_portal.cpp`, tornando iteracoes finas de UX mais trabalhosas
+
+### Proximos passos sugeridos
+- validar em campo a nova selecao da URL principal com notebooks que tenham adaptadores virtuais instalados
+- se o claim ainda falhar, usar `details.stage` e `code` para fechar a causa raiz no banco antes de abrir nova rodada de UX
+
 ## [v0.8.4] - 2026-04-15
 ### Adicionado
 - `primaryBackendApiBaseUrl` e `fallbackBackendApiBaseUrls` em `GET /api/system/network-info` para a UI tratar uma URL principal e fallbacks de rede sem quebrar compatibilidade com `suggestedBackendApiBaseUrl`

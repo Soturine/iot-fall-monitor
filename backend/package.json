@@ -1,6 +1,6 @@
 {
   "name": "backend",
-  "version": "0.8.4",
+  "version": "0.8.5",
   "description": "Backend MQTT + API REST do sistema de monitoramento de quedas com ESP32",
   "main": "src/server.js",
   "engines": {
