@@ -1,5 +1,32 @@
 # Changelog
 
+## [v0.8.6] - 2026-04-16
+### Adicionado
+- evento realtime `device:claimed` para o dashboard detectar a conclusao do claim associado ao codigo de pairing atual
+
+### Alterado
+- versao alinhada para `0.8.6` em `CHANGELOG.md`, `README.md`, `package.json` da raiz, `backend/package.json`, `frontend/package.json` e `frontend/package-lock.json`
+- o modal de pairing agora troca para um estado final de sucesso, deixa de tratar o codigo como ativo e fecha automaticamente alguns segundos apos o claim
+
+### Corrigido
+- o firmware passou a filtrar a resposta JSON do claim e da sincronizacao de perfil, lendo apenas `deviceSyncToken` e `patientProfile` sem depender do payload completo do backend
+- o portal do ESP32 deixa de mostrar o aviso de JSON nao interpretado quando o claim ja foi aceito e a resposta traz o snapshot completo do backend
+- o dashboard agora reage ao sucesso do pairing em tempo real, atualiza o device correspondente e orienta o fechamento do modal sem depender de acao manual
+
+### Pendente / Faltando
+- repetir o pairing ponta a ponta em hardware real para confirmar a persistencia de `deviceSyncToken` e `patientProfile` no ESP32 apos reboot
+
+### Limitacoes conhecidas
+- a validacao desta rodada nao compilou o firmware localmente porque `pio`/`platformio` nao estavam disponiveis no ambiente
+
+### Divida tecnica / Pontos fracos
+- o portal ainda depende de parsing embarcado em `src/patient_profile_client.cpp`, que continua sensivel a futuras mudancas no shape do backend fora dos campos filtrados
+- o feedback visual de sucesso no dashboard ainda depende da conexao realtime ativa com o backend
+
+### Proximos passos sugeridos
+- validar em bancada se o ESP32 reaparece com `deviceSyncToken` e perfil resumido preservados em NVS depois do claim
+- se necessario, adicionar um pequeno indicador de reconexao realtime no modal para cobrir o caso raro em que o claim conclui mas o socket do navegador cai no meio do fluxo
+
 ## [v0.8.5] - 2026-04-16
 ### Adicionado
 - `details.stage` e codigos diagnosticos no backend para facilitar a identificacao objetiva da etapa que falhou em `POST /api/pairing/claim`

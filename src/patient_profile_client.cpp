@@ -5,10 +5,28 @@
 
 namespace {
 
+constexpr size_t kPatientProfileObjectCapacity = JSON_OBJECT_SIZE(5);
+constexpr size_t kClaimResponseFilterCapacity =
+    JSON_OBJECT_SIZE(2) + kPatientProfileObjectCapacity;
+constexpr size_t kClaimResponseCapacity =
+    JSON_OBJECT_SIZE(2) + kPatientProfileObjectCapacity + 384;
+constexpr size_t kProfileSyncFilterCapacity =
+    JSON_OBJECT_SIZE(1) + kPatientProfileObjectCapacity;
+constexpr size_t kProfileSyncResponseCapacity =
+    JSON_OBJECT_SIZE(1) + kPatientProfileObjectCapacity + 320;
+
 void setErrorMessage(String* errorMessage, const String& message) {
   if (errorMessage != nullptr) {
     *errorMessage = message;
   }
+}
+
+void configurePatientProfileFilter(JsonObject filter) {
+  filter["patientName"] = true;
+  filter["weightKg"] = true;
+  filter["heightCm"] = true;
+  filter["fallSensitivityPreset"] = true;
+  filter["syncedAt"] = true;
 }
 
 bool loadPatientProfileFromJson(JsonVariantConst source,
@@ -81,8 +99,13 @@ namespace PatientProfileClient {
 bool applyClaimResponse(DeviceSettings::DeviceConfig& config,
                         const String& responseBody,
                         String* errorMessage) {
-  DynamicJsonDocument doc(1024);
-  const DeserializationError jsonError = deserializeJson(doc, responseBody);
+  StaticJsonDocument<kClaimResponseFilterCapacity> filter;
+  filter["deviceSyncToken"] = true;
+  configurePatientProfileFilter(filter.createNestedObject("patientProfile"));
+
+  DynamicJsonDocument doc(kClaimResponseCapacity);
+  const DeserializationError jsonError =
+      deserializeJson(doc, responseBody, DeserializationOption::Filter(filter));
   if (jsonError) {
     setErrorMessage(errorMessage,
                     "Pareamento confirmado, mas a resposta JSON nao pode ser interpretada.");
@@ -153,8 +176,12 @@ SyncOutcome syncPatientProfile(DeviceSettings::DeviceConfig& config,
     return outcome;
   }
 
-  DynamicJsonDocument doc(1024);
-  const DeserializationError jsonError = deserializeJson(doc, responseBody);
+  StaticJsonDocument<kProfileSyncFilterCapacity> filter;
+  configurePatientProfileFilter(filter.createNestedObject("patientProfile"));
+
+  DynamicJsonDocument doc(kProfileSyncResponseCapacity);
+  const DeserializationError jsonError =
+      deserializeJson(doc, responseBody, DeserializationOption::Filter(filter));
   if (jsonError) {
     outcome.message = "Backend respondeu, mas o JSON do perfil nao pode ser lido.";
     return outcome;

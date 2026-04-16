@@ -17,6 +17,7 @@ import { api, getErrorMessage } from "../services/api";
 import type {
   Device,
   NetworkInfoResponse,
+  PairingClaimRealtimeEvent,
   PairingSession,
   PatientRecord,
 } from "../types/api";
@@ -29,6 +30,12 @@ type PairingFormState = {
 type AssignmentFormState = {
   patientId: string;
   reason: string;
+};
+
+type PairingClaimSuccessState = {
+  device: Device;
+  patientName: string | null;
+  autoCloseAtMs: number;
 };
 
 const emptyPairingForm: PairingFormState = {
@@ -100,6 +107,8 @@ export function DevicesPage() {
   const [networkInfoError, setNetworkInfoError] = useState("");
   const [selectedBackendApiBaseUrl, setSelectedBackendApiBaseUrl] = useState("");
   const [pairingNowMs, setPairingNowMs] = useState(Date.now());
+  const [pairingClaimSuccess, setPairingClaimSuccess] =
+    useState<PairingClaimSuccessState | null>(null);
   const deferredSearch = useDeferredValue(search);
 
   const canManageDevices =
@@ -116,6 +125,9 @@ export function DevicesPage() {
     ) ||
     [];
   const pairingStatus = formatPairingCountdown(latestPairingSession?.expiresAt, pairingNowMs);
+  const pairingSuccessCountdownSeconds = pairingClaimSuccess
+    ? Math.max(0, Math.ceil((pairingClaimSuccess.autoCloseAtMs - pairingNowMs) / 1000))
+    : 0;
 
   async function copyToClipboard(value: string, successMessage: string) {
     if (!value) {
@@ -133,12 +145,21 @@ export function DevicesPage() {
 
   function openPairingModal() {
     setLatestPairingSession(null);
+    setPairingClaimSuccess(null);
     setPairingForm(emptyPairingForm);
     setPairingModalOpen(true);
   }
 
   function resetGeneratedPairingCode() {
     setLatestPairingSession(null);
+    setPairingClaimSuccess(null);
+    setPairingNowMs(Date.now());
+  }
+
+  function closePairingModal() {
+    setPairingModalOpen(false);
+    setLatestPairingSession(null);
+    setPairingClaimSuccess(null);
     setPairingNowMs(Date.now());
   }
 
@@ -245,7 +266,7 @@ export function DevicesPage() {
   }, [canManageDevices, pairingModalOpen]);
 
   useEffect(() => {
-    if (!pairingModalOpen || !latestPairingSession?.expiresAt) {
+    if (!pairingModalOpen || (!latestPairingSession?.expiresAt && !pairingClaimSuccess)) {
       return;
     }
 
@@ -258,7 +279,55 @@ export function DevicesPage() {
     return () => {
       window.clearInterval(timer);
     };
-  }, [latestPairingSession?.expiresAt, pairingModalOpen]);
+  }, [latestPairingSession?.expiresAt, pairingClaimSuccess, pairingModalOpen]);
+
+  useEffect(() => {
+    if (!socket || !pairingModalOpen || !latestPairingSession) {
+      return;
+    }
+
+    const handleDeviceClaimed = (event: PairingClaimRealtimeEvent) => {
+      if (event.pairingSessionId !== latestPairingSession.id) {
+        return;
+      }
+
+      setPairingNowMs(Date.now());
+      setPairingClaimSuccess({
+        device: event.device,
+        patientName: event.patientProfile?.patientName || event.device.currentPatient?.fullName || null,
+        autoCloseAtMs: Date.now() + 5000,
+      });
+      setDevices((current) =>
+        current.some((device) => device.id === event.device.id)
+          ? current.map((device) => (device.id === event.device.id ? event.device : device))
+          : current,
+      );
+      toast.success(`Pareamento concluido para ${event.device.name}.`);
+    };
+
+    socket.on("device:claimed", handleDeviceClaimed);
+
+    return () => {
+      socket.off("device:claimed", handleDeviceClaimed);
+    };
+  }, [latestPairingSession, pairingModalOpen, socket]);
+
+  useEffect(() => {
+    if (!pairingModalOpen || !pairingClaimSuccess) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setPairingModalOpen(false);
+      setLatestPairingSession(null);
+      setPairingClaimSuccess(null);
+      setPairingNowMs(Date.now());
+    }, Math.max(pairingClaimSuccess.autoCloseAtMs - Date.now(), 0));
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [pairingClaimSuccess, pairingModalOpen]);
 
   async function submitDevice(values: DeviceFormValues) {
     if (!editingDevice) {
@@ -301,6 +370,7 @@ export function DevicesPage() {
       );
 
       setLatestPairingSession(response.data.session);
+      setPairingClaimSuccess(null);
       setPairingNowMs(Date.now());
       toast.success("Código de pareamento gerado.");
     } catch (error) {
@@ -567,19 +637,16 @@ export function DevicesPage() {
                 Gerar novo codigo
               </Button>
               <Button
-                onClick={() => {
-                  setPairingModalOpen(false);
-                  setLatestPairingSession(null);
-                }}
+                onClick={closePairingModal}
                 type="button"
-                variant="secondary"
+                variant={pairingClaimSuccess ? "primary" : "secondary"}
               >
-                Fechar
+                {pairingClaimSuccess ? "Fechar agora" : "Fechar"}
               </Button>
             </div>
           ) : (
             <div className="flex items-center justify-end gap-3">
-              <Button onClick={() => setPairingModalOpen(false)} type="button" variant="secondary">
+              <Button onClick={closePairingModal} type="button" variant="secondary">
                 Fechar
               </Button>
               <Button
@@ -592,16 +659,53 @@ export function DevicesPage() {
             </div>
           )
         }
-        onClose={() => {
-          setPairingModalOpen(false);
-          setLatestPairingSession(null);
-        }}
+        onClose={closePairingModal}
         open={pairingModalOpen}
         subtitle="O código é temporário, de uso único e deve ser inserido no portal local do ESP32."
         title="Parear dispositivo"
       >
         {latestPairingSession ? (
           <div className="space-y-4">
+            {pairingClaimSuccess ? (
+              <div className="rounded-[28px] border border-emerald-200 bg-emerald-50 p-6">
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.3em] text-emerald-700">
+                      Pareamento concluido
+                    </p>
+                    <h3 className="mt-2 font-display text-3xl text-emerald-900">
+                      Device claimed com sucesso
+                    </h3>
+                    <p className="mt-3 text-sm text-emerald-900">
+                      O codigo {latestPairingSession.pairingCode} ja foi utilizado e nao esta mais
+                      ativo.
+                    </p>
+                    <p className="mt-2 text-sm text-emerald-900">
+                      Device: <span className="font-semibold">{pairingClaimSuccess.device.name}</span>
+                    </p>
+                    <p className="mt-1 text-sm text-emerald-900">
+                      Identificador: {pairingClaimSuccess.device.deviceIdentifier}
+                    </p>
+                    <p className="mt-1 text-sm text-emerald-900">
+                      Paciente: {pairingClaimSuccess.patientName || "Sem paciente inicial"}
+                    </p>
+                  </div>
+                  <Badge tone="success">Claimed</Badge>
+                </div>
+                <div className="mt-5 rounded-[20px] bg-white/70 p-4 text-sm text-emerald-900">
+                  <p className="font-semibold">Feedback do dashboard</p>
+                  <ul className="mt-2 space-y-2">
+                    <li>A lista de devices recebeu o claim concluido.</li>
+                    <li>O codigo saiu do estado ativo e foi marcado como utilizado.</li>
+                    <li>
+                      Esta janela fecha automaticamente em {pairingSuccessCountdownSeconds}s, ou
+                      voce pode fechar agora.
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            ) : (
+              <>
             <div
               className={`rounded-[28px] border p-6 text-center ${
                 pairingStatus.expired
@@ -810,6 +914,8 @@ export function DevicesPage() {
                 <li>O backend valida expiracao, uso unico e faz o claim do device na organizacao.</li>
               </ol>
             </div>
+              </>
+            )}
           </div>
         ) : (
           <form className="grid gap-4" id="pairing-form" onSubmit={submitPairingCode}>

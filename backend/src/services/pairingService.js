@@ -412,6 +412,7 @@ async function claimDeviceWithPairingCode({
 
       stage = "load_final_device_snapshot";
       return {
+        pairingSessionId: Number(session.id),
         device: await getDeviceStatusSnapshot(finalDevice.id, connection),
         organization: {
           id: Number(session.organization_id),

@@ -28,14 +28,31 @@ function normalizeProfileSyncPayload(body = {}) {
 }
 
 const claim = asyncHandler(async (req, res) => {
-  const result = await claimDeviceWithPairingCode(normalizeClaimPayload(req.body));
+  const claimPayload = normalizeClaimPayload(req.body);
+  const result = await claimDeviceWithPairingCode(claimPayload);
 
   const io = req.app.get("io");
   if (io) {
-    emitScopedEvent(io, "device:status", result.device, {
+    const scope = {
       organizationId: result.device.organization?.id || null,
       patientId: result.device.currentPatient?.id || null,
+    };
+
+    emitScopedEvent(io, "device:status", result.device, {
+      organizationId: scope.organizationId,
+      patientId: scope.patientId,
     });
+
+    emitScopedEvent(
+      io,
+      "device:claimed",
+      {
+        pairingSessionId: result.pairingSessionId,
+        device: result.device,
+        patientProfile: result.patientProfile,
+      },
+      scope,
+    );
   }
 
   res.json(result);

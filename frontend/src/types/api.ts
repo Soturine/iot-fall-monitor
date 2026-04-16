@@ -265,3 +265,15 @@ export interface PairingSession {
   expiresAt: string | null;
   createdAt: string | null;
 }
+
+export interface PairingClaimRealtimeEvent {
+  pairingSessionId: number;
+  device: Device;
+  patientProfile: {
+    patientName: string | null;
+    weightKg?: number | null;
+    heightCm?: number | null;
+    fallSensitivityPreset?: string | null;
+    syncedAt?: string | null;
+  } | null;
+}
