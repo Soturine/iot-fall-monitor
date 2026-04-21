@@ -98,3 +98,66 @@ export function humanizeSeverity(severity?: string | null) {
       return "N/A";
   }
 }
+
+export function deviceBehaviorTone(state?: string | null) {
+  switch (state) {
+    case "queda_confirmada":
+      return "danger";
+    case "queda_suspeita":
+      return "warning";
+    case "em_movimento":
+      return "info";
+    case "em_reposo":
+      return "success";
+    case "deitado":
+    case "sentado":
+      return "info";
+    case "pre_calibracao":
+    case "desconhecido":
+      return "neutral";
+    default:
+      return "neutral";
+  }
+}
+
+export function humanizeDeviceBehaviorState(state?: string | null) {
+  switch (state) {
+    case "pre_calibracao":
+      return "Pre-calibracao";
+    case "desconhecido":
+      return "Desconhecido";
+    case "em_reposo":
+      return "Em repouso";
+    case "deitado":
+      return "Deitado";
+    case "sentado":
+      return "Sentado";
+    case "em_movimento":
+      return "Em movimento";
+    case "queda_suspeita":
+      return "Queda suspeita";
+    case "queda_confirmada":
+      return "Queda confirmada";
+    case "andando":
+      return "Andando";
+    case "correndo":
+      return "Correndo";
+    case "caido":
+      return "Caido";
+    default:
+      return "Indefinido";
+  }
+}
+
+export function humanizeDeviceBehaviorConfidence(confidence?: string | null) {
+  switch (confidence) {
+    case "alto":
+      return "alta";
+    case "medio":
+      return "media";
+    case "baixo":
+      return "baixa";
+    default:
+      return "indefinida";
+  }
+}

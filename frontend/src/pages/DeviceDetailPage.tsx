@@ -9,8 +9,11 @@ import { EmptyState } from "../components/ui/EmptyState";
 import { LoadingState } from "../components/ui/LoadingState";
 import { useRealtime } from "../contexts/RealtimeContext";
 import {
+  deviceBehaviorTone,
   formatDateTime,
   humanizeAlertStatus,
+  humanizeDeviceBehaviorConfidence,
+  humanizeDeviceBehaviorState,
   humanizeSeverity,
   severityTone,
   statusTone,
@@ -115,6 +118,9 @@ export function DeviceDetailPage() {
                   {detail.device.status.online ? "Online" : "Offline"}
                 </Badge>
                 <Badge tone="info">{detail.device.claimStatus}</Badge>
+                <Badge tone={deviceBehaviorTone(detail.device.behavior.state) as never}>
+                  {humanizeDeviceBehaviorState(detail.device.behavior.state)}
+                </Badge>
                 <Badge tone={activeAlerts.length ? "danger" : "info"}>
                   {activeAlerts.length} alertas ativos
                 </Badge>
@@ -183,6 +189,19 @@ export function DeviceDetailPage() {
             Contexto técnico e clínico
           </h3>
           <div className="mt-5 grid gap-3">
+            <div className="rounded-[24px] bg-surface-50 p-4">
+              <p className="text-xs font-bold uppercase tracking-[0.24em] text-surface-500">
+                Estado atual
+              </p>
+              <p className="mt-2 text-sm font-semibold text-surface-900">
+                {humanizeDeviceBehaviorState(detail.device.behavior.state)}
+              </p>
+              <p className="mt-1 text-xs text-surface-600">
+                Confianca {humanizeDeviceBehaviorConfidence(detail.device.behavior.confidence)} -
+                heuristica experimental
+              </p>
+              <p className="mt-2 text-xs text-surface-500">{detail.device.behavior.reason}</p>
+            </div>
             <div className="rounded-[24px] bg-surface-50 p-4">
               <p className="text-xs font-bold uppercase tracking-[0.24em] text-surface-500">
                 Organização

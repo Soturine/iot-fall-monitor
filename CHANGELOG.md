@@ -1,5 +1,34 @@
 # Changelog
 
+## [v0.8.7] - 2026-04-21
+### Adicionado
+- status comportamental/postural experimental derivado da telemetria atual com `state`, `confidence`, `reason` e espaco preparado para estados futuros como `andando`, `correndo` e `caido`
+
+### Alterado
+- versao alinhada para `0.8.7` em `CHANGELOG.md`, `README.md`, `package.json` da raiz, `backend/package.json`, `frontend/package.json` e `frontend/package-lock.json`
+- o dashboard, a listagem de devices e a pagina de detalhe passaram a exibir o estado heuristico atual do dispositivo com linguagem mais honesta e discreta
+
+### Corrigido
+- o backend agora enriquece snapshots de device com um status interpretado baseado em janela recente de telemetria e em eventos de queda recentes, sem alterar o contrato MQTT
+- o frontend passou a reagir a `telemetry:new` para atualizar o estado heuristico em tempo real sem depender apenas de recarga manual
+
+### Pendente / Faltando
+- validar os limiares em hardware real com mais cenarios de uso, especialmente para diferenciar melhor `deitado`, `sentado` e repouso geral
+- decidir numa rodada futura se a calibracao individual do uso corporal do sensor vai migrar para um fluxo dedicado
+
+### Limitacoes conhecidas
+- esta classificacao e experimental, pre-calibracao e nao representa diagnostico clinico
+- sem calibracao por paciente/dispositivo, posturas especificas ainda podem cair em estados mais genericos como `em_reposo` ou `desconhecido`
+- a validacao desta rodada nao incluiu hardware real
+
+### Divida tecnica / Pontos fracos
+- a heuristica ainda depende de poucos sinais (`accel_magnitude`, `gyro_magnitude`, `pitch_deg`, `roll_deg` e eventos recentes), sem janela historica longa nem modelo adaptativo
+- pages como `Devices` e `Dashboard` ainda fazem refresh completo para alguns eventos, embora a telemetria ja atualize o estado localmente
+
+### Proximos passos sugeridos
+- coletar amostras reais por postura para revisar thresholds antes de tentar estados mais ambiciosos como `andando` e `correndo`
+- considerar uma calibracao leve por device/paciente para reduzir falsos `desconhecido` e melhorar a confianca das posturas
+
 ## [v0.8.6] - 2026-04-16
 ### Adicionado
 - evento realtime `device:claimed` para o dashboard detectar a conclusao do claim associado ao codigo de pairing atual

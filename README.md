@@ -2,7 +2,7 @@
 
 Projeto academico full-stack para monitoramento de quedas e imobilidade com firmware `ESP32 + MPU6050`, backend `Node.js + Express + MySQL + MQTT + Socket.IO` e frontend `React + Vite + TypeScript + Tailwind`.
 
-Baseline atual do repositório: `v0.8.6`. Para a experiencia local prevista nesta fase, o projeto foi estabilizado para `Node.js 20+`.
+Baseline atual do repositório: `v0.8.7`. Para a experiencia local prevista nesta fase, o projeto foi estabilizado para `Node.js 20+`.
 
 ## Visao geral
 
@@ -22,6 +22,8 @@ O firmware continua responsavel pela deteccao local e pela publicacao MQTT. O ba
 No frontend, a camada multi-tenant desta fase passou por uma rodada de estabilizacao: o carregamento inicial ficou mais leve com rotas sob demanda, o dashboard voltou a receber o contexto de paciente nos eventos recentes e a automacao local passou a validar o tenant ativo de forma explicita.
 
 Nesta mesma fase, a autenticacao do frontend passou a reidratar a sessao com `GET /api/me` no boot. Isso evita tela branca quando o navegador ainda guarda um `user` antigo no `localStorage` de uma versao anterior ao modelo multi-tenant atual.
+
+Mais recentemente, o backend e o frontend ganharam uma camada inicial de status comportamental/postural experimental. Ela usa apenas a telemetria ja existente do `MPU6050`, com estados heuristicas como `pre_calibracao`, `em_reposo`, `deitado`, `sentado`, `em_movimento`, `queda_suspeita` e `queda_confirmada`, sempre acompanhados de um nivel de confianca e sem pretensao de diagnostico clinico.
 
 ## Estrutura do projeto
 

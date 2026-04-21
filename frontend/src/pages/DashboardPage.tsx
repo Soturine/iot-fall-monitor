@@ -9,15 +9,23 @@ import { LoadingState } from "../components/ui/LoadingState";
 import { useAuth } from "../contexts/AuthContext";
 import { useRealtime } from "../contexts/RealtimeContext";
 import {
+  deviceBehaviorTone,
   formatDateTime,
   formatRelativeTime,
   humanizeAlertStatus,
+  humanizeDeviceBehaviorConfidence,
+  humanizeDeviceBehaviorState,
   humanizeSeverity,
   severityTone,
   statusTone,
 } from "../lib/format";
 import { api } from "../services/api";
-import type { AlertRecord, DashboardSummary, Device } from "../types/api";
+import type {
+  AlertRecord,
+  DashboardSummary,
+  Device,
+  TelemetryRealtimeEvent,
+} from "../types/api";
 
 type SummaryMetric = {
   label: string;
@@ -73,15 +81,42 @@ export function DashboardPage() {
       void loadData();
     };
 
+    const handleTelemetry = (telemetryEvent: TelemetryRealtimeEvent) => {
+      const nextBehavior = telemetryEvent.deviceBehavior;
+
+      if (!nextBehavior) {
+        return;
+      }
+
+      setDeviceStatus((current) =>
+        current.map((device) =>
+          device.id === telemetryEvent.deviceId
+            ? {
+                ...device,
+                behavior: nextBehavior,
+                status: {
+                  ...device.status,
+                  online: true,
+                  lastSeenAt: telemetryEvent.createdAt || device.status.lastSeenAt,
+                  updatedAt: telemetryEvent.createdAt || device.status.updatedAt,
+                },
+              }
+            : device,
+        ),
+      );
+    };
+
     socket.on("alert:new", refresh);
     socket.on("alert:updated", refresh);
     socket.on("device:status", refresh);
+    socket.on("telemetry:new", handleTelemetry);
 
     return () => {
       active = false;
       socket.off("alert:new", refresh);
       socket.off("alert:updated", refresh);
       socket.off("device:status", refresh);
+      socket.off("telemetry:new", handleTelemetry);
     };
   }, [activeOrganization?.id, socket]);
 
@@ -258,11 +293,20 @@ export function DashboardPage() {
                     <p className="text-sm text-surface-600">
                       {device.currentPatient?.fullName || device.deviceIdentifier}
                     </p>
+                    <p className="mt-1 text-xs text-surface-500">
+                      Heuristica experimental: {humanizeDeviceBehaviorState(device.behavior.state)} •
+                      confianca {humanizeDeviceBehaviorConfidence(device.behavior.confidence)}
+                    </p>
                   </div>
                   <div className="text-right">
                     <Badge tone={device.status.online ? "success" : "neutral"}>
                       {device.status.online ? "Online" : "Offline"}
                     </Badge>
+                    <div className="mt-2">
+                      <Badge tone={deviceBehaviorTone(device.behavior.state) as never}>
+                        {humanizeDeviceBehaviorState(device.behavior.state)}
+                      </Badge>
+                    </div>
                     <p className="mt-2 text-xs text-surface-500">
                       {formatRelativeTime(device.status.lastSeenAt)}
                     </p>

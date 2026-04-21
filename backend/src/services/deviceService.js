@@ -3,6 +3,7 @@ const { parseMaybeJson, toBoolean } = require("../utils/formatters");
 const { HttpError } = require("../utils/httpError");
 const { getPagination } = require("../utils/pagination");
 const { createAuditLog } = require("./auditService");
+const { computeDeviceBehavior } = require("./deviceBehaviorService");
 const { assertRole, buildScopeFilter, canAccessScope } = require("./scopeService");
 
 function toNullableNumber(value) {
@@ -144,6 +145,117 @@ function mapDeviceAlertRow(row) {
   };
 }
 
+function buildInClausePlaceholders(values) {
+  return values.map(() => "?").join(", ");
+}
+
+function groupRowsByDeviceId(rows, mapper) {
+  return rows.reduce((accumulator, row) => {
+    const deviceId = Number(row.device_id || row.deviceId);
+    if (!accumulator.has(deviceId)) {
+      accumulator.set(deviceId, []);
+    }
+
+    accumulator.get(deviceId).push(mapper(row));
+    return accumulator;
+  }, new Map());
+}
+
+async function fetchTelemetryWindowsByDeviceIds(
+  deviceIds,
+  sampleLimit = 6,
+  executor = null,
+) {
+  if (!deviceIds.length) {
+    return new Map();
+  }
+
+  const placeholders = buildInClausePlaceholders(deviceIds);
+  const rows = await execute(
+    executor,
+    `
+      SELECT *
+      FROM (
+        SELECT
+          t.*,
+          ROW_NUMBER() OVER (
+            PARTITION BY t.device_id
+            ORDER BY t.created_at DESC, t.id DESC
+          ) AS telemetry_rank
+        FROM telemetry_logs t
+        WHERE t.device_id IN (${placeholders})
+      ) ranked
+      WHERE ranked.telemetry_rank <= ?
+      ORDER BY ranked.device_id ASC, ranked.created_at DESC, ranked.id DESC
+    `,
+    [...deviceIds, sampleLimit],
+  );
+
+  return groupRowsByDeviceId(rows, mapTelemetryRow);
+}
+
+async function fetchRecentFallEventsByDeviceIds(deviceIds, executor = null) {
+  if (!deviceIds.length) {
+    return new Map();
+  }
+
+  const placeholders = buildInClausePlaceholders(deviceIds);
+  const rows = await execute(
+    executor,
+    `
+      SELECT *
+      FROM (
+        SELECT
+          e.device_id,
+          e.event_type,
+          e.severity,
+          e.immobility,
+          e.event_time,
+          e.created_at,
+          ROW_NUMBER() OVER (
+            PARTITION BY e.device_id
+            ORDER BY e.event_time DESC, e.id DESC
+          ) AS event_rank
+        FROM events e
+        WHERE e.device_id IN (${placeholders})
+          AND e.event_type = 'fall_detected'
+          AND e.event_time >= UTC_TIMESTAMP() - INTERVAL 10 MINUTE
+      ) ranked
+      WHERE ranked.event_rank = 1
+    `,
+    deviceIds,
+  );
+
+  return groupRowsByDeviceId(rows, (row) => ({
+    eventType: row.event_type,
+    severity: row.severity,
+    immobility: toBoolean(row.immobility),
+    eventTime: toIso(row.event_time),
+    createdAt: toIso(row.created_at),
+  }));
+}
+
+async function attachBehaviorToDevices(devices, executor = null) {
+  if (!devices.length) {
+    return devices;
+  }
+
+  const deviceIds = devices.map((device) => device.id);
+  const [telemetryWindows, recentFallEvents] = await Promise.all([
+    fetchTelemetryWindowsByDeviceIds(deviceIds, 6, executor),
+    fetchRecentFallEventsByDeviceIds(deviceIds, executor),
+  ]);
+
+  return devices.map((device) => ({
+    ...device,
+    behavior: computeDeviceBehavior({
+      status: device.status,
+      telemetrySamples: telemetryWindows.get(device.id) || [],
+      recentEvents: recentFallEvents.get(device.id) || [],
+    }),
+  }));
+}
+
 async function ensureDeviceStatusRow(deviceId, executor = null) {
   await execute(
     executor,
@@ -254,7 +366,8 @@ async function getDeviceStatusSnapshot(deviceId, executor = null) {
     throw new HttpError(404, "Dispositivo não encontrado.");
   }
 
-  return mapDeviceRow(row);
+  const [device] = await attachBehaviorToDevices([mapDeviceRow(row)], executor);
+  return device;
 }
 
 async function getDeviceForUpdate(deviceId, executor = null) {
@@ -693,7 +806,7 @@ async function listDevices(filters = {}, accessContext) {
   );
 
   return {
-    items: rows.map(mapDeviceRow),
+    items: await attachBehaviorToDevices(rows.map(mapDeviceRow)),
     page: pagination.page,
     limit: pagination.limit,
     total: Number(totalRow.total),
@@ -805,7 +918,14 @@ async function getDeviceById(deviceId, accessContext) {
   );
 
   return {
-    device,
+    device: {
+      ...device,
+      behavior: computeDeviceBehavior({
+        status: device.status,
+        telemetrySamples: telemetryRows.map(mapTelemetryRow),
+        recentEvents: eventRows.map(mapDeviceEventRow),
+      }),
+    },
     recentTelemetry: telemetryRows.reverse().map(mapTelemetryRow),
     recentEvents: eventRows.map(mapDeviceEventRow),
     recentAlerts: alertRows.map(mapDeviceAlertRow),
@@ -1098,11 +1218,13 @@ async function markDevicesOffline(cutoffDate) {
     [cutoffDate],
   );
 
-  return staleRows.map((row) =>
-    mapDeviceRow({
-      ...row,
-      online: 0,
-    }),
+  return attachBehaviorToDevices(
+    staleRows.map((row) =>
+      mapDeviceRow({
+        ...row,
+        online: 0,
+      }),
+    ),
   );
 }
 

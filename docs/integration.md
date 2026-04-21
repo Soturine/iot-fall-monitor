@@ -116,6 +116,65 @@ Exemplo de `fall_detected`:
 }
 ```
 
+## Status interpretado experimental
+
+O backend agora deriva um status comportamental/postural inicial a partir da telemetria mais recente do device, sem alterar o contrato MQTT original.
+
+Principios atuais:
+
+- feature experimental e pre-calibracao
+- sem diagnostico clinico
+- prioridade para estados mais honestos quando a confianca estiver baixa
+- preparada para evoluir no futuro sem quebrar o payload base
+
+Estados implementados nesta versao:
+
+- `pre_calibracao`
+- `desconhecido`
+- `em_reposo`
+- `deitado`
+- `sentado`
+- `em_movimento`
+- `queda_suspeita`
+- `queda_confirmada`
+
+Estados reservados para evolucao futura:
+
+- `andando`
+- `correndo`
+- `caido`
+
+Cada snapshot de device agora pode carregar um bloco derivado como:
+
+```json
+{
+  "behavior": {
+    "state": "em_reposo",
+    "confidence": "medio",
+    "reason": "Telemetria recente sugere repouso estavel, ainda sem postura especifica forte.",
+    "experimental": true,
+    "version": "heuristic_v1",
+    "source": "telemetry_window",
+    "updatedAt": "2026-04-21T20:10:00.000Z",
+    "telemetrySampleCount": 6,
+    "telemetryWindowSeconds": 25,
+    "plannedFutureStates": ["andando", "correndo", "caido"]
+  }
+}
+```
+
+Heuristica atual, em alto nivel:
+
+- sem telemetria suficiente ou conexao muito recente: `pre_calibracao`
+- telemetria stale ou insuficiente: `desconhecido`
+- baixa movimentacao: `em_reposo`
+- baixa movimentacao + orientacao horizontal estavel: `deitado`
+- baixa movimentacao + orientacao inclinada estavel: `sentado`
+- variacao acima do repouso: `em_movimento`
+- `fall_detected` recente: `queda_suspeita` ou `queda_confirmada`
+
+O frontend usa esse bloco para mostrar o estado atual no dashboard, na lista de devices e na pagina de detalhe, sempre como heuristica experimental.
+
 ## Pairing por codigo temporario
 
 O pairing nao acontece via MQTT. Ele acontece por HTTP entre o portal do ESP32 e o backend.

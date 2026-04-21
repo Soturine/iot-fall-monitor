@@ -12,7 +12,13 @@ import { LoadingState } from "../components/ui/LoadingState";
 import { Modal } from "../components/ui/Modal";
 import { useAuth } from "../contexts/AuthContext";
 import { useRealtime } from "../contexts/RealtimeContext";
-import { formatDateTime, formatRelativeTime } from "../lib/format";
+import {
+  deviceBehaviorTone,
+  formatDateTime,
+  formatRelativeTime,
+  humanizeDeviceBehaviorConfidence,
+  humanizeDeviceBehaviorState,
+} from "../lib/format";
 import { api, getErrorMessage } from "../services/api";
 import type {
   Device,
@@ -20,6 +26,7 @@ import type {
   PairingClaimRealtimeEvent,
   PairingSession,
   PatientRecord,
+  TelemetryRealtimeEvent,
 } from "../types/api";
 
 type PairingFormState = {
@@ -79,6 +86,28 @@ function formatPairingCountdown(expiresAt?: string | null, nowMs = Date.now()) {
   return {
     expired: false,
     label: minutes > 0 ? `${minutes} min ${seconds}s restantes` : `${seconds}s restantes`,
+  };
+}
+
+function applyTelemetryBehaviorPatch(
+  device: Device,
+  telemetryEvent: TelemetryRealtimeEvent,
+) {
+  const nextBehavior = telemetryEvent.deviceBehavior;
+
+  if (!nextBehavior) {
+    return device;
+  }
+
+  return {
+    ...device,
+    behavior: nextBehavior,
+    status: {
+      ...device.status,
+      online: true,
+      lastSeenAt: telemetryEvent.createdAt || device.status.lastSeenAt,
+      updatedAt: telemetryEvent.createdAt || device.status.updatedAt,
+    },
   };
 }
 
@@ -207,13 +236,29 @@ export function DevicesPage() {
       void loadData();
     };
 
+    const handleTelemetry = (telemetryEvent: TelemetryRealtimeEvent) => {
+      if (!telemetryEvent.deviceBehavior) {
+        return;
+      }
+
+      setDevices((current) =>
+        current.map((device) =>
+          device.id === telemetryEvent.deviceId
+            ? applyTelemetryBehaviorPatch(device, telemetryEvent)
+            : device,
+        ),
+      );
+    };
+
     socket.on("device:status", refresh);
+    socket.on("telemetry:new", handleTelemetry);
     socket.on("alert:new", refresh);
     socket.on("alert:updated", refresh);
 
     return () => {
       active = false;
       socket.off("device:status", refresh);
+      socket.off("telemetry:new", handleTelemetry);
       socket.off("alert:new", refresh);
       socket.off("alert:updated", refresh);
     };
@@ -496,6 +541,9 @@ export function DevicesPage() {
                     >
                       {device.claimStatus}
                     </Badge>
+                    <Badge tone={deviceBehaviorTone(device.behavior.state) as never}>
+                      {humanizeDeviceBehaviorState(device.behavior.state)}
+                    </Badge>
                     {device.activeAlerts > 0 ? (
                       <Badge tone="danger">{device.activeAlerts} alertas</Badge>
                     ) : null}
@@ -506,6 +554,10 @@ export function DevicesPage() {
                   <p className="mt-1 text-sm text-surface-600">
                     {device.currentPatient?.fullName || "Sem paciente ativo"} •{" "}
                     {device.location || "Local não informado"}
+                  </p>
+                  <p className="mt-2 text-xs text-surface-500">
+                    Heuristica experimental: {humanizeDeviceBehaviorState(device.behavior.state)} -
+                    confianca {humanizeDeviceBehaviorConfidence(device.behavior.confidence)}
                   </p>
                   <p className="mt-2 text-xs font-semibold uppercase tracking-[0.22em] text-surface-500">
                     {device.deviceIdentifier}

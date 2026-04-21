@@ -4,6 +4,7 @@ const { toBoolean } = require("../utils/formatters");
 const { toDateFromUnixSeconds } = require("../utils/time");
 const {
   getOrCreateDeviceByIdentity,
+  getDeviceStatusSnapshot,
   upsertDeviceStatus,
 } = require("./deviceService");
 const {
@@ -115,12 +116,14 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
         },
         connection,
       );
+      const deviceSnapshot = await getDeviceStatusSnapshot(device.id, connection);
 
       return {
         channel: "telemetry",
         telemetry: {
           ...telemetry,
           deviceIdentifier,
+          deviceBehavior: deviceSnapshot.behavior,
         },
       };
     }

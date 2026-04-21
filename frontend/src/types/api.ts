@@ -47,6 +47,34 @@ export interface DeviceStatus {
   updatedAt: string | null;
 }
 
+export type DeviceBehaviorState =
+  | "pre_calibracao"
+  | "desconhecido"
+  | "em_reposo"
+  | "deitado"
+  | "sentado"
+  | "em_movimento"
+  | "queda_suspeita"
+  | "queda_confirmada"
+  | "andando"
+  | "correndo"
+  | "caido";
+
+export type DeviceBehaviorConfidence = "baixo" | "medio" | "alto";
+
+export interface DeviceBehavior {
+  state: DeviceBehaviorState;
+  confidence: DeviceBehaviorConfidence;
+  reason: string;
+  experimental: boolean;
+  version: string;
+  source: string;
+  updatedAt: string | null;
+  telemetrySampleCount: number;
+  telemetryWindowSeconds: number;
+  plannedFutureStates: DeviceBehaviorState[];
+}
+
 export interface PatientRef {
   id: number;
   fullName: string;
@@ -82,6 +110,7 @@ export interface Device {
   patientName: string;
   activeAlerts: number;
   status: DeviceStatus;
+  behavior: DeviceBehavior;
 }
 
 export interface TelemetryLog {
@@ -100,6 +129,11 @@ export interface TelemetryLog {
   pitchDeg: number | null;
   rollDeg: number | null;
   createdAt: string | null;
+}
+
+export interface TelemetryRealtimeEvent extends TelemetryLog {
+  deviceIdentifier?: string;
+  deviceBehavior?: DeviceBehavior;
 }
 
 export interface DeviceRef {
