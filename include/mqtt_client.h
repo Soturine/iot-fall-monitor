@@ -6,6 +6,12 @@
 
 #include "device_config.h"
 
+struct MqttConnectionProbeResult {
+  bool success = false;
+  int stateCode = MQTT_DISCONNECTED;
+  String message;
+};
+
 class DeviceMqttClient {
  public:
   void begin();
@@ -14,11 +20,17 @@ class DeviceMqttClient {
   void update(bool wifiConnected);
 
   bool publish(const String& topic, const String& payload, bool retained = false);
-  bool isConnected();
+  bool isConnected() const;
   bool hasValidConfiguration() const;
   uint8_t consecutiveFailureCount() const;
   unsigned long firstFailureAtMs() const;
   bool usingTls() const;
+  int lastFailureCode() const;
+  String lastFailureReason() const;
+  unsigned long lastSuccessfulConnectAtMs() const;
+  MqttConnectionProbeResult probeConnection(const DeviceSettings::DeviceConfig& config) const;
+
+  static String describeStateCode(int stateCode);
 
  private:
   bool reconnect();
@@ -40,5 +52,7 @@ class DeviceMqttClient {
 
   unsigned long lastReconnectAttemptMs_ = 0;
   unsigned long firstFailureAtMs_ = 0;
+  unsigned long lastSuccessfulConnectAtMs_ = 0;
   uint8_t consecutiveFailureCount_ = 0;
+  int lastFailureCode_ = MQTT_DISCONNECTED;
 };

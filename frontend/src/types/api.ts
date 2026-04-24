@@ -133,6 +133,7 @@ export interface TelemetryLog {
 
 export interface TelemetryRealtimeEvent extends TelemetryLog {
   deviceIdentifier?: string;
+  deviceStatusPatch?: DeviceStatus;
   deviceBehavior?: DeviceBehavior;
 }
 

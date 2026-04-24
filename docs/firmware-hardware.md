@@ -61,8 +61,10 @@ Defaults atuais relevantes:
 - `DEFAULT_MQTT_USE_TLS = false`
 - `MAX_WIFI_NETWORKS = 5`
 - `BUZZER_ENABLED = true`
+- `BUZZER_ACTIVE_HIGH = true`
 - `SOS_BUTTON_ENABLED = false`
 - `STATUS_LED_ENABLED = false`
+- `MOTION_TEST_MODE_ENABLED = false`
 
 Comandos uteis:
 
@@ -100,7 +102,7 @@ Na pratica:
 
 - falhas e mensagens importantes continuam aparecendo
 - diagnosticos detalhados de I2C, buffer e conectividade podem ser ligados sem poluir o loop principal por padrao
-- o `MOTION TEST` continua com flags proprias para bancada
+- o `MOTION TEST` continua com flags proprias para bancada, mas agora fica desabilitado por padrao para nao misturar teste de bancada com alarme real
 
 ## Identidade do device e pairing
 
@@ -125,6 +127,8 @@ O portal local do ESP32 agora cobre:
 - `MQTT_CLIENT_ID`
 - `BACKEND_API_BASE_URL`
 - claim por codigo temporario
+- bloco de saude operacional com `Wi-Fi conectado`, `MQTT OK`, `Backend API` e `Pronto para operar`
+- botoes `Testar backend` e `Testar MQTT`
 - visualizacao do perfil resumido do paciente sincronizado
 
 Fluxo oficial:
@@ -178,6 +182,39 @@ No iOS, a notificacao de "fazer login na rede" pode variar mais. Se ela nao apar
 
 - abra `http://setup.queda`
 - ou abra `http://192.168.4.1`
+
+### Saude operacional no portal
+
+Como o portal existe principalmente em `SETUP_MODE`, a leitura de saude precisa ser honesta:
+
+- `Wi-Fi conectado` usa o estado station atual do ESP32
+- `MQTT OK` pode vir de conexao atual ou do ultimo `Testar MQTT`
+- `Backend API` mostra validade da URL e ultimo `Testar backend`
+- `Pronto para operar` so aparece quando configuracao, backend e MQTT ja responderam de forma coerente
+
+Isso evita prometer que o device ja esta operando normalmente quando ele ainda esta apenas em fase de ajuste/configuracao.
+
+## Telemetria e snapshot tecnico
+
+Nesta baseline, a telemetria continua sendo publicada em alta frequencia, mas agora tambem leva:
+
+- `battery_level`
+- `wifi_rssi`
+
+Com isso, o backend consegue manter bateria, RSSI e `lastSeenAt` mais coerentes nas telas sem depender apenas do `status` periodico.
+
+## Buzzer e motion test
+
+O buzzer recebeu dois ajustes conservadores:
+
+- polaridade explicita via `BUZZER_ACTIVE_HIGH`
+- `MOTION_TEST_MODE_ENABLED = false` por padrao
+
+Na pratica:
+
+- o alarme real por queda/SOS continua disponivel
+- o teste de bancada deixa de ficar habilitado por padrao em uso normal
+- se a placa usar buzzer ativo-low, a inversao agora pode ser tratada em `include/app_config.h` sem mexer na logica do alarme
 - ou conecte no AP do ESP32 e tente abrir qualquer site
 
 ## Multiplas redes Wi-Fi e saude de conectividade

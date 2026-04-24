@@ -12,12 +12,16 @@ import { LoadingState } from "../components/ui/LoadingState";
 import { Modal } from "../components/ui/Modal";
 import { useAuth } from "../contexts/AuthContext";
 import { useRealtime } from "../contexts/RealtimeContext";
+import { applyTelemetryPatchToDeviceList } from "../lib/deviceRealtime";
 import {
   deviceBehaviorTone,
   formatDateTime,
   formatRelativeTime,
   humanizeDeviceBehaviorConfidence,
   humanizeDeviceBehaviorState,
+  humanizeRealtimePhase,
+  humanizeSocketDisconnectReason,
+  realtimeTone,
 } from "../lib/format";
 import { api, getErrorMessage } from "../services/api";
 import type {
@@ -89,30 +93,15 @@ function formatPairingCountdown(expiresAt?: string | null, nowMs = Date.now()) {
   };
 }
 
-function applyTelemetryBehaviorPatch(
-  device: Device,
-  telemetryEvent: TelemetryRealtimeEvent,
-) {
-  const nextBehavior = telemetryEvent.deviceBehavior;
-
-  if (!nextBehavior) {
-    return device;
-  }
-
-  return {
-    ...device,
-    behavior: nextBehavior,
-    status: {
-      ...device.status,
-      online: true,
-      lastSeenAt: telemetryEvent.createdAt || device.status.lastSeenAt,
-      updatedAt: telemetryEvent.createdAt || device.status.updatedAt,
-    },
-  };
-}
-
 export function DevicesPage() {
-  const { socket } = useRealtime();
+  const {
+    connectionPhase,
+    isConnected,
+    lastConnectError,
+    lastConnectErrorCode,
+    lastDisconnectReason,
+    socket,
+  } = useRealtime();
   const { activeRole, user } = useAuth();
   const [devices, setDevices] = useState<Device[]>([]);
   const [patients, setPatients] = useState<PatientRecord[]>([]);
@@ -237,16 +226,8 @@ export function DevicesPage() {
     };
 
     const handleTelemetry = (telemetryEvent: TelemetryRealtimeEvent) => {
-      if (!telemetryEvent.deviceBehavior) {
-        return;
-      }
-
       setDevices((current) =>
-        current.map((device) =>
-          device.id === telemetryEvent.deviceId
-            ? applyTelemetryBehaviorPatch(device, telemetryEvent)
-            : device,
-        ),
+        applyTelemetryPatchToDeviceList(current, telemetryEvent),
       );
     };
 
@@ -462,6 +443,13 @@ export function DevicesPage() {
     return <LoadingState label="Buscando dispositivos da organização..." />;
   }
 
+  const offlineDevices = devices.filter((device) => !device.status.online).length;
+  const realtimeSummary = isConnected
+    ? "Socket do painel conectado. Device offline continua significando ausencia recente de status/telemetria MQTT no backend."
+    : lastConnectError
+      ? `${lastConnectError}${lastConnectErrorCode ? ` (${lastConnectErrorCode})` : ""}`
+      : `Socket do painel desconectado: ${humanizeSocketDisconnectReason(lastDisconnectReason)}. O inventario continua mostrando o ultimo snapshot conhecido.`;
+
   return (
     <div className="space-y-6">
       <Card>
@@ -476,6 +464,17 @@ export function DevicesPage() {
             <p className="mt-2 text-sm text-surface-600">
               O backend agora distingue descoberta técnica, claim seguro por código
               temporário e vínculo do device com o paciente certo.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Badge tone={realtimeTone(connectionPhase) as never}>
+                {humanizeRealtimePhase(connectionPhase)}
+              </Badge>
+              <Badge tone={offlineDevices > 0 ? "warning" : "success"}>
+                {offlineDevices} sem telemetria MQTT recente
+              </Badge>
+            </div>
+            <p className="mt-2 max-w-3xl text-xs text-surface-500">
+              {realtimeSummary}
             </p>
           </div>
           {canManageDevices ? (

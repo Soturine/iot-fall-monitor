@@ -8,23 +8,39 @@ import { Card } from "../components/ui/Card";
 import { EmptyState } from "../components/ui/EmptyState";
 import { LoadingState } from "../components/ui/LoadingState";
 import { useRealtime } from "../contexts/RealtimeContext";
+import { applyTelemetryPatchToDetail } from "../lib/deviceRealtime";
 import {
   deviceBehaviorTone,
   formatDateTime,
+  formatRelativeTime,
   humanizeAlertStatus,
   humanizeDeviceBehaviorConfidence,
   humanizeDeviceBehaviorState,
+  humanizeRealtimePhase,
   humanizeSeverity,
+  humanizeSocketDisconnectReason,
+  realtimeTone,
   severityTone,
   statusTone,
 } from "../lib/format";
 import { api } from "../services/api";
-import type { AlertRecord, DeviceDetailResponse } from "../types/api";
+import type {
+  AlertRecord,
+  DeviceDetailResponse,
+  TelemetryRealtimeEvent,
+} from "../types/api";
 
 export function DeviceDetailPage() {
   const { id } = useParams();
   const numericId = Number(id);
-  const { socket } = useRealtime();
+  const {
+    connectionPhase,
+    isConnected,
+    lastConnectError,
+    lastConnectErrorCode,
+    lastDisconnectReason,
+    socket,
+  } = useRealtime();
   const [detail, setDetail] = useState<DeviceDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -65,16 +81,25 @@ export function DeviceDetailPage() {
         void loadDetail();
       }
     };
+    const handleTelemetry = (telemetryEvent: TelemetryRealtimeEvent) => {
+      if (telemetryEvent.deviceId !== numericId) {
+        return;
+      }
+
+      setDetail((current) =>
+        current ? applyTelemetryPatchToDetail(current, telemetryEvent) : current,
+      );
+    };
 
     socket.on("device:status", refreshIfMatches);
-    socket.on("telemetry:new", refreshIfMatches);
+    socket.on("telemetry:new", handleTelemetry);
     socket.on("alert:new", refreshIfMatches);
     socket.on("alert:updated", refreshIfMatches);
 
     return () => {
       active = false;
       socket.off("device:status", refreshIfMatches);
-      socket.off("telemetry:new", refreshIfMatches);
+      socket.off("telemetry:new", handleTelemetry);
       socket.off("alert:new", refreshIfMatches);
       socket.off("alert:updated", refreshIfMatches);
     };
@@ -97,6 +122,11 @@ export function DeviceDetailPage() {
   const activeAlerts = detail.recentAlerts.filter((alert) =>
     ["open", "acknowledged"].includes(alert.status),
   );
+  const realtimeSummary = isConnected
+    ? "Socket do painel conectado. Este detalhe agora recebe telemetria incremental sem depender de reload completo a cada amostra."
+    : lastConnectError
+      ? `${lastConnectError}${lastConnectErrorCode ? ` (${lastConnectErrorCode})` : ""}`
+      : `Socket do painel desconectado: ${humanizeSocketDisconnectReason(lastDisconnectReason)}. O snapshot atual continua visivel, mas pode atrasar ate a reconexao.`;
 
   return (
     <div className="space-y-6">
@@ -163,6 +193,27 @@ export function DeviceDetailPage() {
         </div>
       </Card>
 
+      <Card>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.28em] text-surface-500">
+              Realtime desta tela
+            </p>
+            <h3 className="mt-2 font-display text-2xl text-surface-900">
+              Painel e device acompanhados em camadas separadas
+            </h3>
+          </div>
+          <Badge tone={realtimeTone(connectionPhase) as never}>
+            {humanizeRealtimePhase(connectionPhase)}
+          </Badge>
+        </div>
+        <p className="mt-3 text-sm text-surface-600">{realtimeSummary}</p>
+        <p className="mt-2 text-xs text-surface-500">
+          Device offline significa ausencia recente de status/telemetria MQTT no backend.
+          Ultimo contato: {formatRelativeTime(detail.device.status.lastSeenAt)}.
+        </p>
+      </Card>
+
       <section className="grid gap-6 xl:grid-cols-[1.35fr_0.95fr]">
         <Card>
           <div className="flex items-center justify-between gap-3">
@@ -226,6 +277,13 @@ export function DeviceDetailPage() {
                 AX {typeof latestTelemetry?.ax === "number" ? latestTelemetry.ax.toFixed(2) : "--"} •
                 AY {typeof latestTelemetry?.ay === "number" ? latestTelemetry.ay.toFixed(2) : "--"} •
                 AZ {typeof latestTelemetry?.az === "number" ? latestTelemetry.az.toFixed(2) : "--"}
+              </p>
+              <p className="mt-2 text-xs text-surface-500">
+                RSSI {detail.device.status.wifiRssi ?? "--"} • bateria{" "}
+                {detail.device.status.batteryPercent ?? "--"}% •{" "}
+                {detail.device.status.online
+                  ? "telemetria MQTT recente"
+                  : "sem telemetria MQTT recente"}
               </p>
             </div>
           </div>

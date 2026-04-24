@@ -101,10 +101,7 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
     if (topicInfo.channel === "telemetry") {
       await upsertDeviceStatus(
         device.id,
-        {
-          online: true,
-          lastSeenAt: normalizeTimestamp(payload.timestamp),
-        },
+        buildStatusUpdateFromPayload(payload),
         currentScope,
         connection,
       );
@@ -123,6 +120,7 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
         telemetry: {
           ...telemetry,
           deviceIdentifier,
+          deviceStatusPatch: deviceSnapshot.status,
           deviceBehavior: deviceSnapshot.behavior,
         },
       };

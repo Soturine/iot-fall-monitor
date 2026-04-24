@@ -1,8 +1,9 @@
 #include "buzzer_led.h"
 
-void BuzzerLed::begin(uint8_t ledPin, uint8_t buzzerPin) {
+void BuzzerLed::begin(uint8_t ledPin, uint8_t buzzerPin, bool buzzerActiveHigh) {
   ledPin_ = ledPin;
   buzzerPin_ = buzzerPin;
+  buzzerActiveHigh_ = buzzerActiveHigh;
   configured_ = true;
 
   pinMode(ledPin_, OUTPUT);
@@ -111,7 +112,10 @@ void BuzzerLed::writeOutputs(bool ledOn, bool buzzerOn) {
   }
 
   if (buzzerOn != buzzerState_) {
-    digitalWrite(buzzerPin_, buzzerOn ? HIGH : LOW);
+    const uint8_t buzzerLevel = buzzerOn
+                                    ? (buzzerActiveHigh_ ? HIGH : LOW)
+                                    : (buzzerActiveHigh_ ? LOW : HIGH);
+    digitalWrite(buzzerPin_, buzzerLevel);
     buzzerState_ = buzzerOn;
   }
 }

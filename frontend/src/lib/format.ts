@@ -161,3 +161,55 @@ export function humanizeDeviceBehaviorConfidence(confidence?: string | null) {
       return "indefinida";
   }
 }
+
+export function realtimeTone(
+  phase?: "idle" | "connecting" | "connected" | "reconnecting" | "error" | null,
+) {
+  switch (phase) {
+    case "connected":
+      return "success";
+    case "error":
+      return "warning";
+    case "connecting":
+    case "reconnecting":
+      return "warning";
+    case "idle":
+    default:
+      return "neutral";
+  }
+}
+
+export function humanizeRealtimePhase(
+  phase?: "idle" | "connecting" | "connected" | "reconnecting" | "error" | null,
+) {
+  switch (phase) {
+    case "connected":
+      return "Tempo real ativo";
+    case "connecting":
+      return "Conectando painel";
+    case "reconnecting":
+      return "Reconectando painel";
+    case "error":
+      return "Socket do painel com falha";
+    case "idle":
+    default:
+      return "Socket em espera";
+  }
+}
+
+export function humanizeSocketDisconnectReason(reason?: string | null) {
+  switch (reason) {
+    case "io server disconnect":
+      return "o backend encerrou a sessao realtime";
+    case "io client disconnect":
+      return "o navegador encerrou o socket localmente";
+    case "ping timeout":
+      return "o heartbeat do socket expirou";
+    case "transport close":
+      return "a conexao de rede/transport foi fechada";
+    case "transport error":
+      return "houve um erro de transporte na rede";
+    default:
+      return reason || "motivo tecnico nao informado";
+  }
+}

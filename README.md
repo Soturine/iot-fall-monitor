@@ -25,6 +25,8 @@ Nesta mesma fase, a autenticacao do frontend passou a reidratar a sessao com `GE
 
 Mais recentemente, o backend e o frontend ganharam uma camada inicial de status comportamental/postural experimental. Ela usa apenas a telemetria ja existente do `MPU6050`, com estados heuristicas como `pre_calibracao`, `em_reposo`, `deitado`, `sentado`, `em_movimento`, `queda_suspeita` e `queda_confirmada`, sempre acompanhados de um nivel de confianca e sem pretensao de diagnostico clinico.
 
+Nesta rodada, o painel passou a separar melhor a saude do socket do navegador da saude MQTT/device, o detalhe do device passou a aplicar patches incrementais de telemetria para deixar ultima leitura, RSSI e bateria mais coerentes, e o portal do ESP32 ganhou um bloco simples de saude operacional com testes de backend e MQTT. No firmware, o motion test do buzzer ficou desabilitado por padrao e a polaridade do buzzer passou a ser configuravel em `BUZZER_ACTIVE_HIGH`.
+
 ## Estrutura do projeto
 
 ```text

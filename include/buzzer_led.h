@@ -12,7 +12,7 @@ enum class IndicatorState {
 
 class BuzzerLed {
  public:
-  void begin(uint8_t ledPin, uint8_t buzzerPin);
+  void begin(uint8_t ledPin, uint8_t buzzerPin, bool buzzerActiveHigh = true);
   void setState(IndicatorState state);
   void triggerAlarm(uint8_t cycles = 6);
   void triggerPulse(unsigned long durationMs);
@@ -25,6 +25,7 @@ class BuzzerLed {
   uint8_t ledPin_ = 0;
   uint8_t buzzerPin_ = 0;
   bool configured_ = false;
+  bool buzzerActiveHigh_ = true;
   bool ledState_ = false;
   bool buzzerState_ = false;
 

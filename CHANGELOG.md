@@ -1,5 +1,38 @@
 # Changelog
 
+## [v0.8.8] - 2026-04-23
+### Adicionado
+- bloco de saude operacional no portal do ESP32 com leitura separada de `Wi-Fi conectado`, `MQTT OK`, `Backend API` e `Pronto para operar`, alem de botoes `Testar backend` e `Testar MQTT`
+- diagnostico de realtime no frontend com fase da conexao do painel, motivo tecnico discreto e separacao explicita entre socket do navegador e status MQTT/device
+
+### Alterado
+- versao alinhada para `0.8.8` em `CHANGELOG.md`, `README.md`, `package.json` da raiz, `backend/package.json`, `backend/package-lock.json`, `frontend/package.json` e `frontend/package-lock.json`
+- `telemetry:new` passou a carregar `deviceStatusPatch`, permitindo atualizar bateria, RSSI, `lastSeenAt` e heuristica sem depender de refetch pesado nas telas
+- o detalhe do device passou a aplicar patch incremental da telemetria recente em vez de recarregar toda a tela a cada amostra
+- o `MOTION_TEST_MODE_ENABLED` do firmware ficou desabilitado por padrao e o buzzer ganhou configuracao explicita de polaridade com `BUZZER_ACTIVE_HIGH`
+
+### Corrigido
+- o painel deixou de sugerir que o device caiu quando quem falha e apenas o socket do navegador, deixando mais claro quando o problema esta no realtime do frontend
+- o portal do ESP32 agora mostra confirmacao visual mais honesta de conectividade/configuracao, incluindo ultimo teste MQTT e alcance do backend
+- a telemetria passou a manter RSSI, bateria e snapshot tecnico-clinico mais coerentes em tempo real com o que o firmware ja conhece
+- o buzzer deixou de ficar exposto ao `motion test` de bancada por padrao, reduzindo falsos disparos fora do cenario esperado
+
+### Pendente / Faltando
+- validar em hardware real o novo bloco de saude do portal e o ajuste conservador do buzzer com a placa fisica usada em campo
+- confirmar em bancada se a polaridade padrao `BUZZER_ACTIVE_HIGH = true` corresponde ao lote de hardware principal ou se sera preciso inverter em placas especificas
+
+### Limitacoes conhecidas
+- sem `PlatformIO` disponivel neste ambiente, a rodada nao conseguiu compilar o firmware localmente
+- o portal continua existindo principalmente em `SETUP_MODE`, entao `MQTT OK` depende de teste manual ou do ultimo contexto conhecido enquanto o ESP32 ainda esta no modo de configuracao
+
+### Divida tecnica / Pontos fracos
+- o portal do ESP32 ainda concentra HTML inline em `src/setup_portal.cpp`, o que deixa iteracoes finas de UX mais trabalhosas
+- o dashboard ainda usa refetch completo para alguns eventos de alerta/status, embora a telemetria ja tenha ficado mais incremental
+
+### Proximos passos sugeridos
+- validar em hardware real se os novos testes do portal ajudam a fechar setup sem adivinhacao e se o buzzer ficou previsivel no lote principal de ESP32
+- numa rodada futura, considerar um snapshot realtime mais rico tambem para alertas e status sem aumentar demais o custo do frontend
+
 ## [v0.8.7] - 2026-04-21
 ### Adicionado
 - status comportamental/postural experimental derivado da telemetria atual com `state`, `confidence`, `reason` e espaco preparado para estados futuros como `andando`, `correndo` e `caido`

@@ -78,15 +78,17 @@ constexpr bool SOS_BUTTON_ENABLED = false;
 constexpr uint8_t SOS_BUTTON_PIN = 27;
 constexpr bool BUZZER_ENABLED = true;
 constexpr uint8_t BUZZER_PIN = 25;
+constexpr bool BUZZER_ACTIVE_HIGH = true;
 constexpr bool STATUS_LED_ENABLED = false;
 // Evita GPIO2 por ser pino de strapping/boot no ESP32.
 constexpr uint8_t STATUS_LED_PIN = 26;
 
 // Modo de teste de bancada para validar MPU6050 + buzzer.
-// Quando habilitado, um movimento brusco acima dos thresholds abaixo gera um beep curto.
+// Mantemos desabilitado por padrao para nao misturar bancada com alarme real.
+// Quando habilitado manualmente, um movimento brusco acima dos thresholds abaixo gera um beep curto.
 // Isso nao substitui a logica real de deteccao de queda.
-constexpr bool MOTION_TEST_MODE_ENABLED = true;
-constexpr bool MOTION_TEST_SERIAL_DEBUG_ENABLED = true;
+constexpr bool MOTION_TEST_MODE_ENABLED = false;
+constexpr bool MOTION_TEST_SERIAL_DEBUG_ENABLED = false;
 // Quando true, accel e gyro precisam ultrapassar o limiar juntos.
 // Isso reduz falsos disparos por vibracao ou ruído isolado do giroscopio.
 constexpr bool MOTION_TEST_REQUIRE_BOTH_THRESHOLDS = true;

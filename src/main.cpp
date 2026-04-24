@@ -26,7 +26,7 @@ FallDetector fallDetector;
 ConfigStore configStore;
 WifiManager wifiManager;
 DeviceMqttClient mqttClient;
-SetupPortal setupPortal(configStore);
+SetupPortal setupPortal(configStore, mqttClient);
 ConnectivityManager connectivityManager(configStore, wifiManager, mqttClient, setupPortal);
 EventBuffer eventBuffer;
 BuzzerLed indicator;
@@ -137,6 +137,8 @@ String buildTelemetryPayload() {
   doc["gyro_magnitude"] = latestReading.gyroMagnitudeDegPerSec;
   doc["pitch_deg"] = latestReading.pitchDeg;
   doc["roll_deg"] = latestReading.rollDeg;
+  doc["battery_level"] = batteryLevelPercent();
+  doc["wifi_rssi"] = connectivityManager.wifiRssi();
 
   String payload;
   serializeJson(doc, payload);
@@ -443,7 +445,7 @@ void setup() {
 
   // A ordem de inicializacao prioriza feedback local mesmo antes da rede subir.
   if (AppConfig::STATUS_LED_ENABLED || AppConfig::BUZZER_ENABLED) {
-    indicator.begin(AppConfig::STATUS_LED_PIN, AppConfig::BUZZER_PIN);
+    indicator.begin(AppConfig::STATUS_LED_PIN, AppConfig::BUZZER_PIN, AppConfig::BUZZER_ACTIVE_HIGH);
     indicator.setState(IndicatorState::Booting);
   }
 
@@ -456,6 +458,8 @@ void setup() {
     AppLog::info("IMU inicializada com sucesso.");
     if (AppConfig::MOTION_TEST_MODE_ENABLED) {
       AppLog::info("Modo de teste MPU6050 + buzzer habilitado.");
+    } else {
+      AppLog::info("Modo de teste MPU6050 + buzzer desabilitado por padrao.");
     }
   } else {
     AppLog::error("Falha ao inicializar a IMU.");

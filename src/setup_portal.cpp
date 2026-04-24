@@ -111,9 +111,19 @@ String buildPairingFailureMessage(int httpStatus, const String& responseBody) {
   return "Nao foi possivel concluir o pareamento. Revise a URL do backend e tente novamente.";
 }
 
+String statusChip(const String& label, const String& stateClass) {
+  String html = "<span class='badge ";
+  html += stateClass;
+  html += "'>";
+  html += label;
+  html += "</span>";
+  return html;
+}
+
 }  // namespace
 
-SetupPortal::SetupPortal(ConfigStore& configStore) : configStore_(configStore) {}
+SetupPortal::SetupPortal(ConfigStore& configStore, DeviceMqttClient& mqttClient)
+    : configStore_(configStore), mqttClient_(mqttClient) {}
 
 void SetupPortal::begin(const DeviceSettings::DeviceConfig& config,
                         const String& stateLabel,
@@ -121,6 +131,7 @@ void SetupPortal::begin(const DeviceSettings::DeviceConfig& config,
                         bool stationConnected,
                         const IPAddress& stationIp) {
   syncContext(config, stateLabel, reason, stationConnected, stationIp);
+  clearOperationalProbeResults();
   ensureApStarted();
   configureRoutes();
   dnsServer_.start(kDnsPort, "*", apIp_);
@@ -171,6 +182,8 @@ void SetupPortal::configureRoutes() {
   server_.on("/wifi/remove", HTTP_POST, [this]() { handleRemoveWifi(); });
   server_.on("/pair", HTTP_POST, [this]() { handlePairDevice(); });
   server_.on("/restart", HTTP_POST, [this]() { handleRestart(); });
+  server_.on("/test-backend", HTTP_POST, [this]() { handleTestBackend(); });
+  server_.on("/test-mqtt", HTTP_POST, [this]() { handleTestMqtt(); });
 
   server_.on("/generate_204", HTTP_ANY, [this]() { handleCaptiveProbe(); });
   server_.on("/gen_204", HTTP_ANY, [this]() { handleCaptiveProbe(); });
@@ -270,6 +283,15 @@ void SetupPortal::redirectToPortal() {
   server_.send(302, "text/plain", "");
 }
 
+void SetupPortal::clearOperationalProbeResults() {
+  backendProbeChecked_ = false;
+  backendProbeSuccess_ = false;
+  backendProbeMessage_ = "";
+  mqttProbeChecked_ = false;
+  mqttProbeSuccess_ = false;
+  mqttProbeMessage_ = "";
+}
+
 void SetupPortal::handleRoot() {
   server_.send(200, "text/html; charset=utf-8", renderPage());
 }
@@ -305,6 +327,7 @@ void SetupPortal::handleSaveSettings() {
   }
 
   config_ = updated;
+  clearOperationalProbeResults();
   if (server_.arg("action") == "save_restart") {
     scheduleRestart("Configuracao salva. Reiniciando o ESP32 para aplicar Wi-Fi e MQTT.");
   } else {
@@ -382,6 +405,9 @@ void SetupPortal::handlePairDevice() {
     }
 
     config_ = updated;
+    backendProbeChecked_ = true;
+    backendProbeSuccess_ = true;
+    backendProbeMessage_ = "O backend respondeu ao claim do pairing nesta rede.";
     flashMessage_ =
         "Dispositivo pareado com sucesso. O backend confirmou o claim deste ESP32 para a organizacao ativa.";
     if (!updated.patientProfile.patientName.isEmpty()) {
@@ -429,6 +455,7 @@ void SetupPortal::handleAddWifi() {
   }
 
   config_ = updated;
+  clearOperationalProbeResults();
   flashMessage_ = "Rede Wi-Fi salva. Se necessario, adicione mais redes e depois reinicie o ESP32.";
   flashTone_ = "success";
   redirectToPortal();
@@ -453,6 +480,7 @@ void SetupPortal::handleRemoveWifi() {
   }
 
   config_ = updated;
+  clearOperationalProbeResults();
   flashMessage_ = "Rede removida. Salve e reinicie quando terminar de editar.";
   flashTone_ = "success";
   redirectToPortal();
@@ -460,6 +488,79 @@ void SetupPortal::handleRemoveWifi() {
 
 void SetupPortal::handleRestart() {
   scheduleRestart("Reiniciando o ESP32 para retomar a conexao normal.");
+  redirectToPortal();
+}
+
+void SetupPortal::handleTestBackend() {
+  DeviceSettings::DeviceConfig probeConfig = config_;
+  probeConfig.mqtt.backendApiBaseUrl = server_.arg("backend_api_base_url");
+
+  backendProbeChecked_ = true;
+  backendProbeSuccess_ = false;
+  backendProbeMessage_ = "";
+
+  if (!DeviceSettings::hasValidBackendApiBaseUrl(probeConfig)) {
+    backendProbeMessage_ =
+        "Backend API invalida. Use http:// ou https:// com o IP real do notebook na rede atual.";
+    flashMessage_ = backendProbeMessage_;
+    flashTone_ = "error";
+    redirectToPortal();
+    return;
+  }
+
+  HTTPClient httpClient;
+  const String endpoint = DeviceSettings::effectiveBackendApiBaseUrl(probeConfig) + "/health";
+
+  if (!httpClient.begin(endpoint)) {
+    backendProbeMessage_ =
+        "Nao foi possivel iniciar o teste HTTP para o backend nesta URL.";
+    flashMessage_ = backendProbeMessage_;
+    flashTone_ = "error";
+    redirectToPortal();
+    return;
+  }
+
+  const int httpStatus = httpClient.GET();
+  const String responseBody = httpClient.getString();
+  httpClient.end();
+
+  if (httpStatus >= 200 && httpStatus < 300) {
+    backendProbeSuccess_ = true;
+    backendProbeMessage_ = "Backend respondeu com sucesso em /health. Se estiver tudo certo, salve e reinicie para operar fora do portal.";
+    flashMessage_ = backendProbeMessage_;
+    flashTone_ = "success";
+    redirectToPortal();
+    return;
+  }
+
+  backendProbeMessage_ = buildPairingFailureMessage(httpStatus, responseBody);
+  flashMessage_ = backendProbeMessage_;
+  flashTone_ = "error";
+  redirectToPortal();
+}
+
+void SetupPortal::handleTestMqtt() {
+  DeviceSettings::DeviceConfig probeConfig = config_;
+  probeConfig.deviceId = server_.arg("device_id");
+  probeConfig.mqtt.host = server_.arg("mqtt_host");
+  probeConfig.mqtt.port = parsePortOrDefault(server_.arg("mqtt_port"),
+                                             AppConfig::DEFAULT_MQTT_PORT);
+  probeConfig.mqtt.username = server_.arg("mqtt_username");
+  probeConfig.mqtt.password = server_.arg("mqtt_password");
+  probeConfig.mqtt.clientId = server_.arg("mqtt_client_id");
+  probeConfig.mqtt.backendApiBaseUrl = server_.arg("backend_api_base_url");
+
+  mqttProbeChecked_ = true;
+  mqttProbeSuccess_ = false;
+  mqttProbeMessage_ = "";
+
+  const MqttConnectionProbeResult result = mqttClient_.probeConnection(probeConfig);
+  mqttProbeSuccess_ = result.success;
+  mqttProbeMessage_ = result.message;
+  flashMessage_ = result.success
+                      ? result.message + " Salve as configuracoes se quiser persistir estes parametros."
+                      : result.message;
+  flashTone_ = result.success ? "success" : "error";
   redirectToPortal();
 }
 
@@ -504,7 +605,12 @@ void SetupPortal::appendPageHead(String& html) const {
   html += ".list{display:grid;gap:10px;margin-top:10px;}.network{border:1px solid #d7e2dd;border-radius:14px;padding:12px;display:flex;justify-content:space-between;gap:12px;align-items:center;}";
   html += ".muted{color:#526661;font-size:14px;}.mono{font-family:'Courier New',monospace;}";
   html += ".hint{font-size:13px;color:#526661;}.success{color:#166534;}.error{color:#991b1b;}.hidden{display:none;}";
-  html += "video{width:100%;max-height:240px;border-radius:14px;background:#0f172a;}";
+  html += ".status-grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));margin-top:14px;}";
+  html += ".status-card{border:1px solid #d7e2dd;border-radius:16px;padding:14px;background:#f9fbfa;}";
+  html += ".status-card strong{display:block;font-size:14px;color:#15312a;}";
+  html += ".ok{background:#dcfce7;color:#166534;}";
+  html += ".warn{background:#fef3c7;color:#92400e;}";
+  html += ".bad{background:#fee2e2;color:#991b1b;}";
   html += "</style></head><body><div class='wrap'>";
 }
 
@@ -536,6 +642,84 @@ void SetupPortal::appendFlashMessage(String& html) const {
   html += flashStyle();
   html += "'>";
   html += htmlEscape(flashMessage_);
+  html += "</div>";
+}
+
+String SetupPortal::renderOperationalHealthSummary() const {
+  const bool wifiConnected = WiFi.status() == WL_CONNECTED;
+  const bool mqttConfigValid = DeviceSettings::hasValidMqttConfig(config_);
+  const bool backendApiValid = DeviceSettings::hasValidBackendApiBaseUrl(config_);
+  const bool configurationCoherent =
+      DeviceSettings::hasWifiNetworks(config_) && mqttConfigValid && backendApiValid;
+  const bool mqttOperationalOk = mqttClient_.isConnected() || (mqttProbeChecked_ && mqttProbeSuccess_);
+  const bool backendOperationalOk = backendProbeChecked_ && backendProbeSuccess_;
+  const bool readyToOperate =
+      wifiConnected && mqttOperationalOk && backendOperationalOk && configurationCoherent;
+
+  const String wifiDetail = wifiConnected
+                                ? String("SSID ") + WiFi.SSID() + " | IP " + WiFi.localIP().toString()
+                                : String("Sem conexao station ativa nesta pagina.");
+  const String mqttDetail = mqttClient_.isConnected()
+                                ? String("Broker conectado em ") + config_.mqtt.host + ":" + config_.mqtt.port
+                                : (!mqttProbeMessage_.isEmpty()
+                                       ? mqttProbeMessage_
+                                       : (mqttConfigValid
+                                              ? String("Broker configurado em ") + config_.mqtt.host + ":" + config_.mqtt.port + ". Use Testar MQTT para validar agora."
+                                              : String("Host, porta ou client ID MQTT ainda nao estao validos.")));
+  const String backendDetail = backendOperationalOk
+                                   ? backendProbeMessage_
+                                   : (!backendProbeMessage_.isEmpty()
+                                          ? backendProbeMessage_
+                                          : (backendApiValid
+                                                 ? String("URL valida. Use Testar backend para confirmar o alcance agora.")
+                                                 : String("Informe uma Backend API base URL valida antes de operar.")));
+  const String readyDetail = readyToOperate
+                                 ? String("Wi-Fi, backend e MQTT responderam. Salve e reinicie para sair do setup com mais previsibilidade.")
+                                 : String("Enquanto algum item ficar pendente, o portal continua sendo a forma mais honesta de ajustar a configuracao.");
+
+  String html = "<div class='status-grid'>";
+
+  html += "<div class='status-card'><strong>Wi-Fi conectado</strong><div class='row'>";
+  html += statusChip(wifiConnected ? "OK" : "Pendente", wifiConnected ? "ok" : "warn");
+  html += "</div><p class='muted'>";
+  html += htmlEscape(wifiDetail);
+  html += "</p></div>";
+
+  html += "<div class='status-card'><strong>MQTT OK</strong><div class='row'>";
+  html += statusChip(mqttOperationalOk ? "OK" : (mqttConfigValid ? "Nao verificado" : "Invalido"),
+                     mqttOperationalOk ? "ok" : (mqttConfigValid ? "warn" : "bad"));
+  html += "</div><p class='muted'>";
+  html += htmlEscape(mqttDetail);
+  html += "</p></div>";
+
+  html += "<div class='status-card'><strong>Backend API</strong><div class='row'>";
+  html += statusChip(backendOperationalOk ? "Acessivel" : (backendApiValid ? "Valido" : "Invalido"),
+                     backendOperationalOk ? "ok" : (backendApiValid ? "warn" : "bad"));
+  html += "</div><p class='muted'>";
+  html += htmlEscape(backendDetail);
+  html += "</p></div>";
+
+  html += "<div class='status-card'><strong>Pronto para operar</strong><div class='row'>";
+  html += statusChip(readyToOperate ? "Pronto" : "Revisar", readyToOperate ? "ok" : "warn");
+  html += "</div><p class='muted'>";
+  html += htmlEscape(readyDetail);
+  html += "</p></div>";
+
+  html += "</div>";
+  return html;
+}
+
+void SetupPortal::appendOperationalHealthCard(String& html) const {
+  html += "<div class='card'><h2>Saude operacional atual</h2>";
+  html += "<p class='muted'>Este bloco separa conectividade do portal, validade da configuracao e testes executados agora. Em setup mode, MQTT pode estar em prova/ajuste mesmo com o AP local funcionando.</p>";
+  html += renderOperationalHealthSummary();
+  if (!mqttClient_.lastFailureReason().isEmpty() &&
+      mqttClient_.lastFailureCode() != MQTT_DISCONNECTED &&
+      mqttClient_.lastFailureCode() != MQTT_CONNECTED) {
+    html += "<p class='muted' style='margin-top:12px;'><strong>Ultima falha MQTT conhecida:</strong> ";
+    html += htmlEscape(mqttClient_.lastFailureReason());
+    html += "</p>";
+  }
   html += "</div>";
 }
 
@@ -581,7 +765,9 @@ void SetupPortal::appendMqttCard(String& html) const {
   html += "' placeholder='http://IP-DO-NOTEBOOK:4000'></div>";
   html += "<p class='muted'>Nunca use <span class='mono'>localhost</span> no ESP32. Para broker no notebook, use o IP real do notebook na rede atual.</p>";
   html += "<div class='row'><button class='primary' name='action' type='submit' value='save_restart'>Salvar e reiniciar</button>";
-  html += "<button class='secondary' name='action' type='submit' value='save_only'>Salvar sem reiniciar</button></div></form>";
+  html += "<button class='secondary' name='action' type='submit' value='save_only'>Salvar sem reiniciar</button>";
+  html += "<button class='secondary' formaction='/test-backend' formmethod='post' type='submit'>Testar backend</button>";
+  html += "<button class='secondary' formaction='/test-mqtt' formmethod='post' type='submit'>Testar MQTT</button></div></form>";
   html += "</div>";
 }
 
@@ -612,11 +798,12 @@ void SetupPortal::appendRestartCard(String& html) const {
 
 String SetupPortal::renderPage() const {
   String html;
-  html.reserve(16384);
+  html.reserve(18432);
 
   appendPageHead(html);
   appendHeaderCard(html);
   appendFlashMessage(html);
+  appendOperationalHealthCard(html);
   appendWifiCard(html);
   appendMqttCard(html);
   appendPairingCard(html);
@@ -693,12 +880,18 @@ String SetupPortal::renderPatientProfileSummary() const {
 }
 
 String SetupPortal::stationAccessSummary() const {
-  if (!stationConnected_) {
+  if (WiFi.status() != WL_CONNECTED) {
     return "<p class='muted'>Mesmo sem Wi-Fi funcional, o AP de setup continua disponivel para configuracao.</p>";
   }
 
   String html = "<p><strong>Tambem disponivel na rede atual:</strong> <span class='mono'>http://";
-  html += stationIp_.toString();
-  html += "</span></p>";
+  html += WiFi.localIP().toString();
+  html += "</span>";
+  if (!WiFi.SSID().isEmpty()) {
+    html += " via SSID <span class='mono'>";
+    html += htmlEscape(WiFi.SSID());
+    html += "</span>";
+  }
+  html += "</p>";
   return html;
 }

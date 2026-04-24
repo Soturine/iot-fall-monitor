@@ -5,6 +5,33 @@
 #include "app_config.h"
 #include "app_logging.h"
 
+String DeviceMqttClient::describeStateCode(int stateCode) {
+  switch (stateCode) {
+    case MQTT_CONNECTED:
+      return "Broker respondeu normalmente.";
+    case MQTT_CONNECTION_TIMEOUT:
+      return "Timeout ao conectar no broker MQTT.";
+    case MQTT_CONNECTION_LOST:
+      return "Conexao MQTT perdida apos conectar.";
+    case MQTT_CONNECT_FAILED:
+      return "Nao foi possivel abrir conexao TCP com o broker MQTT.";
+    case MQTT_DISCONNECTED:
+      return "Cliente MQTT desconectado.";
+    case MQTT_CONNECT_BAD_PROTOCOL:
+      return "Broker recusou a versao/protocolo MQTT desta build.";
+    case MQTT_CONNECT_BAD_CLIENT_ID:
+      return "Broker recusou o client ID configurado.";
+    case MQTT_CONNECT_UNAVAILABLE:
+      return "Broker MQTT indisponivel no momento.";
+    case MQTT_CONNECT_BAD_CREDENTIALS:
+      return "Broker rejeitou usuario ou senha MQTT.";
+    case MQTT_CONNECT_UNAUTHORIZED:
+      return "Broker recusou a conexao por autorizacao/permissao.";
+    default:
+      return String("Falha MQTT com codigo ") + stateCode + ".";
+  }
+}
+
 void DeviceMqttClient::begin() {
   // Buffer suficiente para os payloads JSON atuais sem gastar RAM em excesso.
   configureTransport();
@@ -62,7 +89,7 @@ bool DeviceMqttClient::publish(const String& topic, const String& payload, bool 
   return client_.publish(topic.c_str(), payload.c_str(), retained);
 }
 
-bool DeviceMqttClient::isConnected() {
+bool DeviceMqttClient::isConnected() const {
   return client_.connected();
 }
 
@@ -80,6 +107,90 @@ unsigned long DeviceMqttClient::firstFailureAtMs() const {
 
 bool DeviceMqttClient::usingTls() const {
   return useTls_;
+}
+
+int DeviceMqttClient::lastFailureCode() const {
+  return lastFailureCode_;
+}
+
+String DeviceMqttClient::lastFailureReason() const {
+  return describeStateCode(lastFailureCode_);
+}
+
+unsigned long DeviceMqttClient::lastSuccessfulConnectAtMs() const {
+  return lastSuccessfulConnectAtMs_;
+}
+
+MqttConnectionProbeResult DeviceMqttClient::probeConnection(
+    const DeviceSettings::DeviceConfig& config) const {
+  MqttConnectionProbeResult result;
+
+  if (WiFi.status() != WL_CONNECTED) {
+    result.message = "Wi-Fi desconectado. Conecte o ESP32 a uma rede antes de testar o MQTT.";
+    return result;
+  }
+
+  if (!DeviceSettings::hasValidMqttConfig(config)) {
+    result.message = "Configuracao MQTT invalida. Revise host, porta e client ID antes de testar.";
+    return result;
+  }
+
+  const String probeHost = config.mqtt.host;
+  const uint16_t probePort = config.mqtt.port;
+  const String probeClientId = DeviceSettings::effectiveMqttClientId(config) + "_probe";
+
+  if (config.mqtt.useTls) {
+    WiFiClientSecure secureClient;
+    if (!config.mqtt.tlsCaCertificate.isEmpty()) {
+      secureClient.setCACert(config.mqtt.tlsCaCertificate.c_str());
+    } else if (config.mqtt.tlsInsecure) {
+      secureClient.setInsecure();
+    }
+
+    PubSubClient probeClient(secureClient);
+    probeClient.setBufferSize(256);
+    probeClient.setServer(probeHost.c_str(), probePort);
+
+    const bool connected = !config.mqtt.username.isEmpty()
+                               ? probeClient.connect(probeClientId.c_str(),
+                                                     config.mqtt.username.c_str(),
+                                                     config.mqtt.password.c_str())
+                               : probeClient.connect(probeClientId.c_str());
+
+    result.success = connected;
+    result.stateCode = connected ? MQTT_CONNECTED : probeClient.state();
+    result.message = connected
+                         ? String("Broker MQTT respondeu em ") + probeHost + ":" + probePort + "."
+                         : describeStateCode(result.stateCode);
+
+    if (connected) {
+      probeClient.disconnect();
+    }
+    return result;
+  }
+
+  WiFiClient wifiClient;
+  PubSubClient probeClient(wifiClient);
+  probeClient.setBufferSize(256);
+  probeClient.setServer(probeHost.c_str(), probePort);
+
+  const bool connected = !config.mqtt.username.isEmpty()
+                             ? probeClient.connect(probeClientId.c_str(),
+                                                   config.mqtt.username.c_str(),
+                                                   config.mqtt.password.c_str())
+                             : probeClient.connect(probeClientId.c_str());
+
+  result.success = connected;
+  result.stateCode = connected ? MQTT_CONNECTED : probeClient.state();
+  result.message = connected
+                       ? String("Broker MQTT respondeu em ") + probeHost + ":" + probePort + "."
+                       : describeStateCode(result.stateCode);
+
+  if (connected) {
+    probeClient.disconnect();
+  }
+
+  return result;
 }
 
 void DeviceMqttClient::configureTransport() {
@@ -116,6 +227,8 @@ bool DeviceMqttClient::reconnect() {
 
   if (connected) {
     resetFailureTracking();
+    lastSuccessfulConnectAtMs_ = millis();
+    lastFailureCode_ = MQTT_CONNECTED;
     AppLog::infof("MQTT conectado em %s:%u (%s).\n",
                   host_.c_str(),
                   port_,
@@ -133,10 +246,13 @@ bool DeviceMqttClient::reconnect() {
     ++consecutiveFailureCount_;
   }
 
+  lastFailureCode_ = client_.state();
+
   if (AppConfig::FIRMWARE_CONNECTIVITY_DEBUG_ENABLED &&
       (consecutiveFailureCount_ == 1U || consecutiveFailureCount_ % 3U == 0U)) {
-    AppLog::debugf("MQTT segue desconectado. Tentativas falhas: %u\n",
-                   consecutiveFailureCount_);
+    AppLog::debugf("MQTT segue desconectado. Tentativas falhas: %u | motivo: %s\n",
+                   consecutiveFailureCount_,
+                   describeStateCode(lastFailureCode_).c_str());
   }
 
   return false;

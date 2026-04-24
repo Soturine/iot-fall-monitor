@@ -8,6 +8,7 @@ import { EmptyState } from "../components/ui/EmptyState";
 import { LoadingState } from "../components/ui/LoadingState";
 import { useAuth } from "../contexts/AuthContext";
 import { useRealtime } from "../contexts/RealtimeContext";
+import { applyTelemetryPatchToDeviceList } from "../lib/deviceRealtime";
 import {
   deviceBehaviorTone,
   formatDateTime,
@@ -15,7 +16,10 @@ import {
   humanizeAlertStatus,
   humanizeDeviceBehaviorConfidence,
   humanizeDeviceBehaviorState,
+  humanizeRealtimePhase,
   humanizeSeverity,
+  humanizeSocketDisconnectReason,
+  realtimeTone,
   severityTone,
   statusTone,
 } from "../lib/format";
@@ -35,7 +39,14 @@ type SummaryMetric = {
 };
 
 export function DashboardPage() {
-  const { socket } = useRealtime();
+  const {
+    connectionPhase,
+    isConnected,
+    lastConnectError,
+    lastConnectErrorCode,
+    lastDisconnectReason,
+    socket,
+  } = useRealtime();
   const { activeOrganization } = useAuth();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [recentAlerts, setRecentAlerts] = useState<AlertRecord[]>([]);
@@ -82,27 +93,20 @@ export function DashboardPage() {
     };
 
     const handleTelemetry = (telemetryEvent: TelemetryRealtimeEvent) => {
-      const nextBehavior = telemetryEvent.deviceBehavior;
-
-      if (!nextBehavior) {
-        return;
-      }
-
       setDeviceStatus((current) =>
-        current.map((device) =>
-          device.id === telemetryEvent.deviceId
-            ? {
-                ...device,
-                behavior: nextBehavior,
-                status: {
-                  ...device.status,
-                  online: true,
-                  lastSeenAt: telemetryEvent.createdAt || device.status.lastSeenAt,
-                  updatedAt: telemetryEvent.createdAt || device.status.updatedAt,
-                },
-              }
-            : device,
-        ),
+        applyTelemetryPatchToDeviceList(current, telemetryEvent),
+      );
+      setSummary((current) =>
+        current
+          ? {
+              ...current,
+              systemStatus: {
+                ...current.systemStatus,
+                lastSeenAt:
+                  telemetryEvent.createdAt || current.systemStatus.lastSeenAt,
+              },
+            }
+          : current,
       );
     };
 
@@ -159,6 +163,13 @@ export function DashboardPage() {
       tone: "bg-amber-500 text-white",
     },
   ];
+  const offlineDeviceCount = deviceStatus.filter((device) => !device.status.online).length;
+  const onlineDeviceCount = deviceStatus.filter((device) => device.status.online).length;
+  const realtimeSummary = isConnected
+    ? "Socket do painel conectado. Devices offline continuam significando ausencia recente de status/telemetria MQTT no backend."
+    : lastConnectError
+      ? `${lastConnectError}${lastConnectErrorCode ? ` (${lastConnectErrorCode})` : ""}`
+      : `Socket do painel desconectado: ${humanizeSocketDisconnectReason(lastDisconnectReason)}. O snapshot atual continua visivel, mas pode ficar desatualizado ate a reconexao.`;
 
   return (
     <div className="space-y-6">
@@ -210,6 +221,64 @@ export function DashboardPage() {
           </div>
         </div>
       </section>
+
+      <Card>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.28em] text-surface-500">
+              Diagnostico operacional
+            </p>
+            <h3 className="mt-2 font-display text-2xl text-surface-900">
+              Painel, device e MQTT em camadas separadas
+            </h3>
+            <p className="mt-2 text-sm text-surface-600">
+              Queda do socket do navegador nao significa que o ESP32 caiu. Aqui a leitura fica
+              separada para evitar esse falso positivo.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Badge tone={realtimeTone(connectionPhase) as never}>
+              {humanizeRealtimePhase(connectionPhase)}
+            </Badge>
+            <Badge tone={offlineDeviceCount > 0 ? "warning" : "success"}>
+              {offlineDeviceCount} sem telemetria MQTT recente
+            </Badge>
+          </div>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <div className="rounded-[24px] bg-surface-50 p-4">
+            <p className="text-xs font-bold uppercase tracking-[0.24em] text-surface-500">
+              Realtime do painel
+            </p>
+            <p className="mt-2 text-sm font-semibold text-surface-900">
+              {humanizeRealtimePhase(connectionPhase)}
+            </p>
+            <p className="mt-2 text-xs text-surface-600">{realtimeSummary}</p>
+          </div>
+          <div className="rounded-[24px] bg-surface-50 p-4">
+            <p className="text-xs font-bold uppercase tracking-[0.24em] text-surface-500">
+              Devices online
+            </p>
+            <p className="mt-2 text-sm font-semibold text-surface-900">
+              {onlineDeviceCount} com telemetria/status MQTT recente
+            </p>
+            <p className="mt-2 text-xs text-surface-600">
+              Este numero vem do backend e nao depende do socket do navegador estar ativo.
+            </p>
+          </div>
+          <div className="rounded-[24px] bg-surface-50 p-4">
+            <p className="text-xs font-bold uppercase tracking-[0.24em] text-surface-500">
+              Ultimo snapshot
+            </p>
+            <p className="mt-2 text-sm font-semibold text-surface-900">
+              {formatRelativeTime(summary.systemStatus.lastSeenAt)}
+            </p>
+            <p className="mt-2 text-xs text-surface-600">
+              O mapa de devices continua usando esse snapshot mesmo durante reconexao do painel.
+            </p>
+          </div>
+        </div>
+      </Card>
 
       <section className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
         <Card>

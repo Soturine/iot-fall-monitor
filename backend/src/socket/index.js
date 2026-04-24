@@ -4,6 +4,14 @@ const { verifyToken } = require("../utils/auth");
 const { logger } = require("../utils/logger");
 const { loadAccessContext } = require("../services/scopeService");
 
+function buildSocketAuthError(message, code) {
+  const error = new Error(message);
+  error.data = {
+    code,
+  };
+  return error;
+}
+
 function createSocketServer(httpServer) {
   const io = new Server(httpServer, {
     cors: {
@@ -18,7 +26,7 @@ function createSocketServer(httpServer) {
       socket.handshake.headers.authorization?.replace("Bearer ", "")?.trim();
 
     if (!token) {
-      return next(new Error("Unauthorized"));
+      return next(buildSocketAuthError("Token do painel ausente.", "SOCKET_TOKEN_MISSING"));
     }
 
     try {
@@ -31,7 +39,15 @@ function createSocketServer(httpServer) {
       socket.accessContext = accessContext;
       return next();
     } catch (error) {
-      return next(new Error("Unauthorized"));
+      logger.warn("Falha ao autenticar Socket.IO.", {
+        message: error.message,
+      });
+      return next(
+        buildSocketAuthError(
+          "Falha ao autenticar o canal em tempo real.",
+          "SOCKET_UNAUTHORIZED",
+        ),
+      );
     }
   });
 
@@ -42,8 +58,11 @@ function createSocketServer(httpServer) {
       organizationId: socket.accessContext?.activeOrganizationId || null,
     });
 
-    socket.on("disconnect", () => {
-      logger.debug("Cliente Socket.IO desconectado.", { socketId: socket.id });
+    socket.on("disconnect", (reason) => {
+      logger.debug("Cliente Socket.IO desconectado.", {
+        socketId: socket.id,
+        reason,
+      });
     });
   });
 

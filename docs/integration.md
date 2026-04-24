@@ -112,7 +112,9 @@ Exemplo de `fall_detected`:
   "accel_magnitude": 0.98,
   "gyro_magnitude": 6.4,
   "pitch_deg": -3.1,
-  "roll_deg": 2.7
+  "roll_deg": 2.7,
+  "battery_level": 100,
+  "wifi_rssi": -58
 }
 ```
 
@@ -175,6 +177,22 @@ Heuristica atual, em alto nivel:
 
 O frontend usa esse bloco para mostrar o estado atual no dashboard, na lista de devices e na pagina de detalhe, sempre como heuristica experimental.
 
+## Realtime do painel x MQTT do device
+
+Nesta baseline, o frontend passou a separar melhor tres camadas diferentes:
+
+- socket do navegador com o backend (`Socket.IO`)
+- ultimo snapshot conhecido do device no backend
+- presenca recente de status/telemetria MQTT do ESP32
+
+Regras praticas:
+
+- `socket do painel desconectado` significa apenas que o navegador perdeu o canal realtime
+- `device offline` continua significando ausencia recente de `status`/`telemetry` MQTT no backend
+- o frontend agora recebe `telemetry:new` com `deviceBehavior` e `deviceStatusPatch`, o que permite atualizar `lastSeenAt`, bateria, RSSI e a heuristica local sem refetch completo a cada amostra
+
+Isso reduz a chance de interpretar uma falha do navegador como se o ESP32 tivesse realmente caido.
+
 ## Pairing por codigo temporario
 
 O pairing nao acontece via MQTT. Ele acontece por HTTP entre o portal do ESP32 e o backend.
@@ -192,6 +210,15 @@ O pairing nao acontece via MQTT. Ele acontece por HTTP entre o portal do ESP32 e
 9. o backend devolve `deviceSyncToken` e um `patientProfile` resumido
 10. o device passa para `claimed` e fica locked na organizacao
 11. se o pairing session tiver um `patient_id`, o backend cria tambem o assignment inicial
+
+No portal local do ESP32, a rodada atual tambem adicionou um bloco de saude operacional com:
+
+- `Wi-Fi conectado`
+- `MQTT OK`
+- `Backend API`
+- `Pronto para operar`
+
+O portal continua honesto sobre o fato de estar em `SETUP_MODE`: quando o broker ainda nao esta conectado de fato, o operador pode usar `Testar backend` e `Testar MQTT` para validar a configuracao antes de reiniciar o ESP32.
 
 ### Endpoint usado pelo ESP32
 

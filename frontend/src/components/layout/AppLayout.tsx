@@ -16,6 +16,11 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 
 import { useAuth } from "../../contexts/AuthContext";
 import { useRealtime } from "../../contexts/RealtimeContext";
+import {
+  humanizeRealtimePhase,
+  humanizeSocketDisconnectReason,
+  realtimeTone,
+} from "../../lib/format";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
 import { cn } from "../../lib/cn";
@@ -37,10 +42,22 @@ export function AppLayout() {
     activeRole,
     setActiveOrganizationId,
   } = useAuth();
-  const { isConnected } = useRealtime();
+  const {
+    connectionPhase,
+    isConnected,
+    lastConnectError,
+    lastConnectErrorCode,
+    lastDisconnectReason,
+    reconnectAttempts,
+  } = useRealtime();
   const [menuOpen, setMenuOpen] = useState(false);
   const navigate = useNavigate();
   const memberships = user?.memberships || [];
+  const realtimeDetail = isConnected
+    ? "Canal do painel conectado ao backend. Se um device aparecer offline, isso reflete ausencia recente de telemetria MQTT, nao o socket do navegador."
+    : lastConnectError
+      ? `${lastConnectError}${lastConnectErrorCode ? ` (${lastConnectErrorCode})` : ""}`
+      : `Socket do painel desconectado: ${humanizeSocketDisconnectReason(lastDisconnectReason)}. O ultimo snapshot continua visivel ate a reconexao.`;
 
   function handleLogout() {
     setMenuOpen(false);
@@ -175,8 +192,8 @@ export function AppLayout() {
 
                 <div className="mt-4 space-y-3">
                   <div className="flex items-center justify-between gap-3">
-                    <Badge tone={isConnected ? "success" : "warning"}>
-                      {isConnected ? "Tempo real ativo" : "Reconectando"}
+                    <Badge tone={realtimeTone(connectionPhase) as never}>
+                      {humanizeRealtimePhase(connectionPhase)}
                     </Badge>
                     <button
                       className="text-xs font-semibold text-white/80 underline-offset-4 transition hover:text-white hover:underline"
@@ -186,6 +203,12 @@ export function AppLayout() {
                       Trocar usuario
                     </button>
                   </div>
+                  <p className="text-xs leading-5 text-white/70">
+                    {realtimeDetail}
+                    {!isConnected && reconnectAttempts > 0
+                      ? ` Tentativas de reconexao nesta sessao: ${reconnectAttempts}.`
+                      : ""}
+                  </p>
                   <Button
                     className="w-full justify-center border border-white/15 bg-white/10 text-white hover:border-white/30 hover:bg-white/20"
                     onClick={handleLogout}
@@ -218,11 +241,19 @@ export function AppLayout() {
                   Organização ativa, pacientes, devices locked e atualização em
                   tempo real filtrada no backend.
                 </p>
+                <p className="mt-1 text-xs text-surface-500">
+                  Canal do painel e saude MQTT/device aparecem separados para evitar diagnostico falso quando o navegador perde o socket.
+                </p>
               </div>
             </div>
-            <Badge tone={isConnected ? "success" : "warning"}>
-              {isConnected ? "Socket conectado" : "Socket indisponível"}
-            </Badge>
+            <div className="text-right">
+              <Badge tone={realtimeTone(connectionPhase) as never}>
+                {humanizeRealtimePhase(connectionPhase)}
+              </Badge>
+              <p className="mt-2 max-w-xs text-xs text-surface-500">
+                {realtimeDetail}
+              </p>
+            </div>
           </div>
 
           <Outlet />

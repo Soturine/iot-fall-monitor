@@ -6,10 +6,11 @@
 
 #include "config_store.h"
 #include "device_config.h"
+#include "mqtt_client.h"
 
 class SetupPortal {
  public:
-  explicit SetupPortal(ConfigStore& configStore);
+  SetupPortal(ConfigStore& configStore, DeviceMqttClient& mqttClient);
 
   void begin(const DeviceSettings::DeviceConfig& config,
              const String& stateLabel,
@@ -33,6 +34,7 @@ class SetupPortal {
   void startWifiScanIfNeeded();
   void updateWifiScanCache();
   void redirectToPortal();
+  void clearOperationalProbeResults();
 
   void handleRoot();
   void handleCaptiveProbe();
@@ -41,6 +43,8 @@ class SetupPortal {
   void handleRemoveWifi();
   void handlePairDevice();
   void handleRestart();
+  void handleTestBackend();
+  void handleTestMqtt();
 
   String htmlEscape(const String& value) const;
   String flashStyle() const;
@@ -48,16 +52,19 @@ class SetupPortal {
   String renderSavedNetworks() const;
   String renderScannedNetworks() const;
   String renderPatientProfileSummary() const;
+  String renderOperationalHealthSummary() const;
   String stationAccessSummary() const;
   void appendPageHead(String& html) const;
   void appendHeaderCard(String& html) const;
   void appendFlashMessage(String& html) const;
+  void appendOperationalHealthCard(String& html) const;
   void appendWifiCard(String& html) const;
   void appendMqttCard(String& html) const;
   void appendPairingCard(String& html) const;
   void appendRestartCard(String& html) const;
 
   ConfigStore& configStore_;
+  DeviceMqttClient& mqttClient_;
   DNSServer dnsServer_;
   WebServer server_{80};
 
@@ -75,4 +82,10 @@ class SetupPortal {
   bool scanInProgress_ = false;
   String scannedNetworks_[8];
   size_t scannedNetworkCount_ = 0;
+  bool backendProbeChecked_ = false;
+  bool backendProbeSuccess_ = false;
+  String backendProbeMessage_;
+  bool mqttProbeChecked_ = false;
+  bool mqttProbeSuccess_ = false;
+  String mqttProbeMessage_;
 };
