@@ -89,7 +89,7 @@ bool DeviceMqttClient::publish(const String& topic, const String& payload, bool 
   return client_.publish(topic.c_str(), payload.c_str(), retained);
 }
 
-bool DeviceMqttClient::isConnected() const {
+bool DeviceMqttClient::isConnected() {
   return client_.connected();
 }
 

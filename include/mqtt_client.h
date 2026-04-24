@@ -20,7 +20,7 @@ class DeviceMqttClient {
   void update(bool wifiConnected);
 
   bool publish(const String& topic, const String& payload, bool retained = false);
-  bool isConnected() const;
+  bool isConnected();
   bool hasValidConfiguration() const;
   uint8_t consecutiveFailureCount() const;
   unsigned long firstFailureAtMs() const;
