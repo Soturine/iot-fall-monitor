@@ -1,8 +1,10 @@
 {
   "name": "queda-workspace",
   "private": true,
-  "version": "0.8.8",
-  "description": "Automacoes Windows para o projeto Queda",
+  "version": "0.8.9",
+  "description": "Automações Windows para o projeto Queda",
+  "author": "Rafael Ryan Ramos de Souza",
+  "license": "MIT",
   "engines": {
     "node": ">=20.0.0"
   },

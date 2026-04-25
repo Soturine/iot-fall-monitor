@@ -1,7 +1,9 @@
 {
   "name": "frontend",
   "private": true,
-  "version": "0.8.8",
+  "version": "0.8.9",
+  "author": "Rafael Ryan Ramos de Souza",
+  "license": "MIT",
   "type": "module",
   "engines": {
     "node": ">=20.0.0"

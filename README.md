@@ -1,241 +1,283 @@
-# Sistema IoT de Deteccao de Quedas com ESP32
+# Sistema IoT de Detecção de Quedas com ESP32
 
-Projeto academico full-stack para monitoramento de quedas e imobilidade com firmware `ESP32 + MPU6050`, backend `Node.js + Express + MySQL + MQTT + Socket.IO` e frontend `React + Vite + TypeScript + Tailwind`.
+Projeto acadêmico full-stack para monitoramento de quedas, imobilidade e telemetria com firmware `ESP32 + MPU6050`, comunicação `MQTT`, backend `Node.js + Express + MySQL + Socket.IO` e frontend `React + Vite + TypeScript + Tailwind CSS`.
 
-Baseline atual do repositório: `v0.8.7`. Para a experiencia local prevista nesta fase, o projeto foi estabilizado para `Node.js 20+`.
+O objetivo do repositório é integrar hardware embarcado, ingestão de eventos, persistência, atualização em tempo real e uma interface web multi-tenant para acompanhamento operacional de pacientes, dispositivos e alertas.
 
-## Visao geral
+## Baseline Atual
 
-O projeto deixou de operar como um painel global unico e passou a usar um modelo multi-tenant por organizacao. A mesma base agora suporta:
+Baseline atual do repositório: `v0.8.9`.
 
-- familias
-- clinicas
-- hospitais
-- multiplos pacientes por organizacao
-- multiplos usuarios por organizacao
-- multiplos dispositivos por organizacao
-- claim seguro de dispositivo com codigo temporario
-- historico de vinculo device <-> paciente sem perder rastreabilidade
+A baseline `v0.8.9` registra uma rodada de organização institucional do repositório: revisão do `README.md`, correção de português e acentuação, alinhamento da documentação principal à arquitetura atual, inclusão da licença MIT e atualização da descrição e dos tópicos do GitHub.
 
-O firmware continua responsavel pela deteccao local e pela publicacao MQTT. O backend continua consumindo o mesmo contrato MQTT, mas agora persiste e expoe tudo com escopo correto por organizacao e, quando houver caregiver assignments, tambem por paciente.
+Para a experiência local prevista nesta fase, o projeto está estabilizado para `Node.js 20+`.
 
-No frontend, a camada multi-tenant desta fase passou por uma rodada de estabilizacao: o carregamento inicial ficou mais leve com rotas sob demanda, o dashboard voltou a receber o contexto de paciente nos eventos recentes e a automacao local passou a validar o tenant ativo de forma explicita.
+## Visão Geral
 
-Nesta mesma fase, a autenticacao do frontend passou a reidratar a sessao com `GET /api/me` no boot. Isso evita tela branca quando o navegador ainda guarda um `user` antigo no `localStorage` de uma versao anterior ao modelo multi-tenant atual.
+O projeto é composto por:
 
-Mais recentemente, o backend e o frontend ganharam uma camada inicial de status comportamental/postural experimental. Ela usa apenas a telemetria ja existente do `MPU6050`, com estados heuristicas como `pre_calibracao`, `em_reposo`, `deitado`, `sentado`, `em_movimento`, `queda_suspeita` e `queda_confirmada`, sempre acompanhados de um nivel de confianca e sem pretensao de diagnostico clinico.
+- firmware para `ESP32`, com leitura do sensor `MPU6050`
+- comunicação MQTT entre dispositivo e backend
+- backend `Node.js` com `Express`, API REST, bridge MQTT e emissão `Socket.IO`
+- banco de dados `MySQL`
+- frontend web em `React`, `Vite`, `TypeScript` e `Tailwind CSS`
+- portal local de configuração do ESP32
+- dashboard multi-tenant por organização
 
-Nesta rodada, o painel passou a separar melhor a saude do socket do navegador da saude MQTT/device, o detalhe do device passou a aplicar patches incrementais de telemetria para deixar ultima leitura, RSSI e bateria mais coerentes, e o portal do ESP32 ganhou um bloco simples de saude operacional com testes de backend e MQTT. No firmware, o motion test do buzzer ficou desabilitado por padrao e a polaridade do buzzer passou a ser configuravel em `BUZZER_ACTIVE_HIGH`.
+O modelo atual deixou de ser um painel global único e passou a trabalhar com organizações, membros, pacientes, dispositivos, vínculos e histórico de assignments. O backend preserva o contrato MQTT existente, mas passa a persistir o escopo de `organization_id`, `patient_id` e `device_assignment_history_id` no momento da ingestão para manter rastreabilidade.
 
-## Estrutura do projeto
+## Principais Funcionalidades
+
+- pareamento seguro por código temporário
+- cadastro, descoberta técnica e reivindicação (`claim`) de dispositivos
+- vínculo de dispositivo com paciente
+- histórico de vínculos entre dispositivo e paciente
+- dashboard multi-tenant por organização
+- controle de acesso por papel e organização ativa
+- ingestão MQTT de eventos, status e telemetria
+- alertas de queda e imobilidade
+- telemetria em tempo real no dashboard
+- atualização do navegador via `Socket.IO`
+- portal local do ESP32 para Wi-Fi, MQTT, backend e pareamento
+- bloco de saúde operacional no portal do ESP32 com testes de backend e MQTT
+- diagnóstico de realtime/socket no frontend
+- separação entre saúde do socket do navegador e saúde operacional do dispositivo
+- status comportamental/postural heurístico experimental
+- suporte a buzzer e modo opcional de teste de movimento em bancada
+- scripts Windows para setup, banco, start, stop e smoke test
+
+## Arquitetura
+
+```text
+ESP32 + MPU6050
+      |
+      | MQTT
+      v
+Broker MQTT
+      |
+      v
+Backend Node.js + Express + Socket.IO
+      |
+      v
+MySQL
+      |
+      v
+Frontend React + Vite
+```
+
+### Camadas
+
+- **Firmware ESP32:** lê o `MPU6050`, executa a detecção local, publica `events`, `status` e `telemetry`, mantém configurações em `NVS` e oferece portal local de configuração.
+- **Broker MQTT:** transporta mensagens do ESP32 para o backend nos tópicos `queda/devices/{deviceId}/events`, `status` e `telemetry`.
+- **Backend API REST:** autentica usuários, aplica escopo multi-tenant, gerencia pacientes, dispositivos, pareamento, alertas e ingestão.
+- **Banco MySQL:** armazena organizações, membros, pacientes, dispositivos, histórico de vínculos, eventos, alertas, status e telemetria.
+- **Socket.IO:** entrega atualizações do backend para o navegador em tempo real.
+- **Frontend Web:** oferece dashboard operacional, telas de pacientes, dispositivos, alertas, organização, pareamento e detalhe de dispositivo.
+
+## Estrutura de Pastas
 
 ```text
 /
-  backend/
-    scripts/
-    src/
-    .env.example
-    README.md
-  database/
-    schema.sql
-    seed.sql
-  docs/
-    firmware-hardware.md
-    integration.md
-    quickstart-windows.md
-  frontend/
-    public/
-    src/
-    .env.example
-    README.md
-  include/
-  scripts/
-  src/
-  CHANGELOG.md
-  package.json
-  platformio.ini
-  README.md
+  backend/     API REST, bridge MQTT, Socket.IO, scripts de backend e .env.example
+  frontend/    aplicação React/Vite, telas web, serviços, tipos e .env.example
+  src/         firmware do ESP32 em C++/Arduino
+  include/     headers, constantes, modelos e configuração do firmware
+  database/    schema.sql e seed.sql do MySQL
+  docs/        documentação complementar de integração, firmware, quickstart e regras
+  scripts/     automações PowerShell e auxiliares de desenvolvimento
+  test/        estrutura reservada para testes do PlatformIO
 ```
 
-## Arquitetura atual
+Arquivos principais na raiz:
 
-1. O firmware le o `MPU6050`, roda o detector local e publica `events`, `status` e `telemetry`.
-2. O backend assina `queda/devices/+/events`, `status` e `telemetry`.
-3. Cada payload agora pode trazer `device_uid` tecnico e continua trazendo `device_id`.
-4. Devices desconhecidos podem ser descobertos tecnicamente via MQTT, mas entram como `unclaimed`.
-5. O claim definitivo acontece por codigo temporario gerado no dashboard e enviado pelo portal local do ESP32.
-6. Depois do claim, o device fica locked naquela organizacao.
-7. O backend grava `organization_id`, `patient_id` e `device_assignment_history_id` no momento da ingestao para preservar o historico correto mesmo apos reassignment.
-8. O frontend opera sempre sobre o tenant ativo do usuario.
+- [CHANGELOG.md](CHANGELOG.md)
+- [LICENSE](LICENSE)
+- [package.json](package.json)
+- [platformio.ini](platformio.ini)
 
-## Multi-tenant e escopo
+## Requisitos
 
-O modelo principal do banco agora inclui:
+- `Node.js 20+`
+- `npm`
+- `MySQL Server` ou acesso a um servidor MySQL compatível
+- `PlatformIO` para compilar e gravar o firmware
+- placa `ESP32`
+- sensor `MPU6050`
+- broker MQTT local ou remoto
+- navegador moderno
+- PowerShell no Windows para usar os scripts da raiz
 
-- `organizations`
-- `organization_members`
-- `patients`
-- `caregiver_assignments`
-- `devices`
-- `device_assignment_history`
-- `device_pairing_sessions`
+## Configuração Rápida
 
-Os pacientes agora tambem carregam `full_name`, `birth_date`, `weight_kg` e `height_cm`, preparando o dashboard e o firmware para futuras regras clinicas sem tirar o backend da posicao de fonte da verdade.
+Para o passo a passo completo no Windows, consulte [docs/quickstart-windows.md](docs/quickstart-windows.md).
 
-Tabelas operacionais como `device_status`, `telemetry_logs`, `events` e `alerts` tambem carregam o escopo organizacional e clinico do momento da ingestao.
+Fluxo de alto nível:
 
-Regras atuais:
+1. Clone o repositório.
+2. Instale as dependências com os scripts do projeto ou manualmente em `backend/` e `frontend/`.
+3. Configure os arquivos `.env` a partir dos exemplos existentes.
+4. Inicialize o banco MySQL com `database/schema.sql` e `database/seed.sql`.
+5. Suba backend, frontend e, se necessário, broker MQTT local.
+6. Configure o firmware em [include/app_config.h](include/app_config.h) quando precisar ajustar defaults de fábrica.
+7. Grave o firmware no ESP32 com PlatformIO.
+8. Use o portal local do ESP32 para configurar Wi-Fi, MQTT, URL do backend e código de pareamento.
+9. Gere um código temporário de pareamento no dashboard.
+10. Pareie o dispositivo pelo portal local do ESP32.
 
-- `platform_admin` pode operar globalmente ou selecionar uma organizacao especifica
-- `organization_admin` gerencia membros, pacientes, devices e pairing dentro da propria organizacao
-- `caregiver`, `operator` e `viewer` nunca enxergam dados de outra organizacao
-- quando existem caregiver assignments para aquele membro, o backend restringe o acesso tambem ao subconjunto de pacientes atribuidos
+### Scripts Disponíveis na Raiz
 
-## Pairing e vinculo do dispositivo
+```powershell
+.\scripts\check-env.ps1
+.\scripts\setup-dev.ps1
+.\scripts\init-db.ps1
+.\scripts\start-all.ps1 -StartMock
+.\scripts\smoke-test.ps1
+.\scripts\stop-all.ps1
+```
 
-O contrato MQTT foi preservado, mas o vinculo final do device deixou de ser automatico.
+Atalhos equivalentes no [package.json](package.json):
 
-Fluxo atual:
+```powershell
+npm run dev:check
+npm run dev:setup
+npm run dev:init-db
+npm run dev:start
+npm run dev:smoke
+npm run dev:stop
+```
 
-1. um `organization_admin` abre a tela de dispositivos
-2. gera um codigo temporario de pareamento
-3. o frontend consulta `GET /api/system/network-info` para destacar uma URL principal recomendada para a rede atual e guardar fallbacks opcionais
-4. o modal mostra o `pairingCode`, a URL principal, estado de expiracao e as outras URLs apenas em `Outras opcoes de rede`
-5. o usuario abre o portal local do ESP32 e informa manualmente a URL do backend e o codigo temporario
-6. o ESP32 envia `device_uid`, `device_id` e `pairing_code` para `POST /api/pairing/claim`
-7. o backend valida expiracao, uso unico e organizacao e devolve erros especificos para invalido, expirado ou ja utilizado
-8. o backend faz o claim transacional, devolve `deviceSyncToken` e o perfil resumido do paciente atual
-9. o device passa para `claimed` e fica locked no tenant
-10. opcionalmente o codigo de pairing ja pode definir o paciente inicial
+O fluxo local esperado usa:
 
-## Configuracao do ESP32
+- backend em `http://localhost:4000`
+- frontend em `http://localhost:5173`
+- broker de desenvolvimento em `mqtt://localhost:1883`, quando iniciado localmente
 
-O firmware preserva o portal local com `NVS`, multiplas redes Wi-Fi, fallback automatico por falha de Wi-Fi e MQTT e agora tambem suporta o fluxo de pairing.
+Após aplicar o seed, o ambiente demo cria:
 
-O arquivo [include/app_config.h](include/app_config.h) continua sendo a referencia principal de defaults e constantes de hardware. O portal local do ESP32 persiste:
-
-- redes Wi-Fi
-- broker MQTT e credenciais
-- `DEVICE_ID`
-- `MQTT_CLIENT_ID`
-- `BACKEND_API_BASE_URL`
-- `deviceSyncToken`
-- perfil resumido do paciente atual (`patientName`, `weightKg`, `heightCm`, `fallSensitivityPreset`)
-
-O ESP32 tambem exibe e usa um `device_uid` tecnico estavel derivado do hardware para o claim seguro.
-
-Nesta rodada, o firmware tambem passou a:
-
-- controlar logs seriais por nivel em `include/app_config.h`, reduzindo verbosidade fora de diagnosticos
-- manter um snapshot pequeno dos eventos criticos pendentes em `NVS` para reduzir perda apos reboot rapido
-- aceitar preparacao opt-in para `MQTT/TLS`, preservando `mqtt://` sem TLS como comportamento padrao
-
-O portal local agora fica focado no fluxo manual confiavel de pairing: `BACKEND_API_BASE_URL`, codigo temporario e botao `Parear agora`. O backend continua sendo a fonte da verdade para os dados do paciente; o ESP32 apenas persiste uma copia resumida para uso local futuro.
-
-Para bancada, o firmware agora tambem possui um caminho explicito para forcar o portal local no boot com `FORCE_SETUP_MODE_ON_BOOT = true`. Isso facilita validar o AP `Queda-Setup-*` sem depender de falha real de Wi-Fi ou MQTT.
-
-Nesta rodada tambem entrou o helper [scripts/free-serial-port.ps1](scripts/free-serial-port.ps1), pensado para desalojar monitores `PlatformIO` orfaos que prendem a `COM` e impedem upload ou captura de log no Windows.
-
-Na placa atual com ponte `CH9102`, o upload voltou a funcionar quando o `BOOT` foi segurado manualmente durante o `Connecting...`. O auto-reset para entrar em modo de download ainda nao ficou confiavel sem intervencao manual.
-
-O `PlatformIO` agora tambem roda automaticamente uma limpeza da porta serial antes do upload no Windows, via [scripts/pio-pre-upload.py](scripts/pio-pre-upload.py), para reduzir falhas por monitor preso na `COM`.
-
-Detalhes completos ficam em [docs/firmware-hardware.md](docs/firmware-hardware.md).
-
-## Banco de dados
-
-Arquivos principais:
-
-- [database/schema.sql](database/schema.sql)
-- [database/seed.sql](database/seed.sql)
-
-O seed atual cria um ambiente demo coerente com o modelo novo:
-
-- organizacao `Familia Demo`
-- usuario `admin@queda.local`
+- organização `Familia Demo`
+- usuário `admin@queda.local`
 - senha `Admin@123`
 - paciente `Paciente Demo`
-- device claimed inicial `legacy:esp32_01`
-- assignment inicial entre device e paciente
+- dispositivo demo `legacy:esp32_01`
 
-Importante:
+Importante: a versão atual de [database/schema.sql](database/schema.sql) recria o schema do projeto. O script `init-db` deve ser tratado como reset do ambiente local para o modelo multi-tenant atual.
 
-- a versao atual de [database/schema.sql](database/schema.sql) recria o schema inteiro
-- rodar `init-db` nesta versao reseta as tabelas do projeto para o modelo multi-tenant atual
+## Variáveis de Ambiente
 
-## MQTT e tempo real
+O repositório possui exemplos versionados:
 
-Base de topicos:
+- [backend/.env.example](backend/.env.example)
+- [frontend/.env.example](frontend/.env.example)
 
-- `queda/devices`
+Não inclua arquivos `.env`, credenciais reais, tokens, chaves, dumps ou logs no repositório.
 
-Topicos consumidos:
+No backend, as variáveis principais cobrem:
 
-- `queda/devices/{deviceId}/events`
-- `queda/devices/{deviceId}/status`
-- `queda/devices/{deviceId}/telemetry`
+- porta HTTP
+- segredo JWT local
+- conexão MySQL
+- URL e credenciais MQTT
+- base de tópicos MQTT
+- opções de reconnect, keepalive e TLS
+- limiar de dispositivo offline
 
-Eventos `Socket.IO`:
+No frontend, as variáveis principais são:
+
+- `VITE_API_URL`
+- `VITE_SOCKET_URL`
+
+Para o ESP32 físico, não use `localhost`, `127.0.0.1` ou `::1` como backend ou broker. Use o IP real do notebook na rede atual, um host acessível na mesma rede ou um serviço externo.
+
+## Fluxo de Pareamento
+
+O pareamento definitivo do dispositivo não acontece por MQTT. Ele acontece por HTTP entre o portal local do ESP32 e o backend.
+
+1. Um usuário com permissão gera um código temporário no dashboard.
+2. O dashboard consulta `GET /api/system/network-info` para sugerir uma URL de backend acessível na rede atual.
+3. O ESP32 abre o portal local `Queda-Setup-*` quando entra em modo de configuração.
+4. O usuário informa `BACKEND_API_BASE_URL` e o código temporário no portal.
+5. O ESP32 envia `device_uid`, `device_id`, `device_name` e `pairing_code` para `POST /api/pairing/claim`.
+6. O backend valida código, expiração, uso único e organização.
+7. O dispositivo passa para `claimed` e fica associado à organização.
+8. Se o código tiver paciente inicial, o backend cria o vínculo inicial.
+9. O backend devolve `deviceSyncToken` e um resumo do perfil do paciente atual.
+10. O backend emite atualização em tempo real.
+11. O dashboard atualiza o estado do dispositivo.
+
+Devices desconhecidos que chegam via MQTT podem ser criados tecnicamente como `unclaimed`, mas só passam a pertencer a uma organização após o claim.
+
+## MQTT e Tempo Real
+
+MQTT e `Socket.IO` têm papéis diferentes no projeto:
+
+- **MQTT:** comunicação do ESP32 para o backend, com eventos, status e telemetria.
+- **Socket.IO:** comunicação do backend para o navegador, com atualizações em tempo real.
+- **Device online/offline:** estado operacional derivado de presença recente de status ou telemetria MQTT no backend.
+
+Eventos `Socket.IO` atuais:
 
 - `alert:new`
 - `alert:updated`
 - `device:status`
 - `telemetry:new`
 
-Esses eventos agora tambem sao emitidos com filtro de escopo no backend, de acordo com organizacao e paciente visiveis para o usuario conectado.
+O diagnóstico de realtime no frontend separa o socket do navegador da saúde MQTT/device. Portanto, uma mensagem de socket indisponível no navegador não significa necessariamente que o ESP32, o broker MQTT ou a ingestão MQTT tenham caído.
 
-## Quickstart no Windows
+## Status Heurístico Experimental
 
-Para o passo a passo operacional completo, use [docs/quickstart-windows.md](docs/quickstart-windows.md).
+O backend deriva um status comportamental/postural inicial a partir da telemetria recente do `MPU6050`.
 
-Fluxo minimo:
+Esse status:
 
-```powershell
-.\scripts\setup-dev.ps1
-.\scripts\init-db.ps1
-.\scripts\start-all.ps1 -StartMock
-```
+- é heurístico
+- está em fase de pré-calibração
+- não representa diagnóstico clínico definitivo
+- depende da qualidade da telemetria recebida
+- deve ser validado com hardware real e cenários práticos
+- inclui nível de confiança e justificativa técnica
 
-Depois disso:
+Estados atuais:
 
-- backend em `http://localhost:4000`
-- frontend em `http://localhost:5173`
-- broker dev opcional em `mqtt://localhost:1883`
+- `pre_calibracao`
+- `desconhecido`
+- `em_reposo`
+- `deitado`
+- `sentado`
+- `em_movimento`
+- `queda_suspeita`
+- `queda_confirmada`
 
-No backend, o broker continua funcionando normalmente com `mqtt://...`. A base para `mqtts://...` foi preparada de forma opt-in por variaveis de ambiente, sem tornar TLS obrigatorio nesta fase.
+O frontend exibe esse status de forma discreta no dashboard, na lista de dispositivos e na página de detalhe do dispositivo. A interpretação deve ser tratada como apoio operacional experimental, não como avaliação médica.
 
-Voce pode:
+## Limitações Conhecidas
 
-- entrar com `admin@queda.local / Admin@123`
-- ou usar `Criar conta` para criar uma nova organizacao e o `organization_admin` inicial
+- O projeto não possui GPS.
+- O sistema não fornece diagnóstico médico ou clínico definitivo.
+- Os thresholds de queda, imobilidade e postura ainda precisam de validação prática com hardware real.
+- A leitura de bateria do firmware real ainda pode ser placeholder se não houver circuito de medição dedicado.
+- O fluxo padrão continua usando `mqtt://`; `mqtts://` existe como preparação opt-in e depende de configuração coerente.
+- O buzzer e o motion test dependem do hardware real, da montagem e da polaridade do módulo.
+- O portal local do ESP32 não substitui o dashboard principal.
+- O portal local do ESP32 não possui autenticação local própria.
+- O pairing depende de o backend estar acessível ao ESP32 pela rede atual.
+- Em redes institucionais, isolamento entre clientes pode impedir pareamento ou MQTT local.
+- O broker MQTT embutido é voltado a desenvolvimento e demonstração local.
+- O schema atual é aplicado como reset de ambiente, não como migração incremental versionada.
+- O fluxo completo de unpair ou transferência cross-tenant pela interface ainda não está implementado.
+- O auto-reset de upload pode depender da placa, driver e porta serial; em alguns casos ainda pode ser necessário segurar `BOOT` durante o upload.
 
-Se o navegador estiver com sessao antiga de uma versao anterior e a interface mostrar erro de renderizacao, o frontend agora exibe uma tela de recuperacao com opcao para limpar a sessao local e voltar ao `/login`.
+## Documentação Complementar
 
-## Teste sem hardware real
+- [docs/integration.md](docs/integration.md): integração entre firmware, backend, banco, MQTT, pareamento e tempo real.
+- [docs/firmware-hardware.md](docs/firmware-hardware.md): hardware, pinagem, portal local, payloads, calibração, buzzer e bancada.
+- [docs/quickstart-windows.md](docs/quickstart-windows.md): guia operacional para Windows.
+- [docs/commit-guidelines.md](docs/commit-guidelines.md): padrão de commits do repositório.
+- [docs/release-rules.md](docs/release-rules.md): regras de changelog e versionamento.
+- [docs/motion-test-bench-report.md](docs/motion-test-bench-report.md): relatório de bancada do motion test e portal AP.
+- [backend/README.md](backend/README.md): detalhes do backend, rotas, scripts e ingestão.
+- [frontend/README.md](frontend/README.md): detalhes do frontend, telas e comportamento em tempo real.
+- [CHANGELOG.md](CHANGELOG.md): histórico de versões, limitações e próximos passos.
 
-Sem ESP32 fisico, o caminho mais simples continua sendo:
+## Licença
 
-1. rodar `.\scripts\start-all.ps1 -StartMock`
-2. entrar no site
-3. acompanhar dashboard, pacientes, dispositivos e alertas
-4. rodar `.\scripts\smoke-test.ps1`
-
-O mock publisher foi adaptado para o modelo atual e publica `device_uid = legacy:{deviceId}` para encaixar no fluxo do backend e do seed demo.
-
-O smoke test agora usa o `activeOrganizationId` devolvido no login para enviar `X-Organization-Id` e validar:
-
-- `GET /api/organization`
-- `GET /api/patients`
-- `GET /api/dashboard/summary`
-- `GET /api/devices`
-- `GET /api/alerts`
-
-## Documentacao detalhada
-
-- [docs/quickstart-windows.md](docs/quickstart-windows.md): guia operacional no Windows
-- [docs/firmware-hardware.md](docs/firmware-hardware.md): hardware, pinagem, portal local, pairing, multi-Wi-Fi, payloads e calibracao
-- [docs/integration.md](docs/integration.md): contrato MQTT, claim por codigo, persistencia, autorizacao e tempo real
-- [docs/motion-test-bench-report.md](docs/motion-test-bench-report.md): relatorio desta rodada de bancada para `MOTION TEST` e portal AP
-- [backend/README.md](backend/README.md): API, servicos, escopo por organizacao e broker dev
-- [frontend/README.md](frontend/README.md): telas, organizacao ativa, login, pairing e UX operacional
-- [CHANGELOG.md](CHANGELOG.md): historico real de mudancas, limitacoes e proximos passos
+Este projeto está licenciado sob a licença MIT. Consulte o arquivo [LICENSE](LICENSE) para mais detalhes.

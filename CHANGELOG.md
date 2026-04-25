@@ -1,5 +1,40 @@
 # Changelog
 
+## [v0.8.9] - 2026-04-25
+### Adicionado
+- arquivo `LICENSE` com licença MIT para o projeto
+- seção de licença no `README.md`, apontando para o arquivo `LICENSE`
+
+### Alterado
+- versão alinhada para `0.8.9` em `CHANGELOG.md`, `README.md`, `package.json` da raiz, `backend/package.json`, `backend/package-lock.json`, `frontend/package.json` e `frontend/package-lock.json`
+- `README.md` revisado e reestruturado como entrada principal institucional do repositório
+- documentação principal alinhada à arquitetura atual com firmware ESP32, MQTT, backend Node.js/Express, MySQL, Socket.IO, frontend React/Vite e dashboard multi-tenant
+- limitações conhecidas documentadas com mais clareza, incluindo ausência de GPS, caráter não clínico do status heurístico, dependência de validação em hardware real e restrições de rede local
+- metadados de licença dos pacotes locais alinhados para `MIT`
+- descrição e tópicos do repositório no GitHub atualizados via `gh repo edit`
+
+### Corrigido
+- inconsistência em que o `README.md` ainda apontava baseline antiga em relação ao changelog
+- problemas de português, acentuação e tom informal no `README.md`
+- trechos do `README.md` que misturavam detalhes históricos com a visão atual do projeto sem separação clara entre funcionalidade pronta e limitação conhecida
+
+### Pendente / Faltando
+- revisar futuramente a acentuação completa dos documentos complementares em `docs/`, `backend/README.md` e `frontend/README.md`
+- definir uma estratégia futura de migrações incrementais para substituir o reset completo via `database/schema.sql`
+
+### Limitacoes conhecidas
+- esta rodada foi documental e não incluiu teste em hardware real
+- nenhuma validação de firmware com `PlatformIO` foi necessária para o escopo alterado
+- o status heurístico continua experimental, pré-calibração e sem valor de diagnóstico clínico
+
+### Divida tecnica / Pontos fracos
+- ainda existem documentos complementares com histórico operacional acumulado que podem ser condensados em uma rodada futura
+- o repositório ainda não possui automação dedicada para validação de links Markdown
+
+### Proximos passos sugeridos
+- revisar os documentos complementares com o mesmo padrão linguístico aplicado ao `README.md`
+- considerar uma tag `v0.8.9` se esta baseline documental for usada como marco antes da próxima rodada funcional
+
 ## [v0.8.8] - 2026-04-23
 ### Adicionado
 - bloco de saude operacional no portal do ESP32 com leitura separada de `Wi-Fi conectado`, `MQTT OK`, `Backend API` e `Pronto para operar`, alem de botoes `Testar backend` e `Testar MQTT`

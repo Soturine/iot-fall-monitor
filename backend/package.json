@@ -1,6 +1,6 @@
 {
   "name": "backend",
-  "version": "0.8.8",
+  "version": "0.8.9",
   "description": "Backend MQTT + API REST do sistema de monitoramento de quedas com ESP32",
   "main": "src/server.js",
   "engines": {
@@ -22,8 +22,8 @@
     "iot",
     "quedas"
   ],
-  "author": "",
-  "license": "ISC",
+  "author": "Rafael Ryan Ramos de Souza",
+  "license": "MIT",
   "type": "commonjs",
   "dependencies": {
     "aedes": "^1.0.2",
