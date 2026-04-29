@@ -588,7 +588,16 @@ constexpr unsigned long REQUIRED_IMMOBILITY_MS = 1800;
 
 - `MQTT_HOST` deve ser o IP real do notebook
 - `BACKEND_API_BASE_URL` tambem deve apontar para o IP real do notebook
+- o broker local de desenvolvimento deve escutar em `0.0.0.0:1883` ou outro bind acessivel pela LAN
 - nunca use `localhost` no ESP32
+
+No Windows, valide a porta do ponto de vista da LAN:
+
+```powershell
+Test-NetConnection IP_DO_NOTEBOOK -Port 1883
+```
+
+O esperado e `TcpTestSucceeded : True`. Se `localhost:1883` funcionar, mas o IP do notebook falhar, o broker provavelmente esta preso a loopback/IPv6 ou a rede/firewall ainda esta bloqueando o acesso.
 
 ### Cenario B: hotspot do celular
 

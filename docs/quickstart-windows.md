@@ -73,6 +73,8 @@ MYSQL_USER=root
 MYSQL_PASSWORD=
 MYSQL_DATABASE=queda_monitor
 MQTT_BROKER_URL=mqtt://localhost:1883
+MQTT_BIND_HOST=0.0.0.0
+MQTT_PORT=1883
 MQTT_CLIENT_ID=queda-backend
 MQTT_TOPIC_BASE=queda/devices
 MQTT_RECONNECT_PERIOD_MS=4000
@@ -87,6 +89,7 @@ Notas praticas:
 - o ambiente local atual usa `MYSQL_PASSWORD=` vazio
 - backend, frontend e broker local usam `localhost` apenas no notebook
 - isso nao vale para o ESP32 fisico
+- o broker local de desenvolvimento usa `MQTT_BIND_HOST=0.0.0.0` para aceitar conexao pelo IPv4 da LAN
 - `mqtts://...` ficou preparado de forma opt-in, mas o fluxo padrao continua sendo `mqtt://localhost:1883`
 
 ## 5. Configurar `frontend/.env`
@@ -158,7 +161,7 @@ Fluxo local esperado:
 
 - backend em `http://localhost:4000`
 - frontend em `http://localhost:5173`
-- broker dev em `mqtt://localhost:1883`
+- broker dev na porta `1883`, escutando por padrao em `0.0.0.0`
 
 ## 8. Como entrar no site
 
@@ -286,7 +289,34 @@ Use as URLs secundarias apenas se:
 
 - `MQTT_HOST` = IP real do notebook
 - `BACKEND_API_BASE_URL` = `http://IP-DO-NOTEBOOK:4000`
+- o broker dev precisa estar escutando em `0.0.0.0:1883` ou host equivalente acessivel pela LAN
 - nunca use `localhost` no ESP32
+
+Diagnostico Windows para o broker local:
+
+```powershell
+netstat -ano | findstr :1883
+Get-CimInstance Win32_Process -Filter "ProcessId = PID_AQUI" | Select-Object ProcessId,CommandLine
+```
+
+Para testar o mesmo caminho TCP que o ESP32 precisa abrir:
+
+```powershell
+Test-NetConnection IP_DO_NOTEBOOK -Port 1883
+```
+
+O esperado e:
+
+```text
+TcpTestSucceeded : True
+```
+
+Observacoes:
+
+- `localhost:1883` funcionando nao garante que o ESP32 consiga acessar
+- `127.0.0.1`, `localhost` e `::1` sao locais do proprio computador
+- o ESP32 deve usar o IPv4 real do notebook na rede atual
+- em rede institucional, ainda pode haver isolamento entre clientes mesmo com o bind correto
 
 ### Cenario B: hotspot do celular
 
@@ -372,6 +402,7 @@ Provavel causa:
 Como resolver:
 
 - use o IP real do notebook ou um broker externo
+- no Windows, confirme `Test-NetConnection IP_DO_NOTEBOOK -Port 1883`
 - revise a secao MQTT do portal
 
 ### `A COM4 esta ocupada e o monitor/upload nao funciona`

@@ -315,11 +315,13 @@ function Test-TcpEndpoint {
   $testNetConnection = Get-Command "Test-NetConnection" -ErrorAction SilentlyContinue
   if ($testNetConnection) {
     try {
-      return [bool](Test-NetConnection `
-          -ComputerName $HostName `
-          -Port $Port `
-          -InformationLevel Quiet `
-          -WarningAction SilentlyContinue)
+      if ([bool](Test-NetConnection `
+            -ComputerName $HostName `
+            -Port $Port `
+            -InformationLevel Quiet `
+            -WarningAction SilentlyContinue)) {
+        return $true
+      }
     } catch {
       # Se o cmdlet falhar, tento o fallback manual abaixo.
     }

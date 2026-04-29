@@ -6,9 +6,9 @@ O objetivo do repositório é integrar hardware embarcado, ingestão de eventos,
 
 ## Baseline Atual
 
-Baseline atual do repositório: `v0.8.9`.
+Baseline atual do repositório: `v0.8.10`.
 
-A baseline `v0.8.9` registra uma rodada de organização institucional do repositório: revisão do `README.md`, correção de português e acentuação, alinhamento da documentação principal à arquitetura atual, inclusão da licença MIT e atualização da descrição e dos tópicos do GitHub.
+A baseline `v0.8.10` corrige o bind do broker MQTT local de desenvolvimento para aceitar conexões pelo IPv4 da LAN do notebook, mantendo o fluxo local e documentando o diagnóstico Windows para ESP32 físico.
 
 Para a experiência local prevista nesta fase, o projeto está estabilizado para `Node.js 20+`.
 
@@ -150,7 +150,7 @@ O fluxo local esperado usa:
 
 - backend em `http://localhost:4000`
 - frontend em `http://localhost:5173`
-- broker de desenvolvimento em `mqtt://localhost:1883`, quando iniciado localmente
+- broker de desenvolvimento na porta `1883`, com bind padrão em `0.0.0.0` quando iniciado localmente
 
 Após aplicar o seed, o ambiente demo cria:
 
@@ -187,6 +187,21 @@ No frontend, as variáveis principais são:
 - `VITE_SOCKET_URL`
 
 Para o ESP32 físico, não use `localhost`, `127.0.0.1` ou `::1` como backend ou broker. Use o IP real do notebook na rede atual, um host acessível na mesma rede ou um serviço externo.
+
+No Windows, `localhost:1883` funcionando no notebook não garante que o ESP32 consiga abrir TCP no broker. Para o broker local de desenvolvimento, `backend/scripts/devBroker.js` usa por padrão:
+
+```env
+MQTT_BIND_HOST=0.0.0.0
+MQTT_PORT=1883
+```
+
+Valide o acesso que o ESP32 precisa usando o IPv4 real do notebook:
+
+```powershell
+Test-NetConnection IP_DO_NOTEBOOK -Port 1883
+```
+
+O esperado é `TcpTestSucceeded : True`. Em redes institucionais, firewall ou isolamento entre clientes ainda podem bloquear o acesso mesmo com o bind correto.
 
 ## Fluxo de Pareamento
 

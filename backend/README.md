@@ -55,6 +55,8 @@ MYSQL_USER=root
 MYSQL_PASSWORD=
 MYSQL_DATABASE=queda_monitor
 MQTT_BROKER_URL=mqtt://localhost:1883
+MQTT_BIND_HOST=0.0.0.0
+MQTT_PORT=1883
 MQTT_USERNAME=
 MQTT_PASSWORD=
 MQTT_CLIENT_ID=queda-backend
@@ -76,6 +78,14 @@ O ambiente local atual do projeto usa `MYSQL_PASSWORD=` vazio. Se o seu MySQL ex
 - `mqtts://...` agora tambem pode ser usado de forma opt-in
 - `MQTT_TLS_CA_FILE` permite apontar para um arquivo PEM local quando voce quiser validar uma CA customizada
 - `MQTT_TLS_REJECT_UNAUTHORIZED=true` mantem verificacao de certificado quando TLS estiver habilitado
+
+### Broker local de desenvolvimento
+
+`npm run dev:broker` inicia `scripts/devBroker.js` com `Aedes`.
+
+- `MQTT_BIND_HOST=0.0.0.0` faz o broker escutar no IPv4 da LAN do notebook
+- `MQTT_PORT=1883` define a porta TCP do broker dev
+- no ESP32, use o IPv4 real do notebook como `MQTT_HOST`; nunca use `localhost`
 
 ## O que mudou no modelo do backend
 

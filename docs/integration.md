@@ -220,6 +220,32 @@ No portal local do ESP32, a rodada atual tambem adicionou um bloco de saude oper
 
 O portal continua honesto sobre o fato de estar em `SETUP_MODE`: quando o broker ainda nao esta conectado de fato, o operador pode usar `Testar backend` e `Testar MQTT` para validar a configuracao antes de reiniciar o ESP32.
 
+### Broker MQTT local no Windows
+
+O broker local de desenvolvimento fica em `backend/scripts/devBroker.js` e usa `Aedes`. Para bancada com ESP32 fisico, ele deve aceitar conexao pelo IPv4 da LAN do notebook:
+
+```env
+MQTT_BIND_HOST=0.0.0.0
+MQTT_PORT=1883
+```
+
+Para descobrir quem esta usando a porta:
+
+```powershell
+netstat -ano | findstr :1883
+Get-CimInstance Win32_Process -Filter "ProcessId = PID_AQUI" | Select-Object ProcessId,CommandLine
+```
+
+Para validar o acesso esperado pelo ESP32:
+
+```powershell
+Test-NetConnection IP_DO_NOTEBOOK -Port 1883
+```
+
+O esperado e `TcpTestSucceeded : True`.
+
+`localhost`, `127.0.0.1` e `::1` apontam para o proprio computador e nao servem como `MQTT_HOST` no ESP32. Mesmo com o broker em `0.0.0.0:1883`, firewall local ou isolamento de clientes em rede institucional ainda podem impedir a conexao.
+
 ### Endpoint usado pelo ESP32
 
 - `POST /api/pairing/claim`

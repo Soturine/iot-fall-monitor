@@ -1,5 +1,28 @@
 # Changelog
 
+## [v0.8.10] - 2026-04-29
+### Alterado
+- versao alinhada para `0.8.10` em `CHANGELOG.md`, `README.md`, `package.json` da raiz, `backend/package.json`, `backend/package-lock.json`, `frontend/package.json` e `frontend/package-lock.json`
+- broker MQTT local de desenvolvimento passou a usar `MQTT_BIND_HOST=0.0.0.0` e `MQTT_PORT=1883` por padrao
+- `scripts/start-all.ps1` passou a iniciar o broker dev com bind explicito em `0.0.0.0`, sem forcar `localhost` como interface de escuta
+
+### Corrigido
+- corrigido o bind do broker MQTT local de desenvolvimento, permitindo conexao TCP pelo IPv4 da LAN do notebook para uso do ESP32
+- preservada compatibilidade com `DEV_BROKER_HOST`, `DEV_BROKER_PORT` e porta via argumento para fluxos locais existentes
+- ajuste no teste TCP dos scripts Windows para tentar fallback manual quando `Test-NetConnection localhost` falhar por preferencia de IPv6
+
+### Documentado
+- diagnostico Windows para identificar processo na porta `1883` com `netstat` e `Get-CimInstance`
+- validacao manual esperada com `Test-NetConnection IP_DO_NOTEBOOK -Port 1883`
+- diferenca entre `localhost`/loopback e IPv4 real do notebook para o ESP32
+
+### Pendente / Faltando
+- validar em hardware real se `Test-NetConnection IP_DO_NOTEBOOK -Port 1883` retorna `TcpTestSucceeded : True` no notebook alvo e se o botao `Testar MQTT` do portal do ESP32 passa
+
+### Limitacoes conhecidas
+- firewall local, perfil de rede do Windows ou isolamento entre clientes em redes institucionais ainda podem bloquear o ESP32 mesmo com o broker escutando em `0.0.0.0:1883`
+- a rodada nao altera contratos MQTT, payloads, API REST, Socket.IO ou logica de deteccao de queda
+
 ## [v0.8.9] - 2026-04-25
 ### Adicionado
 - arquivo `LICENSE` com licença MIT para o projeto

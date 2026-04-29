@@ -3,6 +3,7 @@ param(
   [switch]$StartMock,
   [switch]$NoBrowser,
   [int]$DevBrokerPort = 1883,
+  [string]$DevBrokerBindHost = "0.0.0.0",
   [string]$MockDeviceId = "esp32_demo_01"
 )
 
@@ -50,7 +51,11 @@ if ($UseDevBroker) {
       -Title "Queda Dev Broker" `
       -WorkingDirectory (Get-BackendDir) `
       -Command "& '$(Escape-SingleQuoted $npmCli)' run dev:broker" `
-      -EnvironmentOverrides @{ DEV_BROKER_PORT = "$DevBrokerPort"; DEV_BROKER_HOST = $localDevHost }
+      -EnvironmentOverrides @{
+        MQTT_PORT = "$DevBrokerPort"
+        MQTT_BIND_HOST = $DevBrokerBindHost
+        DEV_BROKER_PORT = "$DevBrokerPort"
+      }
 
     if ($brokerResult.Reused) {
       Write-Ok "Broker de desenvolvimento ja estava rodando no processo $($brokerResult.ProcessId)."
@@ -77,7 +82,11 @@ if ($UseDevBroker) {
       -Title "Queda Dev Broker" `
       -WorkingDirectory (Get-BackendDir) `
       -Command "& '$(Escape-SingleQuoted $npmCli)' run dev:broker" `
-      -EnvironmentOverrides @{ DEV_BROKER_PORT = "$($mqtt.Port)"; DEV_BROKER_HOST = $mqtt.Host }
+      -EnvironmentOverrides @{
+        MQTT_PORT = "$($mqtt.Port)"
+        MQTT_BIND_HOST = $DevBrokerBindHost
+        DEV_BROKER_PORT = "$($mqtt.Port)"
+      }
 
     if ($brokerResult.Reused) {
       Write-Ok "Broker de desenvolvimento ja estava rodando no processo $($brokerResult.ProcessId)."
