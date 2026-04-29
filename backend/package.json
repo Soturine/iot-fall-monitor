@@ -1,6 +1,6 @@
 {
   "name": "backend",
-  "version": "0.8.10",
+  "version": "0.8.11",
   "description": "Backend MQTT + API REST do sistema de monitoramento de quedas com ESP32",
   "main": "src/server.js",
   "engines": {
@@ -12,6 +12,7 @@
     "check": "node scripts/check.js",
     "mock:publisher": "node scripts/mockPublisher.js",
     "dev:broker": "node scripts/devBroker.js",
+    "mqtt:test": "node scripts/testMqttConnection.js",
     "db:init": "node scripts/initDb.js"
   },
   "keywords": [

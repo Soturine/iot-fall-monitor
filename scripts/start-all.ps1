@@ -33,16 +33,17 @@ $brokerUrlOverride = ""
 $brokerUrlInUse = ""
 $mqtt = Get-MqttSettings
 $localDevHost = Get-LocalDevHost
+$localMqttClientHost = "127.0.0.1"
 $npmCli = Get-CommandPath "npm.cmd"
 if (-not $npmCli) {
   $npmCli = "npm.cmd"
 }
 
 if ($UseDevBroker) {
-  $brokerUrlOverride = "mqtt://$localDevHost`:$DevBrokerPort"
+  $brokerUrlOverride = "mqtt://$localMqttClientHost`:$DevBrokerPort"
   $brokerUrlInUse = $brokerUrlOverride
 
-  if (Test-TcpEndpoint -HostName $localDevHost -Port $DevBrokerPort -TimeoutMs 800) {
+  if (Test-TcpEndpoint -HostName $localMqttClientHost -Port $DevBrokerPort -TimeoutMs 800) {
     Write-Ok "Ja existe algo ouvindo em $brokerUrlInUse. Vou reutilizar esse broker local."
   } else {
     Write-Info "Iniciando broker MQTT local de desenvolvimento em $brokerUrlInUse..."
@@ -61,7 +62,7 @@ if ($UseDevBroker) {
       Write-Ok "Broker de desenvolvimento ja estava rodando no processo $($brokerResult.ProcessId)."
     } else {
       Start-Sleep -Seconds 2
-      if (Test-TcpEndpoint -HostName $localDevHost -Port $DevBrokerPort -TimeoutMs 1200) {
+      if (Test-TcpEndpoint -HostName $localMqttClientHost -Port $DevBrokerPort -TimeoutMs 1200) {
         Write-Ok "Broker local iniciado em $brokerUrlInUse."
       } else {
         Write-Fail "O broker de desenvolvimento foi iniciado em nova janela, mas nao respondeu em $brokerUrlInUse."

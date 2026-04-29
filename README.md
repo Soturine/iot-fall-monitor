@@ -6,9 +6,9 @@ O objetivo do repositório é integrar hardware embarcado, ingestão de eventos,
 
 ## Baseline Atual
 
-Baseline atual do repositório: `v0.8.10`.
+Baseline atual do repositório: `v0.8.11`.
 
-A baseline `v0.8.10` corrige o bind do broker MQTT local de desenvolvimento para aceitar conexões pelo IPv4 da LAN do notebook, mantendo o fluxo local e documentando o diagnóstico Windows para ESP32 físico.
+A baseline `v0.8.11` corrige a inicialização do broker MQTT local de desenvolvimento para completar o handshake MQTT, melhora os logs do broker e adiciona um teste local de `CONNACK`.
 
 Para a experiência local prevista nesta fase, o projeto está estabilizado para `Node.js 20+`.
 
@@ -202,6 +202,16 @@ Test-NetConnection IP_DO_NOTEBOOK -Port 1883
 ```
 
 O esperado é `TcpTestSucceeded : True`. Em redes institucionais, firewall ou isolamento entre clientes ainda podem bloquear o acesso mesmo com o bind correto.
+
+Esse teste valida apenas TCP. Para validar MQTT de verdade, use um cliente MQTT e confirme o recebimento de `CONNACK`:
+
+```powershell
+cd backend
+npm run mqtt:test -- 127.0.0.1 1883
+npm run mqtt:test -- IP_DO_NOTEBOOK 1883
+```
+
+O esperado é `MQTT handshake OK`. Para o backend rodando no mesmo notebook, prefira `MQTT_BROKER_URL=mqtt://127.0.0.1:1883`; para o ESP32, use o IPv4 real do notebook.
 
 ## Fluxo de Pareamento
 

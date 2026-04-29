@@ -1,5 +1,29 @@
 # Changelog
 
+## [v0.8.11] - 2026-04-29
+### Adicionado
+- script `backend/scripts/testMqttConnection.js` e comando `npm run mqtt:test -- HOST PORT` para validar handshake MQTT com recebimento de `CONNACK`
+
+### Alterado
+- versao alinhada para `0.8.11` em `CHANGELOG.md`, `README.md`, `package.json` da raiz, `backend/package.json`, `backend/package-lock.json`, `frontend/package.json` e `frontend/package-lock.json`
+- broker MQTT local de desenvolvimento passou a inicializar o `Aedes` com `Aedes.createBroker()`, conforme a API da versao instalada `aedes@1.0.2`
+- logs do broker dev passaram a diferenciar conexao TCP, envio de `CONNACK`, cliente MQTT conectado/desconectado e erros de cliente/conexao/protocolo
+- configuracao local recomendada do backend passou a usar `MQTT_BROKER_URL=mqtt://127.0.0.1:1883`, mantendo o ESP32 apontado para o IPv4 real do notebook
+
+### Corrigido
+- corrigido o timeout de handshake MQTT do broker local de desenvolvimento causado por socket TCP aberto antes de o broker `Aedes` estar realmente em estado de escuta MQTT
+- preservado o bind em `MQTT_BIND_HOST=0.0.0.0` e a porta `MQTT_PORT=1883`, sem alterar contratos MQTT, payloads do ESP32, API REST, Socket.IO ou pairing
+
+### Documentado
+- diferenca entre `Test-NetConnection IP_DO_NOTEBOOK -Port 1883`, que valida apenas TCP, e teste MQTT real com cliente recebendo `CONNACK`
+- fluxo de validacao com `npm run mqtt:test -- 127.0.0.1 1883` e `npm run mqtt:test -- IP_DO_NOTEBOOK 1883`
+
+### Pendente / Faltando
+- validar em hardware real o botao `Testar MQTT` do portal do ESP32 apos reiniciar o broker com esta versao
+
+### Limitacoes conhecidas
+- firewall local, perfil de rede do Windows, isolamento de clientes em redes institucionais, TLS ou credenciais incorretas ainda podem impedir o ESP32 mesmo com TCP e handshake local funcionando
+
 ## [v0.8.10] - 2026-04-29
 ### Alterado
 - versao alinhada para `0.8.10` em `CHANGELOG.md`, `README.md`, `package.json` da raiz, `backend/package.json`, `backend/package-lock.json`, `frontend/package.json` e `frontend/package-lock.json`

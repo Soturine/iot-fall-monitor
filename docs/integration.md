@@ -244,6 +244,16 @@ Test-NetConnection IP_DO_NOTEBOOK -Port 1883
 
 O esperado e `TcpTestSucceeded : True`.
 
+Esse teste valida apenas abertura de porta TCP. Para confirmar o protocolo MQTT, rode um cliente e aguarde `CONNACK`:
+
+```powershell
+cd backend
+npm run mqtt:test -- 127.0.0.1 1883
+npm run mqtt:test -- IP_DO_NOTEBOOK 1883
+```
+
+O esperado e `MQTT handshake OK`. Para o backend local, prefira `MQTT_BROKER_URL=mqtt://127.0.0.1:1883`; para o ESP32, use o IPv4 real do notebook.
+
 `localhost`, `127.0.0.1` e `::1` apontam para o proprio computador e nao servem como `MQTT_HOST` no ESP32. Mesmo com o broker em `0.0.0.0:1883`, firewall local ou isolamento de clientes em rede institucional ainda podem impedir a conexao.
 
 ### Endpoint usado pelo ESP32

@@ -238,7 +238,7 @@ function Get-MqttSettings {
   $brokerUrl = if ($envValues.ContainsKey("MQTT_BROKER_URL") -and $envValues["MQTT_BROKER_URL"]) {
     $envValues["MQTT_BROKER_URL"]
   } else {
-    "mqtt://$(Get-LocalDevHost):1883"
+    "mqtt://127.0.0.1:1883"
   }
 
   $brokerHost = Get-LocalDevHost

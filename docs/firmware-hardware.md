@@ -599,6 +599,15 @@ Test-NetConnection IP_DO_NOTEBOOK -Port 1883
 
 O esperado e `TcpTestSucceeded : True`. Se `localhost:1883` funcionar, mas o IP do notebook falhar, o broker provavelmente esta preso a loopback/IPv6 ou a rede/firewall ainda esta bloqueando o acesso.
 
+Esse teste nao valida o handshake MQTT. Para confirmar que o broker respondeu com `CONNACK`:
+
+```powershell
+cd backend
+npm run mqtt:test -- IP_DO_NOTEBOOK 1883
+```
+
+O esperado e `MQTT handshake OK`. Depois disso, o botao `Testar MQTT` do portal do ESP32 deve conseguir passar se host, porta, TLS e credenciais estiverem coerentes.
+
 ### Cenario B: hotspot do celular
 
 - conecte notebook e ESP32 no mesmo hotspot

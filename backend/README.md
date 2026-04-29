@@ -54,7 +54,7 @@ MYSQL_PORT=3306
 MYSQL_USER=root
 MYSQL_PASSWORD=
 MYSQL_DATABASE=queda_monitor
-MQTT_BROKER_URL=mqtt://localhost:1883
+MQTT_BROKER_URL=mqtt://127.0.0.1:1883
 MQTT_BIND_HOST=0.0.0.0
 MQTT_PORT=1883
 MQTT_USERNAME=
@@ -85,7 +85,17 @@ O ambiente local atual do projeto usa `MYSQL_PASSWORD=` vazio. Se o seu MySQL ex
 
 - `MQTT_BIND_HOST=0.0.0.0` faz o broker escutar no IPv4 da LAN do notebook
 - `MQTT_PORT=1883` define a porta TCP do broker dev
+- `MQTT_BROKER_URL=mqtt://127.0.0.1:1883` evita ambiguidade de `localhost`/IPv6 para o backend local
 - no ESP32, use o IPv4 real do notebook como `MQTT_HOST`; nunca use `localhost`
+
+Para validar que o broker respondeu ao protocolo MQTT, e nao apenas abriu TCP:
+
+```powershell
+npm run mqtt:test -- 127.0.0.1 1883
+npm run mqtt:test -- IP_DO_NOTEBOOK 1883
+```
+
+O esperado e `MQTT handshake OK`.
 
 ## O que mudou no modelo do backend
 

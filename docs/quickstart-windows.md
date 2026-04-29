@@ -72,7 +72,7 @@ MYSQL_PORT=3306
 MYSQL_USER=root
 MYSQL_PASSWORD=
 MYSQL_DATABASE=queda_monitor
-MQTT_BROKER_URL=mqtt://localhost:1883
+MQTT_BROKER_URL=mqtt://127.0.0.1:1883
 MQTT_BIND_HOST=0.0.0.0
 MQTT_PORT=1883
 MQTT_CLIENT_ID=queda-backend
@@ -87,10 +87,11 @@ MQTT_TLS_CA_FILE=
 Notas praticas:
 
 - o ambiente local atual usa `MYSQL_PASSWORD=` vazio
-- backend, frontend e broker local usam `localhost` apenas no notebook
+- backend e frontend podem usar `localhost` no notebook; para MQTT local do backend, prefira `127.0.0.1`
 - isso nao vale para o ESP32 fisico
+- para o backend local, prefira `MQTT_BROKER_URL=mqtt://127.0.0.1:1883` para evitar resolucao de `localhost` em IPv6
 - o broker local de desenvolvimento usa `MQTT_BIND_HOST=0.0.0.0` para aceitar conexao pelo IPv4 da LAN
-- `mqtts://...` ficou preparado de forma opt-in, mas o fluxo padrao continua sendo `mqtt://localhost:1883`
+- `mqtts://...` ficou preparado de forma opt-in, mas o fluxo padrao local do backend continua sendo `mqtt://127.0.0.1:1883`
 
 ## 5. Configurar `frontend/.env`
 
@@ -311,9 +312,20 @@ O esperado e:
 TcpTestSucceeded : True
 ```
 
+Isso valida apenas TCP. Para validar o handshake MQTT e o `CONNACK`:
+
+```powershell
+cd backend
+npm run mqtt:test -- 127.0.0.1 1883
+npm run mqtt:test -- IP_DO_NOTEBOOK 1883
+```
+
+O esperado e `MQTT handshake OK`.
+
 Observacoes:
 
 - `localhost:1883` funcionando nao garante que o ESP32 consiga acessar
+- TCP aberto nao garante que o broker concluiu o protocolo MQTT
 - `127.0.0.1`, `localhost` e `::1` sao locais do proprio computador
 - o ESP32 deve usar o IPv4 real do notebook na rede atual
 - em rede institucional, ainda pode haver isolamento entre clientes mesmo com o bind correto
