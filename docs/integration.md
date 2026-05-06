@@ -193,6 +193,15 @@ Regras praticas:
 - `socket do painel desconectado` significa apenas que o navegador perdeu o canal realtime
 - `device offline` continua significando ausencia recente de `status`/`telemetry` MQTT no backend
 - o frontend agora recebe `telemetry:new` com `deviceBehavior` e `deviceStatusPatch`, o que permite atualizar `lastSeenAt`, bateria, RSSI e a heuristica local sem refetch completo a cada amostra
+- a pagina de detalhe do device tambem faz um refresh HTTP leve a cada 10s como fallback, para cobrir perda de evento realtime durante reload, troca de sessao ou reconexao do socket
+
+## Identidade do device MQTT
+
+O firmware pode publicar `device_id` como identificador humano/tecnico curto, por exemplo `esp32_01`, e `device_uid` como identidade fisica real do chip. Em bases antigas ou seeds de demo, alguns devices podem existir como `device_uid = legacy:{device_id}`.
+
+Na ingestao MQTT atual, quando chega uma mensagem com `device_uid` real e o backend encontra um cadastro legado `legacy:{device_id}` ja `claimed` e com organizacao, ele reconcilia o cadastro para o UID real antes de persistir status/telemetria. Se uma tentativa anterior ja tiver criado um duplicado tecnico sem organizacao para esse UID real, o backend move telemetrias, eventos e alertas desse duplicado para o device pareado e remove o duplicado.
+
+Isso evita o caso em que o broker recebe telemetria corretamente, mas o dashboard da organizacao continua stale porque o payload foi associado a um device sem tenant. Se a mensagem MQTT chegar sem `device_uid` depois da reconciliacao, o backend tenta associar por `device_id` apenas quando houver exatamente um cadastro pareado com aquele identificador.
 
 Isso reduz a chance de interpretar uma falha do navegador como se o ESP32 tivesse realmente caido.
 

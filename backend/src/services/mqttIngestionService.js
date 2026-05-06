@@ -166,7 +166,8 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
         deviceLog,
         telemetry: {
           ...telemetry,
-          deviceIdentifier,
+          deviceIdentifier: deviceSnapshot.deviceIdentifier,
+          deviceUid: deviceSnapshot.deviceUid,
           deviceStatusPatch: deviceSnapshot.status,
           deviceBehavior: deviceSnapshot.behavior,
         },
@@ -217,6 +218,13 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
       online: result.status.status?.online ?? null,
       lastSeenAt: result.status.status?.lastSeenAt || null,
     });
+    if (!result.status.organization?.id) {
+      logger.warn("MQTT status processado sem organizacao pareada; realtime tenant nao sera entregue.", {
+        topic: topicInfo.topic,
+        device: result.deviceLog,
+        reason: "device_without_organization_scope",
+      });
+    }
     emitScopedEvent(io, "device:status", result.status, {
       organizationId: result.status.organization?.id || null,
       patientId: result.status.currentPatient?.id || null,
@@ -231,6 +239,14 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
       telemetryId: result.telemetry.id,
       createdAt: result.telemetry.createdAt,
     });
+    if (!result.telemetry.organizationId) {
+      logger.warn("MQTT telemetry processada sem organizacao pareada; realtime tenant nao sera entregue.", {
+        topic: topicInfo.topic,
+        device: result.deviceLog,
+        telemetryId: result.telemetry.id,
+        reason: "device_without_organization_scope",
+      });
+    }
     emitScopedEvent(io, "telemetry:new", result.telemetry, {
       organizationId: result.telemetry.organizationId || null,
       patientId: result.telemetry.patientId || null,

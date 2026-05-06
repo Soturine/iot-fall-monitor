@@ -1,5 +1,29 @@
 # Changelog
 
+## [v0.8.13] - 2026-05-06
+### Alterado
+- versao alinhada para `0.8.13` em `CHANGELOG.md`, `README.md`, `package.json` da raiz, `backend/package.json`, `backend/package-lock.json`, `frontend/package.json` e `frontend/package-lock.json`
+- o detalhe do device no frontend passou a combinar atualizacao incremental via `telemetry:new` com refresh HTTP leve a cada 10s, evitando grafico stale quando um evento realtime se perde
+- o grafico de telemetria passou a mostrar segundos em janelas curtas e pontos nas series, deixando amostras de bancada mais visiveis
+- eventos realtime de telemetria agora incluem tambem o `deviceUid` resolvido pelo backend, sem remover campos existentes
+
+### Corrigido
+- corrigida a divergencia entre o device legado pareado `legacy:{device_id}` e o `device_uid` real publicado pelo ESP32, que podia fazer o backend gravar telemetria em um duplicado sem organizacao e deixar o dashboard da organizacao stale
+- quando esse duplicado tecnico sem tenant ja existe, a ingestao MQTT move telemetrias, eventos e alertas para o device pareado, remove o duplicado e passa a usar o UID real no cadastro existente
+- mensagens MQTT sem `device_uid` continuam compatíveis: depois da reconciliacao, o backend tenta resolver por `device_id` somente se houver exatamente um cadastro pareado com aquele identificador
+
+### Documentado
+- fluxo de identidade MQTT entre `device_id`, `device_uid` real e cadastros legados
+- comportamento do detalhe `/devices/:id` com realtime incremental e fallback HTTP
+
+### Pendente / Faltando
+- validar em hardware real se o proximo pacote MQTT do ESP32 reconcilia o device exibido como `legacy:esp32_01` e atualiza o grafico sem F5
+- confirmar no banco se existe duplicado tecnico antigo sem organizacao e se ele foi removido apos a primeira telemetria recebida nesta versao
+
+### Limitacoes conhecidas
+- se existirem varios devices pareados com o mesmo `device_id`, mensagens sem `device_uid` continuam criando/atualizando o fallback legado para evitar associacao ambigua
+- se o `device_uid` real ja estiver claimed em outra organizacao, o backend nao faz merge automatico com o cadastro legado
+
 ## [v0.8.12] - 2026-05-06
 ### Adicionado
 - `SETUP_PORTAL_ALWAYS_ON = true` no firmware para manter o AP/portal de manutencao ativo em paralelo ao fluxo normal de Wi-Fi station, MQTT, leitura do sensor e publicacao de telemetria

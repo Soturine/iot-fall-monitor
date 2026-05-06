@@ -58,6 +58,8 @@ Nesta rodada, o frontend recebeu uma passada de estabilizacao para o modelo mult
 - o contexto `Socket.IO` foi ajustado para reconectar de forma mais limpa quando token ou organizacao ativa mudam
 - o modal de edicao de device foi corrigido para nao reciclar estado antigo entre dispositivos diferentes
 - o dashboard voltou a renderizar corretamente o paciente dos eventos recentes vindos do backend
+- a pagina `/devices/:id` aplica `telemetry:new` incrementalmente e tambem faz refresh HTTP leve a cada 10s, para manter o grafico responsivo se algum evento realtime se perder
+- o grafico de telemetria mostra segundos quando a janela e curta e exibe pontos nas series, facilitando enxergar amostras chegando em bancada
 
 ## Fluxo de autenticacao
 

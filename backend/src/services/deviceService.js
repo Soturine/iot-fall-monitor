@@ -1,6 +1,7 @@
 const { execute, one, transaction } = require("../db/pool");
 const { parseMaybeJson, toBoolean } = require("../utils/formatters");
 const { HttpError } = require("../utils/httpError");
+const { logger } = require("../utils/logger");
 const { getPagination } = require("../utils/pagination");
 const { createAuditLog } = require("./auditService");
 const { computeDeviceBehavior } = require("./deviceBehaviorService");
@@ -42,6 +43,14 @@ function normalizeDeviceUid(deviceUid, deviceIdentifier) {
   }
 
   return `legacy:${normalizedIdentifier}`;
+}
+
+function buildLegacyDeviceUid(deviceIdentifier) {
+  return `legacy:${deviceIdentifier}`;
+}
+
+function isClaimedScopedDevice(row) {
+  return Boolean(row?.claim_status === "claimed" && row.organization_id);
 }
 
 function mapDeviceRow(row) {
@@ -389,9 +398,271 @@ async function getDeviceForUpdate(deviceId, executor = null) {
   return row;
 }
 
+async function findDeviceByUidForUpdate(deviceUid, executor = null) {
+  return one(
+    executor,
+    `
+      SELECT
+        id,
+        device_uid,
+        device_identifier,
+        claim_status,
+        organization_id,
+        current_patient_id,
+        current_assignment_history_id
+      FROM devices
+      WHERE device_uid = ?
+      LIMIT 1
+      FOR UPDATE
+    `,
+    [deviceUid],
+  );
+}
+
+async function findClaimedDevicesByIdentifierForUpdate(deviceIdentifier, executor = null) {
+  return execute(
+    executor,
+    `
+      SELECT
+        id,
+        device_uid,
+        device_identifier,
+        claim_status,
+        organization_id,
+        current_patient_id,
+        current_assignment_history_id
+      FROM devices
+      WHERE device_identifier = ?
+        AND claim_status = 'claimed'
+        AND organization_id IS NOT NULL
+      ORDER BY id ASC
+      LIMIT 2
+      FOR UPDATE
+    `,
+    [deviceIdentifier],
+  );
+}
+
+async function moveUnclaimedDuplicateDevice({
+  sourceDeviceId,
+  targetDeviceId,
+  targetScope,
+  executor = null,
+}) {
+  const scopeParams = [
+    targetDeviceId,
+    targetScope.organizationId,
+    targetScope.patientId,
+    targetScope.assignmentHistoryId,
+    sourceDeviceId,
+  ];
+
+  await execute(
+    executor,
+    `
+      UPDATE telemetry_logs
+      SET
+        device_id = ?,
+        organization_id = ?,
+        patient_id = ?,
+        device_assignment_history_id = ?
+      WHERE device_id = ?
+    `,
+    scopeParams,
+  );
+
+  await execute(
+    executor,
+    `
+      UPDATE events
+      SET
+        device_id = ?,
+        organization_id = ?,
+        patient_id = ?,
+        device_assignment_history_id = ?
+      WHERE device_id = ?
+    `,
+    scopeParams,
+  );
+
+  await execute(
+    executor,
+    `
+      UPDATE alerts
+      SET
+        device_id = ?,
+        organization_id = ?,
+        patient_id = ?
+      WHERE device_id = ?
+    `,
+    [
+      targetDeviceId,
+      targetScope.organizationId,
+      targetScope.patientId,
+      sourceDeviceId,
+    ],
+  );
+
+  await execute(
+    executor,
+    `
+      UPDATE device_pairing_sessions
+      SET used_by_device_id = ?
+      WHERE used_by_device_id = ?
+    `,
+    [targetDeviceId, sourceDeviceId],
+  );
+
+  await execute(
+    executor,
+    `
+      DELETE FROM device_status
+      WHERE device_id = ?
+    `,
+    [sourceDeviceId],
+  );
+
+  await execute(
+    executor,
+    `
+      DELETE FROM devices
+      WHERE id = ?
+    `,
+    [sourceDeviceId],
+  );
+}
+
+async function reconcileLegacyDeviceIdentity({
+  normalizedUid,
+  normalizedIdentifier,
+  executor = null,
+}) {
+  if (!normalizedIdentifier) {
+    return normalizedUid;
+  }
+
+  const legacyUid = buildLegacyDeviceUid(normalizedIdentifier);
+  if (normalizedUid === legacyUid) {
+    const legacyDevice = await findDeviceByUidForUpdate(legacyUid, executor);
+    if (legacyDevice) {
+      return normalizedUid;
+    }
+
+    const claimedDevices = await findClaimedDevicesByIdentifierForUpdate(
+      normalizedIdentifier,
+      executor,
+    );
+
+    if (claimedDevices.length === 1) {
+      logger.info("Mensagem MQTT sem device_uid associada ao device pareado por identificador.", {
+        deviceIdentifier: normalizedIdentifier,
+        resolvedDeviceUid: claimedDevices[0].device_uid,
+        deviceId: Number(claimedDevices[0].id),
+        organizationId: Number(claimedDevices[0].organization_id),
+      });
+
+      return claimedDevices[0].device_uid;
+    }
+
+    return normalizedUid;
+  }
+
+  const legacyDevice = await findDeviceByUidForUpdate(legacyUid, executor);
+  if (!isClaimedScopedDevice(legacyDevice)) {
+    return normalizedUid;
+  }
+
+  const uidDevice = await findDeviceByUidForUpdate(normalizedUid, executor);
+  if (!uidDevice) {
+    await execute(
+      executor,
+      `
+        UPDATE devices
+        SET device_uid = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `,
+      [normalizedUid, legacyDevice.id],
+    );
+
+    logger.info("Device MQTT reconciliado com cadastro legado pareado.", {
+      deviceIdentifier: normalizedIdentifier,
+      previousDeviceUid: legacyUid,
+      nextDeviceUid: normalizedUid,
+      deviceId: Number(legacyDevice.id),
+      organizationId: Number(legacyDevice.organization_id),
+    });
+
+    return normalizedUid;
+  }
+
+  if (Number(uidDevice.id) === Number(legacyDevice.id)) {
+    return normalizedUid;
+  }
+
+  const canMergeUnclaimedDuplicate =
+    uidDevice.claim_status === "unclaimed" &&
+    !uidDevice.organization_id &&
+    uidDevice.device_identifier === normalizedIdentifier;
+
+  if (!canMergeUnclaimedDuplicate) {
+    logger.warn("Device MQTT real nao foi reconciliado com cadastro legado.", {
+      deviceIdentifier: normalizedIdentifier,
+      incomingDeviceUid: normalizedUid,
+      incomingDeviceId: Number(uidDevice.id),
+      incomingClaimStatus: uidDevice.claim_status,
+      legacyDeviceId: Number(legacyDevice.id),
+      reason: "incoming_uid_already_claimed_or_scoped",
+    });
+
+    return normalizedUid;
+  }
+
+  const targetScope = {
+    organizationId: legacyDevice.organization_id ? Number(legacyDevice.organization_id) : null,
+    patientId: legacyDevice.current_patient_id ? Number(legacyDevice.current_patient_id) : null,
+    assignmentHistoryId: legacyDevice.current_assignment_history_id
+      ? Number(legacyDevice.current_assignment_history_id)
+      : null,
+  };
+
+  await moveUnclaimedDuplicateDevice({
+    sourceDeviceId: Number(uidDevice.id),
+    targetDeviceId: Number(legacyDevice.id),
+    targetScope,
+    executor,
+  });
+
+  await execute(
+    executor,
+    `
+      UPDATE devices
+      SET device_uid = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `,
+    [normalizedUid, legacyDevice.id],
+  );
+
+  logger.info("Device MQTT duplicado sem tenant foi anexado ao legado pareado.", {
+    deviceIdentifier: normalizedIdentifier,
+    previousDeviceUid: legacyUid,
+    nextDeviceUid: normalizedUid,
+    removedDuplicateDeviceId: Number(uidDevice.id),
+    targetDeviceId: Number(legacyDevice.id),
+    organizationId: targetScope.organizationId,
+    patientId: targetScope.patientId,
+  });
+
+  return normalizedUid;
+}
+
 async function getOrCreateDeviceByIdentity({ deviceUid, deviceIdentifier, name }, executor = null) {
   const normalizedIdentifier = normalizeDeviceIdentifier(deviceIdentifier, "");
-  const normalizedUid = normalizeDeviceUid(deviceUid, normalizedIdentifier);
+  const requestedUid = normalizeDeviceUid(deviceUid, normalizedIdentifier);
+  const normalizedUid = await reconcileLegacyDeviceIdentity({
+    normalizedUid: requestedUid,
+    normalizedIdentifier,
+    executor,
+  });
   const fallbackName = normalizeDeviceIdentifier(name, normalizedIdentifier || normalizedUid);
 
   await execute(

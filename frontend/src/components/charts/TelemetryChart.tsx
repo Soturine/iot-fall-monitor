@@ -20,6 +20,24 @@ export function TelemetryChart({ data }: { data: TelemetryLog[] }) {
     );
   }
 
+  const timestamps = data
+    .map((sample) => (sample.createdAt ? new Date(sample.createdAt).getTime() : Number.NaN))
+    .filter((timestamp) => Number.isFinite(timestamp));
+  const timeSpanMs = timestamps.length
+    ? Math.max(...timestamps) - Math.min(...timestamps)
+    : 0;
+  const showSeconds = timeSpanMs > 0 && timeSpanMs < 120000;
+  const tickFormatterOptions: Intl.DateTimeFormatOptions = {
+    hour: "2-digit",
+    minute: "2-digit",
+  };
+
+  if (showSeconds) {
+    tickFormatterOptions.second = "2-digit";
+  }
+
+  const tickFormatter = new Intl.DateTimeFormat("pt-BR", tickFormatterOptions);
+
   return (
     <div className="panel-soft h-80 p-4">
       <ResponsiveContainer width="100%" height="100%">
@@ -29,12 +47,7 @@ export function TelemetryChart({ data }: { data: TelemetryLog[] }) {
             dataKey="createdAt"
             minTickGap={40}
             stroke="#4f7367"
-            tickFormatter={(value) =>
-              new Intl.DateTimeFormat("pt-BR", {
-                hour: "2-digit",
-                minute: "2-digit",
-              }).format(new Date(value))
-            }
+            tickFormatter={(value) => tickFormatter.format(new Date(value))}
           />
           <YAxis stroke="#4f7367" />
           <Tooltip
@@ -50,7 +63,10 @@ export function TelemetryChart({ data }: { data: TelemetryLog[] }) {
           />
           <Line
             dataKey="accelMagnitude"
-            dot={false}
+            activeDot={{ r: 5 }}
+            connectNulls
+            dot={{ r: 2 }}
+            isAnimationActive={false}
             name="Aceleração"
             stroke="#b4382d"
             strokeWidth={3}
@@ -58,7 +74,10 @@ export function TelemetryChart({ data }: { data: TelemetryLog[] }) {
           />
           <Line
             dataKey="gyroMagnitude"
-            dot={false}
+            activeDot={{ r: 5 }}
+            connectNulls
+            dot={{ r: 2 }}
+            isAnimationActive={false}
             name="Giroscópio"
             stroke="#36584d"
             strokeWidth={3}

@@ -51,8 +51,10 @@ export function DeviceDetailPage() {
 
     let active = true;
 
-    const loadDetail = async () => {
-      setLoading(true);
+    const loadDetail = async (showLoading = true) => {
+      if (showLoading) {
+        setLoading(true);
+      }
 
       try {
         const response = await api.get<DeviceDetailResponse>(`/devices/${numericId}`);
@@ -60,25 +62,33 @@ export function DeviceDetailPage() {
         if (active) {
           setDetail(response.data);
         }
+      } catch {
+        if (active && showLoading) {
+          setDetail(null);
+        }
       } finally {
-        if (active) {
+        if (active && showLoading) {
           setLoading(false);
         }
       }
     };
 
     void loadDetail();
+    const pollTimer = window.setInterval(() => {
+      void loadDetail(false);
+    }, 10000);
 
     if (!socket) {
       return () => {
         active = false;
+        window.clearInterval(pollTimer);
       };
     }
 
     const refreshIfMatches = (payload: { device?: { id?: number }; deviceId?: number; id?: number }) => {
       const targetId = payload.device?.id || payload.deviceId || payload.id;
       if (targetId === numericId) {
-        void loadDetail();
+        void loadDetail(false);
       }
     };
     const handleTelemetry = (telemetryEvent: TelemetryRealtimeEvent) => {
@@ -98,6 +108,7 @@ export function DeviceDetailPage() {
 
     return () => {
       active = false;
+      window.clearInterval(pollTimer);
       socket.off("device:status", refreshIfMatches);
       socket.off("telemetry:new", handleTelemetry);
       socket.off("alert:new", refreshIfMatches);

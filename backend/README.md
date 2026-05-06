@@ -97,6 +97,14 @@ npm run mqtt:test -- IP_DO_NOTEBOOK 1883
 
 O esperado e `MQTT handshake OK`.
 
+### Identidade MQTT e devices legados
+
+O backend aceita mensagens MQTT com `device_id` e, quando disponivel, `device_uid`. Em ambientes antigos ou seeds de demo, o device pode estar cadastrado como `device_uid = legacy:{device_id}` enquanto o firmware real ja publica um UID fisico do ESP32.
+
+Na ingestao atual, se chegar um `device_uid` real para um `device_id` que ja possui um cadastro legado `claimed` com organizacao, o backend reconcilia esse cadastro para o UID real antes de gravar `status`, `telemetry` ou `events`. Se uma tentativa anterior criou um duplicado tecnico sem organizacao para esse mesmo UID, as telemetrias/eventos/alertas desse duplicado sao movidos para o device pareado e o duplicado e removido.
+
+Quando a mensagem chega sem `device_uid`, o backend ainda preserva o fallback legado. Depois da reconciliacao, ele tenta resolver pelo `device_id` apenas se existir exatamente um device pareado com esse identificador, evitando associacao ambigua.
+
 ## O que mudou no modelo do backend
 
 O backend deixou de ser global/single-tenant.
