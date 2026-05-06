@@ -14,8 +14,8 @@ void WifiManager::begin(const DeviceSettings::DeviceConfig& config) {
   attemptsExhausted_ = false;
   ntpConfigured_ = false;
 
-  // O dispositivo opera como cliente da rede local quando esta em modo normal.
-  WiFi.mode(WIFI_STA);
+  // Em bancada, o portal de manutencao pode ficar ativo junto com o cliente Wi-Fi.
+  WiFi.mode(AppConfig::SETUP_PORTAL_ALWAYS_ON ? WIFI_AP_STA : WIFI_STA);
   WiFi.persistent(false);
   WiFi.setSleep(false);
 

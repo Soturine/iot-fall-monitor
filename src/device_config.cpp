@@ -205,12 +205,6 @@ String buildSetupApSsid(const DeviceConfig& config) {
   ssid += "-";
   ssid += suffix;
 
-  const String deviceId = effectiveDeviceId(config);
-  if (!deviceId.isEmpty()) {
-    ssid += "-";
-    ssid += deviceId.substring(0, 12);
-  }
-
   return ssid;
 }
 

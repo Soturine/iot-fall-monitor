@@ -45,6 +45,7 @@ unsigned long lastMotionTestTriggerAtMs = 0;
 unsigned long motionTestStableSinceAtMs = 0;
 unsigned long lastEventBufferPersistAtMs = 0;
 bool lastPatientProfileSyncSucceeded = false;
+bool mqttRuntimeContextLogged = false;
 
 unsigned long currentTimestampSeconds() {
   const time_t now = time(nullptr);
@@ -147,10 +148,22 @@ String buildTelemetryPayload() {
 
 void queueOrPublish(const String& topic, const String& payload) {
   if (mqttClient.publish(topic, payload, false)) {
+    if (AppConfig::FIRMWARE_CONNECTIVITY_DEBUG_ENABLED) {
+      AppLog::debugf("MQTT publish OK | topico=%s | bytes=%u\n",
+                     topic.c_str(),
+                     static_cast<unsigned>(payload.length()));
+    }
     if (AppConfig::FIRMWARE_EVENT_BUFFER_DEBUG_ENABLED) {
       AppLog::debugf("Evento enviado para %s\n", topic.c_str());
     }
     return;
+  }
+
+  if (AppConfig::FIRMWARE_CONNECTIVITY_DEBUG_ENABLED) {
+    AppLog::debugf("MQTT publish falhou | topico=%s | conectado=%s | bytes=%u\n",
+                   topic.c_str(),
+                   mqttClient.isConnected() ? "sim" : "nao",
+                   static_cast<unsigned>(payload.length()));
   }
 
   // Se a publicacao falhar, o evento entra no buffer local para reenvio posterior.
@@ -253,7 +266,11 @@ void publishPeriodicStatus() {
   }
 
   const String payload = buildStatusPayload();
-  queueOrPublish(DeviceSettings::buildTopic(runtimeConfig(), "status"), payload);
+  const String topic = DeviceSettings::buildTopic(runtimeConfig(), "status");
+  if (AppConfig::FIRMWARE_CONNECTIVITY_DEBUG_ENABLED) {
+    AppLog::debugf("Publicando status MQTT em %s\n", topic.c_str());
+  }
+  queueOrPublish(topic, payload);
 }
 
 void publishPeriodicTelemetry() {
@@ -262,10 +279,16 @@ void publishPeriodicTelemetry() {
   }
 
   // Telemetria continua nao entra no buffer local para nao competir com alertas.
+  const String topic = DeviceSettings::buildTopic(runtimeConfig(), "telemetry");
   const String payload = buildTelemetryPayload();
-  mqttClient.publish(DeviceSettings::buildTopic(runtimeConfig(), "telemetry"),
-                     payload,
-                     false);
+  const bool published = mqttClient.publish(topic, payload, false);
+
+  if (AppConfig::FIRMWARE_CONNECTIVITY_DEBUG_ENABLED) {
+    AppLog::debugf("MQTT telemetry %s | topico=%s | bytes=%u\n",
+                   published ? "OK" : "falhou",
+                   topic.c_str(),
+                   static_cast<unsigned>(payload.length()));
+  }
 }
 
 void maybeSyncPatientProfile(unsigned long nowMs) {
@@ -346,6 +369,43 @@ void restoreBufferedEventsFromStore() {
   eventBuffer.markPersisted();
   AppLog::warnf("Restaurados %u evento(s) critico(s) pendente(s) apos reboot.\n",
                 static_cast<unsigned>(restoredCount));
+}
+
+void holdDisabledBuzzerInactive() {
+  if (AppConfig::BUZZER_ENABLED) {
+    return;
+  }
+
+  pinMode(AppConfig::BUZZER_PIN, OUTPUT);
+  digitalWrite(AppConfig::BUZZER_PIN,
+               AppConfig::BUZZER_ACTIVE_HIGH ? LOW : HIGH);
+  AppLog::info("Buzzer desabilitado por padrao; GPIO mantido em repouso conforme BUZZER_ACTIVE_HIGH.");
+}
+
+void logMqttRuntimeContextIfNeeded() {
+  if (!AppConfig::FIRMWARE_CONNECTIVITY_DEBUG_ENABLED) {
+    return;
+  }
+
+  if (!mqttClient.isConnected()) {
+    mqttRuntimeContextLogged = false;
+    return;
+  }
+
+  if (mqttRuntimeContextLogged) {
+    return;
+  }
+
+  mqttRuntimeContextLogged = true;
+  AppLog::debugf("MQTT runtime deviceId=%s | clientId=%s\n",
+                 DeviceSettings::effectiveDeviceId(runtimeConfig()).c_str(),
+                 DeviceSettings::effectiveMqttClientId(runtimeConfig()).c_str());
+  AppLog::debugf("Topico status: %s\n",
+                 DeviceSettings::buildTopic(runtimeConfig(), "status").c_str());
+  AppLog::debugf("Topico telemetry: %s\n",
+                 DeviceSettings::buildTopic(runtimeConfig(), "telemetry").c_str());
+  AppLog::debugf("Topico events: %s\n",
+                 DeviceSettings::buildTopic(runtimeConfig(), "events").c_str());
 }
 
 void printSensorReading(const SensorReading& reading) {
@@ -444,8 +504,14 @@ void setup() {
   delay(100);
 
   // A ordem de inicializacao prioriza feedback local mesmo antes da rede subir.
+  holdDisabledBuzzerInactive();
+
   if (AppConfig::STATUS_LED_ENABLED || AppConfig::BUZZER_ENABLED) {
-    indicator.begin(AppConfig::STATUS_LED_PIN, AppConfig::BUZZER_PIN, AppConfig::BUZZER_ACTIVE_HIGH);
+    indicator.begin(AppConfig::STATUS_LED_PIN,
+                    AppConfig::BUZZER_PIN,
+                    AppConfig::BUZZER_ACTIVE_HIGH,
+                    AppConfig::STATUS_LED_ENABLED,
+                    AppConfig::BUZZER_ENABLED);
     indicator.setState(IndicatorState::Booting);
   }
 
@@ -477,6 +543,7 @@ void loop() {
 
   // Wi-Fi, MQTT e setup portal sao mantidos por um unico gerente de conectividade.
   connectivityManager.update();
+  logMqttRuntimeContextIfNeeded();
 
   if (sensorReady && (nowMs - lastSensorSampleAtMs) >= AppConfig::SENSOR_SAMPLE_INTERVAL_MS) {
     lastSensorSampleAtMs = nowMs;

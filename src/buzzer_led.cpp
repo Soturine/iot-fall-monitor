@@ -1,13 +1,24 @@
 #include "buzzer_led.h"
 
-void BuzzerLed::begin(uint8_t ledPin, uint8_t buzzerPin, bool buzzerActiveHigh) {
+void BuzzerLed::begin(uint8_t ledPin,
+                      uint8_t buzzerPin,
+                      bool buzzerActiveHigh,
+                      bool ledEnabled,
+                      bool buzzerEnabled) {
   ledPin_ = ledPin;
   buzzerPin_ = buzzerPin;
   buzzerActiveHigh_ = buzzerActiveHigh;
-  configured_ = true;
+  ledEnabled_ = ledEnabled;
+  buzzerEnabled_ = buzzerEnabled;
+  configured_ = ledEnabled_ || buzzerEnabled_;
 
-  pinMode(ledPin_, OUTPUT);
-  pinMode(buzzerPin_, OUTPUT);
+  if (ledEnabled_) {
+    pinMode(ledPin_, OUTPUT);
+  }
+
+  if (buzzerEnabled_) {
+    pinMode(buzzerPin_, OUTPUT);
+  }
 
   writeOutputs(false, false);
 }
@@ -106,16 +117,20 @@ void BuzzerLed::renderState(unsigned long nowMs) {
 
 void BuzzerLed::writeOutputs(bool ledOn, bool buzzerOn) {
   // So escrevemos no GPIO quando ha mudanca real de estado.
-  if (ledOn != ledState_) {
+  if (ledEnabled_ && ledOn != ledState_) {
     digitalWrite(ledPin_, ledOn ? HIGH : LOW);
     ledState_ = ledOn;
+  } else if (!ledEnabled_) {
+    ledState_ = false;
   }
 
-  if (buzzerOn != buzzerState_) {
+  if (buzzerEnabled_ && buzzerOn != buzzerState_) {
     const uint8_t buzzerLevel = buzzerOn
                                     ? (buzzerActiveHigh_ ? HIGH : LOW)
                                     : (buzzerActiveHigh_ ? LOW : HIGH);
     digitalWrite(buzzerPin_, buzzerLevel);
     buzzerState_ = buzzerOn;
+  } else if (!buzzerEnabled_) {
+    buzzerState_ = false;
   }
 }

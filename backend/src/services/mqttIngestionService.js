@@ -1,7 +1,10 @@
 const { transaction } = require("../db/pool");
 const { logger } = require("../utils/logger");
 const { toBoolean } = require("../utils/formatters");
-const { toDateFromUnixSeconds } = require("../utils/time");
+const {
+  isPlausibleDeviceUnixSeconds,
+  toDateFromDeviceTimestamp,
+} = require("../utils/time");
 const {
   getOrCreateDeviceByIdentity,
   getDeviceStatusSnapshot,
@@ -29,7 +32,7 @@ function normalizeTimestamp(value) {
     return new Date();
   }
 
-  return toDateFromUnixSeconds(value);
+  return toDateFromDeviceTimestamp(value);
 }
 
 function buildStatusUpdateFromPayload(payload) {
@@ -50,7 +53,9 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
   } catch (error) {
     logger.warn("Mensagem MQTT ignorada por JSON inválido.", {
       topic: topicInfo.topic,
-      payloadText,
+      channel: topicInfo.channel,
+      payloadBytes: Buffer.byteLength(payloadText || "", "utf8"),
+      reason: "invalid_json",
     });
     return;
   }
@@ -63,9 +68,42 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
   if (!deviceIdentifier) {
     logger.warn("Mensagem MQTT ignorada sem device_id.", {
       topic: topicInfo.topic,
-      payload,
+      channel: topicInfo.channel,
+      payloadKeys: Object.keys(payload || {}),
+      reason: "missing_device_id",
     });
     return;
+  }
+
+  if (!["events", "status", "telemetry"].includes(topicInfo.channel)) {
+    logger.warn("Mensagem MQTT ignorada por canal não suportado.", {
+      topic: topicInfo.topic,
+      channel: topicInfo.channel,
+      reason: "unsupported_channel",
+    });
+    return;
+  }
+
+  if (topicInfo.channel === "status" || topicInfo.channel === "telemetry") {
+    logger.info(`MQTT ${topicInfo.channel} recebido.`, {
+      topic: topicInfo.topic,
+      topicDeviceIdentifier: topicInfo.deviceIdentifier,
+      payloadDeviceId: deviceIdentifier,
+      deviceUid: deviceUid || null,
+    });
+  }
+
+  if (
+    payload.timestamp != null &&
+    !isPlausibleDeviceUnixSeconds(payload.timestamp)
+  ) {
+    logger.debug("Timestamp MQTT do device ignorado; usando hora do backend.", {
+      topic: topicInfo.topic,
+      channel: topicInfo.channel,
+      payloadDeviceId: deviceIdentifier,
+      timestamp: payload.timestamp,
+      reason: "implausible_device_timestamp",
+    });
   }
 
   const result = await transaction(async (connection) => {
@@ -83,6 +121,13 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
       patientId: device.currentPatient?.id || null,
       assignmentHistoryId: device.currentAssignmentHistoryId || null,
     };
+    const deviceLog = {
+      id: device.id,
+      deviceUid: device.deviceUid,
+      deviceIdentifier: device.deviceIdentifier,
+      organizationId: currentScope.organizationId,
+      patientId: currentScope.patientId,
+    };
 
     if (topicInfo.channel === "status") {
       const status = await upsertDeviceStatus(
@@ -94,6 +139,7 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
 
       return {
         channel: "status",
+        deviceLog,
         status,
       };
     }
@@ -117,6 +163,7 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
 
       return {
         channel: "telemetry",
+        deviceLog,
         telemetry: {
           ...telemetry,
           deviceIdentifier,
@@ -149,6 +196,7 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
 
       return {
         channel: "events",
+        deviceLog,
         event,
         alert,
       };
@@ -156,12 +204,19 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
 
     return {
       channel: "events",
+      deviceLog,
       event,
       alert: null,
     };
   });
 
   if (result.channel === "status") {
+    logger.info("MQTT status processado.", {
+      topic: topicInfo.topic,
+      device: result.deviceLog,
+      online: result.status.status?.online ?? null,
+      lastSeenAt: result.status.status?.lastSeenAt || null,
+    });
     emitScopedEvent(io, "device:status", result.status, {
       organizationId: result.status.organization?.id || null,
       patientId: result.status.currentPatient?.id || null,
@@ -170,12 +225,25 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
   }
 
   if (result.channel === "telemetry") {
+    logger.info("MQTT telemetry processada.", {
+      topic: topicInfo.topic,
+      device: result.deviceLog,
+      telemetryId: result.telemetry.id,
+      createdAt: result.telemetry.createdAt,
+    });
     emitScopedEvent(io, "telemetry:new", result.telemetry, {
       organizationId: result.telemetry.organizationId || null,
       patientId: result.telemetry.patientId || null,
     });
     return;
   }
+
+  logger.debug("MQTT event processado.", {
+    topic: topicInfo.topic,
+    device: result.deviceLog,
+    eventId: result.event.id,
+    eventType: result.event.eventType,
+  });
 
   if (result.alert) {
     emitScopedEvent(io, "alert:new", result.alert, {

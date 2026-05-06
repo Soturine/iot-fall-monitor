@@ -2,7 +2,7 @@ const { execute, one } = require("../db/pool");
 const { parseMaybeJson, toBoolean } = require("../utils/formatters");
 const { HttpError } = require("../utils/httpError");
 const { getPagination } = require("../utils/pagination");
-const { parseDateBoundary, toDateFromUnixSeconds } = require("../utils/time");
+const { parseDateBoundary, toDateFromDeviceTimestamp } = require("../utils/time");
 const { buildScopeFilter, canAccessScope } = require("./scopeService");
 
 function toNullableNumber(value) {
@@ -170,7 +170,7 @@ async function recordEventFromMqtt({ device, payload }, executor = null) {
   const intensity = toNullableNumber(payload.intensity ?? payload.accel_magnitude);
   const immobility = toBoolean(payload.immobility ?? payload.immobility_confirmed);
   const eventTime = payload.timestamp
-    ? toDateFromUnixSeconds(payload.timestamp)
+    ? toDateFromDeviceTimestamp(payload.timestamp)
     : new Date();
 
   const result = await execute(
@@ -227,7 +227,7 @@ async function recordEventFromMqtt({ device, payload }, executor = null) {
 
 async function recordTelemetryFromMqtt({ device, payload }, executor = null) {
   const createdAt = payload.timestamp
-    ? toDateFromUnixSeconds(payload.timestamp)
+    ? toDateFromDeviceTimestamp(payload.timestamp)
     : new Date();
 
   const result = await execute(

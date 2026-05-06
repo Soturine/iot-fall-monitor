@@ -4,6 +4,8 @@ Data: 2026-04-07
 Projeto: Sistema IoT de Deteccao de Quedas com ESP32  
 Porta observada: `COM4`
 
+Nota atual v0.8.12: este documento preserva observacoes historicas de bancada. O SSID atual do portal passou a ser `Q-ESP32-*`, `SETUP_PORTAL_ALWAYS_ON = true` pode manter o AP de manutencao ativo em paralelo ao Wi-Fi/MQTT, e o buzzer agora fica desabilitado por padrao com `BUZZER_ENABLED = false`.
+
 ## Objetivo
 
 Verificar a viabilidade do teste local de:
@@ -123,13 +125,15 @@ Interpretacao atual:
 - o bloqueio principal deixou de ser a porta ocupada
 - o ponto fraco restante esta no auto-reset/bootloader da placa `CH9102`
 
-## Diagnostico do AP de setup
+## Diagnostico historico do AP de setup
 
-### Comportamento real atual do firmware
+### Comportamento observado na epoca
 
-O AP `Queda-Setup-*` nao fica visivel o tempo todo.
+Naquela build, o AP `Queda-Setup-*` nao ficava visivel o tempo todo.
 
-Ele sobe apenas quando o ESP32 entra em `SETUP_MODE`, por exemplo quando:
+Na versao atual, o SSID esperado e `Q-ESP32-*`. Com `SETUP_PORTAL_ALWAYS_ON = true`, esse AP pode ficar ativo como manutencao mesmo quando o device continua tentando Wi-Fi/MQTT.
+
+Na build historica deste relatorio, ele subia apenas quando o ESP32 entrava em `SETUP_MODE`, por exemplo quando:
 
 - nao existe nenhuma rede Wi-Fi valida salva
 - a configuracao MQTT e invalida
@@ -214,27 +218,28 @@ Nesta rodada tambem:
 - `MOTION_TEST_GYRO_THRESHOLD_DPS = 140.0`
 - `MOTION_TEST_COOLDOWN_MS = 1200`
 
-## Como testar o AP de setup agora
+## Como testar o AP de manutencao agora
 
 ### Opcao mais simples para bancada
 
 1. abrir [include/app_config.h](../include/app_config.h)
-2. definir `FORCE_SETUP_MODE_ON_BOOT = true`
+2. manter `SETUP_PORTAL_ALWAYS_ON = true`
 3. compilar e gravar no ESP32
 4. reiniciar a placa
-5. procurar a rede `Queda-Setup-*`
+5. procurar a rede `Q-ESP32-*`
 6. abrir `http://setup.queda` ou `http://192.168.4.1`
 
 ### Depois do teste
 
 1. voltar `FORCE_SETUP_MODE_ON_BOOT = false`
-2. gravar novamente o firmware
-3. deixar o device operar normalmente
+2. se quiser o comportamento antigo, definir `SETUP_PORTAL_ALWAYS_ON = false`
+3. gravar novamente o firmware
+4. deixar o device operar normalmente
 
 ## Como testar o Motion Test em bancada
 
-1. manter `MOTION_TEST_MODE_ENABLED = true`
-2. manter `BUZZER_ENABLED = true`
+1. habilitar `MOTION_TEST_MODE_ENABLED = true`
+2. habilitar `BUZZER_ENABLED = true` apenas para esse teste controlado
 3. colocar o dispositivo parado por pelo menos ~1 segundo
 4. executar um movimento curto e mais brusco
 5. observar o beep curto e o monitor serial
@@ -253,7 +258,7 @@ Nesta rodada tambem:
 - houve uma tentativa intermediaria que deixou a serial em `DOWNLOAD_BOOT`, mas isso foi superado com um boot limpo posterior
 - o `MOTION TEST` em repouso nao mostrou falso disparo nesta janela de observacao
 - a verificacao fisica final agora depende principalmente de:
-  - conectar ao AP `Queda-Setup-*`
+  - conectar ao AP `Q-ESP32-*`
   - configurar Wi-Fi/MQTT
   - repetir o teste de gesto brusco no case
 
@@ -263,7 +268,7 @@ Nesta rodada tambem:
 2. rodar `.\scripts\free-serial-port.ps1 -Port COM4`
 3. iniciar o upload e segurar `BOOT` durante `Connecting...`
 4. depois da gravacao, dar um boot limpo na placa
-5. procurar e conectar no AP `Queda-Setup-*`
+5. procurar e conectar no AP `Q-ESP32-*`
 6. abrir `http://setup.queda` ou `http://192.168.4.1`
 7. configurar Wi-Fi/MQTT
 8. depois testar o `MOTION TEST` com o dispositivo em repouso antes do movimento

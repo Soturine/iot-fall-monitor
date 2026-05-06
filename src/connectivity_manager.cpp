@@ -33,11 +33,12 @@ void ConnectivityManager::begin() {
 
   wifiManager_.begin(config_);
   state_ = ConnectivityState::WIFI_CONNECTING;
+  startMaintenancePortal();
 }
 
 void ConnectivityManager::update() {
   if (setupModeStarted_) {
-    setupPortal_.update();
+    updatePortalContext();
     return;
   }
 
@@ -46,25 +47,62 @@ void ConnectivityManager::update() {
 
   if (!wifiManager_.isConnected()) {
     state_ = ConnectivityState::WIFI_CONNECTING;
+    if (AppConfig::SETUP_PORTAL_ALWAYS_ON) {
+      setupReason_ =
+          "Wi-Fi station ainda conectando. O AP de manutencao permanece ativo para bancada.";
+    }
 
     if (wifiManager_.attemptsExhausted()) {
       state_ = ConnectivityState::NO_WIFI;
+      setupReason_ =
+          "Nenhuma rede Wi-Fi salva respondeu nesta inicializacao. O portal esta disponivel para ajuste.";
+
+      if (AppConfig::SETUP_PORTAL_ALWAYS_ON) {
+        if (!wifiExhaustedWarningLogged_) {
+          AppLog::warn("Wi-Fi esgotou as tentativas, mantendo portal de manutencao sem bloquear o loop normal.");
+          wifiExhaustedWarningLogged_ = true;
+        }
+        updatePortalContext();
+        return;
+      }
+
       enterSetupMode("Nenhuma rede Wi-Fi salva respondeu nesta inicializacao. O ESP32 entrou em modo setup automaticamente.");
     }
+    updatePortalContext();
     return;
   }
 
+  wifiExhaustedWarningLogged_ = false;
+
   if (!mqttClient_.hasValidConfiguration()) {
+    if (AppConfig::SETUP_PORTAL_ALWAYS_ON) {
+      state_ = ConnectivityState::WIFI_OK_MQTT_CONNECTING;
+      setupReason_ =
+          "O Wi-Fi station conectou, mas a configuracao MQTT ainda precisa de ajuste no portal.";
+      updatePortalContext();
+      return;
+    }
+
     enterSetupMode("O Wi-Fi conectou, mas a configuracao MQTT nao esta pronta. Corrija o broker no portal.");
     return;
   }
 
   if (mqttClient_.isConnected()) {
     state_ = ConnectivityState::ONLINE;
+    mqttFallbackWarningLogged_ = false;
+    setupReason_ =
+        AppConfig::SETUP_PORTAL_ALWAYS_ON
+            ? "Portal de manutencao ativo. Wi-Fi station e MQTT seguem operando em paralelo."
+            : setupReason_;
+    updatePortalContext();
     return;
   }
 
   state_ = ConnectivityState::WIFI_OK_MQTT_CONNECTING;
+  setupReason_ =
+      AppConfig::SETUP_PORTAL_ALWAYS_ON
+          ? "Wi-Fi station conectado. MQTT ainda tentando conectar; o portal segue aberto para diagnostico."
+          : setupReason_;
 
   const bool mqttTimedOut =
       mqttClient_.firstFailureAtMs() > 0 &&
@@ -75,9 +113,23 @@ void ConnectivityManager::update() {
       AppConfig::MQTT_SETUP_FALLBACK_ATTEMPTS;
 
   if (mqttTimedOut || mqttTooManyFailures) {
+    if (AppConfig::SETUP_PORTAL_ALWAYS_ON) {
+      setupReason_ =
+          "O Wi-Fi conectou, mas o broker MQTT falhou repetidamente. Ajuste host, porta ou credenciais sem perder o AP de manutencao.";
+      if (!mqttFallbackWarningLogged_) {
+        AppLog::warn("MQTT falhou repetidamente, mas o portal de manutencao ja esta ativo em paralelo.");
+        mqttFallbackWarningLogged_ = true;
+      }
+      updatePortalContext();
+      return;
+    }
+
     enterSetupMode(
         "O Wi-Fi conectou, mas o broker MQTT falhou repetidamente. O portal foi liberado para corrigir host, porta ou credenciais.");
+    return;
   }
+
+  updatePortalContext();
 }
 
 ConnectivityState ConnectivityManager::state() const {
@@ -152,6 +204,36 @@ void ConnectivityManager::loadConfig() {
   AppLog::warn("Usando defaults de fabrica porque nao havia configuracao persistida na NVS.");
 }
 
+void ConnectivityManager::startMaintenancePortal() {
+  if (!AppConfig::SETUP_PORTAL_ALWAYS_ON || setupPortal_.isRunning()) {
+    return;
+  }
+
+  maintenancePortalStarted_ = true;
+  setupReason_ =
+      "Portal de manutencao ativo. O ESP32 continua tentando Wi-Fi/MQTT e publicando telemetria quando conectado.";
+  setupPortal_.begin(config_,
+                     stateLabel(),
+                     setupReason_,
+                     wifiManager_.isConnected(),
+                     wifiManager_.localIP(),
+                     true);
+}
+
+void ConnectivityManager::updatePortalContext() {
+  if (!setupPortal_.isRunning()) {
+    return;
+  }
+
+  setupPortal_.syncContext(config_,
+                           stateLabel(),
+                           setupReason_,
+                           wifiManager_.isConnected(),
+                           wifiManager_.localIP(),
+                           maintenancePortalStarted_ && !setupModeStarted_);
+  setupPortal_.update();
+}
+
 void ConnectivityManager::enterSetupMode(const String& reason) {
   const bool stationConnected = wifiManager_.isConnected();
   const IPAddress stationIp = wifiManager_.localIP();
@@ -168,5 +250,6 @@ void ConnectivityManager::enterSetupMode(const String& reason) {
                      stateLabel(),
                      setupReason_,
                      stationConnected,
-                     stationIp);
+                     stationIp,
+                     false);
 }

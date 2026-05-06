@@ -134,7 +134,7 @@ Tambem passaram a carregar escopo:
 - `POST /api/auth/login` autentica e devolve usuario com memberships e organizacao ativa
 - `GET /api/me` devolve o contexto autenticado atual
 
-O frontend usa `GET /api/me` no boot para reidratar a sessao salva no navegador e atualizar o shape do usuario quando houve evolucao de contrato entre versoes.
+O frontend usa `GET /api/me` no boot para reidratar a sessao salva no navegador e atualizar o shape do usuario quando houve evolucao de contrato entre versoes. Se o `X-Organization-Id` salvo no navegador nao existir mais para o usuario, o frontend descarta apenas essa organizacao local, tenta `/me` novamente e deixa o backend escolher a primeira membership valida.
 
 Nao existe mais a regra antiga de "primeiro usuario do sistema vira admin global".
 
@@ -232,6 +232,7 @@ Nesta rodada, a bridge MQTT tambem ficou preparada para:
 - `mqtt://` sem TLS, como hoje
 - `mqtts://` com configuracao opt-in por ambiente
 - niveis de log mais previsiveis sem introduzir framework de logging pesado
+- logs de ingestao para `status` e `telemetry` com topico recebido, device resolvido, escopo e motivo de descarte quando a mensagem e rejeitada
 
 Na ingestao:
 
@@ -239,6 +240,7 @@ Na ingestao:
 - `status`, `telemetry` e `events` recebem snapshot do escopo atual do device
 - alertas abertos herdam `organization_id` e `patient_id`
 - `Socket.IO` tambem emite em escopo filtrado
+- timestamps MQTT so sao usados quando parecem Unix time plausivel; se o ESP32 ainda estiver sem NTP e enviar `millis()/1000`, o backend persiste a hora de recebimento para evitar device falsamente stale/offline
 
 ## Rotas REST principais
 

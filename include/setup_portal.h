@@ -16,12 +16,14 @@ class SetupPortal {
              const String& stateLabel,
              const String& reason,
              bool stationConnected,
-             const IPAddress& stationIp);
+             const IPAddress& stationIp,
+             bool maintenanceMode = false);
   void syncContext(const DeviceSettings::DeviceConfig& config,
                    const String& stateLabel,
                    const String& reason,
                    bool stationConnected,
-                   const IPAddress& stationIp);
+                   const IPAddress& stationIp,
+                   bool maintenanceMode = false);
   void update();
 
   bool isRunning() const;
@@ -74,6 +76,7 @@ class SetupPortal {
   String flashMessage_;
   String flashTone_ = "info";
   bool running_ = false;
+  bool maintenanceMode_ = false;
   bool stationConnected_ = false;
   IPAddress stationIp_;
   IPAddress apIp_{192, 168, 4, 1};

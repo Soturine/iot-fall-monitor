@@ -56,6 +56,14 @@ void DeviceMqttClient::configure(const DeviceSettings::DeviceConfig& config) {
     AppLog::warn(
         "MQTT/TLS habilitado sem CA customizada. Confirme se o broker usa um certificado confiavel para esta build.");
   }
+
+  if (AppConfig::FIRMWARE_CONNECTIVITY_DEBUG_ENABLED) {
+    AppLog::debugf("MQTT efetivo configurado | host=%s | porta=%u | clientId=%s | TLS=%s\n",
+                   host_.c_str(),
+                   port_,
+                   clientId_.c_str(),
+                   useTls_ ? "sim" : "nao");
+  }
 }
 
 void DeviceMqttClient::disconnect() {
@@ -215,6 +223,13 @@ bool DeviceMqttClient::reconnect() {
     return false;
   }
 
+  if (AppConfig::FIRMWARE_CONNECTIVITY_DEBUG_ENABLED) {
+    AppLog::debugf("Tentando MQTT | host=%s | porta=%u | clientId=%s\n",
+                   host_.c_str(),
+                   port_,
+                   clientId_.c_str());
+  }
+
   bool connected = false;
 
   if (!username_.isEmpty()) {
@@ -233,6 +248,9 @@ bool DeviceMqttClient::reconnect() {
                   host_.c_str(),
                   port_,
                   useTls_ ? "TLS" : "sem TLS");
+    if (AppConfig::FIRMWARE_CONNECTIVITY_DEBUG_ENABLED) {
+      AppLog::debugf("MQTT clientId efetivo conectado: %s\n", clientId_.c_str());
+    }
     return true;
   }
 

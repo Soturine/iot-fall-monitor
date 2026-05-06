@@ -47,12 +47,15 @@ constexpr const char* MQTT_CLIENT_ID = DEFAULT_MQTT_CLIENT_ID;
 
 // Parametros do portal local de configuracao.
 constexpr size_t MAX_WIFI_NETWORKS = 5;
-constexpr char SETUP_AP_SSID_PREFIX[] = "Queda-Setup";
+constexpr char SETUP_AP_SSID_PREFIX[] = "Q-ESP32";
 // AP aberto para facilitar captive portal e setup rapido no celular.
 constexpr char SETUP_AP_PASSWORD[] = "";
 // Use apenas para bancada quando quiser forcar o portal local no boot.
 // Com true, o ESP32 entra direto em SETUP_MODE sem depender de falha de Wi-Fi/MQTT.
 constexpr bool FORCE_SETUP_MODE_ON_BOOT = false;
+// Mantem o AP/portal local acessivel em paralelo ao fluxo normal de bancada.
+// Diferente do SETUP_MODE, esta flag nao bloqueia Wi-Fi station, MQTT ou telemetria.
+constexpr bool SETUP_PORTAL_ALWAYS_ON = true;
 constexpr char SETUP_PORTAL_LOCAL_URL[] = "http://setup.queda";
 constexpr char SETUP_PORTAL_IP[] = "http://192.168.4.1";
 constexpr unsigned long WIFI_PROFILE_CONNECT_TIMEOUT_MS = 12000;
@@ -76,9 +79,12 @@ constexpr uint8_t I2C_SDA_PIN = 21;
 constexpr uint8_t I2C_SCL_PIN = 22;
 constexpr bool SOS_BUTTON_ENABLED = false;
 constexpr uint8_t SOS_BUTTON_PIN = 27;
-constexpr bool BUZZER_ENABLED = true;
+// Bancada conservadora: buzzer desligado por padrao e sem sinalizacao sonora de estados normais.
+constexpr bool BUZZER_ENABLED = false;
 constexpr uint8_t BUZZER_PIN = 25;
-constexpr bool BUZZER_ACTIVE_HIGH = true;
+// Ajuste para modulos active-low comuns. Se o seu buzzer for active-high, volte para true.
+constexpr bool BUZZER_ACTIVE_HIGH = false;
+constexpr bool BUZZER_ALARM_ONLY = true;
 constexpr bool STATUS_LED_ENABLED = false;
 // Evita GPIO2 por ser pino de strapping/boot no ESP32.
 constexpr uint8_t STATUS_LED_PIN = 26;

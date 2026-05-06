@@ -41,6 +41,8 @@ class ConnectivityManager {
 
  private:
   void loadConfig();
+  void startMaintenancePortal();
+  void updatePortalContext();
   void enterSetupMode(const String& reason);
 
   ConfigStore& configStore_;
@@ -52,4 +54,7 @@ class ConnectivityManager {
   ConnectivityState state_ = ConnectivityState::NO_WIFI;
   String setupReason_;
   bool setupModeStarted_ = false;
+  bool maintenancePortalStarted_ = false;
+  bool mqttFallbackWarningLogged_ = false;
+  bool wifiExhaustedWarningLogged_ = false;
 };

@@ -35,18 +35,19 @@ type RealtimeContextValue = {
 const RealtimeContext = createContext<RealtimeContextValue | undefined>(undefined);
 
 export function RealtimeProvider({ children }: PropsWithChildren) {
-  const { token, activeOrganizationId } = useAuth();
+  const { token, activeOrganizationId, isAuthenticated, loading } = useAuth();
+  const canConnect = Boolean(token && isAuthenticated && !loading);
   const [isConnected, setIsConnected] = useState(false);
   const [connectionPhase, setConnectionPhase] =
-    useState<RealtimeConnectionPhase>(token ? "connecting" : "idle");
+    useState<RealtimeConnectionPhase>("idle");
   const [activeTransport, setActiveTransport] = useState<string | null>(null);
   const [lastDisconnectReason, setLastDisconnectReason] = useState<string | null>(null);
   const [lastConnectError, setLastConnectError] = useState<string | null>(null);
   const [lastConnectErrorCode, setLastConnectErrorCode] = useState<string | null>(null);
   const [reconnectAttempts, setReconnectAttempts] = useState(0);
   const socket = useMemo(
-    () => (token ? createRealtimeSocket(token, activeOrganizationId) : null),
-    [activeOrganizationId, token],
+    () => (canConnect && token ? createRealtimeSocket(token, activeOrganizationId) : null),
+    [activeOrganizationId, canConnect, token],
   );
 
   useEffect(() => {
@@ -120,18 +121,26 @@ export function RealtimeProvider({ children }: PropsWithChildren) {
       socket.io.engine?.off("upgrade", handleTransportUpgrade);
       socket.disconnect();
       setIsConnected(false);
-      setConnectionPhase(token ? "connecting" : "idle");
+      setConnectionPhase(canConnect ? "connecting" : "idle");
       setActiveTransport(null);
       setLastConnectError(null);
       setLastConnectErrorCode(null);
       setReconnectAttempts(0);
     };
-  }, [socket, token]);
+  }, [canConnect, socket]);
+
+  const effectiveConnectionPhase: RealtimeConnectionPhase = socket
+    ? connectionPhase === "idle"
+      ? "connecting"
+      : connectionPhase
+    : canConnect
+      ? "connecting"
+      : "idle";
 
   const value = {
     socket,
     isConnected: socket ? isConnected : false,
-    connectionPhase: socket ? connectionPhase : token ? "connecting" : "idle",
+    connectionPhase: effectiveConnectionPhase,
     activeTransport: socket ? activeTransport : null,
     lastDisconnectReason,
     lastConnectError,

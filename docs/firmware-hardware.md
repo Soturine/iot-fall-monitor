@@ -32,6 +32,8 @@ Na pratica:
 - `DEFAULT_MQTT_TLS_INSECURE`
 - `DEFAULT_MQTT_TLS_CA_CERT`
 - `DEFAULT_MQTT_TOPIC_BASE`
+- `SETUP_AP_SSID_PREFIX`
+- `SETUP_PORTAL_ALWAYS_ON`
 - `FORCE_SETUP_MODE_ON_BOOT`
 - `FIRMWARE_LOG_LEVEL`
 - `FIRMWARE_I2C_DEBUG_ENABLED`
@@ -60,8 +62,10 @@ Defaults atuais relevantes:
 - `DEFAULT_BACKEND_API_BASE_URL = ""`
 - `DEFAULT_MQTT_USE_TLS = false`
 - `MAX_WIFI_NETWORKS = 5`
-- `BUZZER_ENABLED = true`
-- `BUZZER_ACTIVE_HIGH = true`
+- `SETUP_AP_SSID_PREFIX = "Q-ESP32"`
+- `SETUP_PORTAL_ALWAYS_ON = true`
+- `BUZZER_ENABLED = false`
+- `BUZZER_ACTIVE_HIGH = false`
 - `SOS_BUTTON_ENABLED = false`
 - `STATUS_LED_ENABLED = false`
 - `MOTION_TEST_MODE_ENABLED = false`
@@ -102,6 +106,7 @@ Na pratica:
 
 - falhas e mensagens importantes continuam aparecendo
 - diagnosticos detalhados de I2C, buffer e conectividade podem ser ligados sem poluir o loop principal por padrao
+- com `FIRMWARE_CONNECTIVITY_DEBUG_ENABLED = true`, o firmware registra host/porta/clientId MQTT efetivos, topicos de `status`, `telemetry` e `events`, e resultado de publish sem expor senha
 - o `MOTION TEST` continua com flags proprias para bancada, mas agora fica desabilitado por padrao para nao misturar teste de bancada com alarme real
 
 ## Identidade do device e pairing
@@ -127,6 +132,8 @@ O portal local do ESP32 agora cobre:
 - `MQTT_CLIENT_ID`
 - `BACKEND_API_BASE_URL`
 - claim por codigo temporario
+- AP curto no padrao `Q-ESP32-xxxxxx`, usando os 6 ultimos hexadecimais do chip
+- modo de manutencao com `SETUP_PORTAL_ALWAYS_ON = true`, mantendo o portal aberto sem bloquear Wi-Fi station, MQTT ou telemetria
 - bloco de saude operacional com `Wi-Fi conectado`, `MQTT OK`, `Backend API` e `Pronto para operar`
 - botoes `Testar backend` e `Testar MQTT`
 - visualizacao do perfil resumido do paciente sincronizado
@@ -135,22 +142,29 @@ Fluxo oficial:
 
 1. o ESP32 liga
 2. tenta usar as redes e o MQTT salvos em `NVS`
-3. se falhar ou estiver sem configuracao valida, entra em `SETUP_MODE`
-4. sobe o AP `Queda-Setup-*`
-5. o usuario abre o portal
-6. salva rede, broker e backend
-7. opcionalmente pareia o device informando o codigo temporario gerado no dashboard
-8. o ESP32 reinicia e tenta operar normalmente
+3. se `SETUP_PORTAL_ALWAYS_ON = true`, sobe o AP de manutencao `Q-ESP32-*` em paralelo ao fluxo normal
+4. se falhar ou estiver sem configuracao valida, entra em `SETUP_MODE`
+5. no setup/fallback, o mesmo AP `Q-ESP32-*` continua oferecendo o portal
+6. o usuario abre o portal
+7. salva rede, broker e backend
+8. opcionalmente pareia o device informando o codigo temporario gerado no dashboard
+9. o ESP32 reinicia e tenta operar normalmente
 
-### Como forcar o portal em bancada
+### Portal de manutencao sempre ativo em bancada
 
-Se voce quiser testar o AP local sem depender de falha real de conectividade:
+Com `SETUP_PORTAL_ALWAYS_ON = true`, o ESP32 opera em `WIFI_AP_STA`: o AP local permanece visivel em `http://192.168.4.1`, enquanto a interface station segue conectando no Wi-Fi e o MQTT continua tentando publicar status, eventos e telemetria. Isso e diferente de `SETUP_MODE`, que e um modo de fallback/configuracao.
+
+Para restaurar o comportamento antigo, defina `SETUP_PORTAL_ALWAYS_ON = false`. Nesse caso, o AP aparece apenas quando o firmware entra em setup/fallback.
+
+### Como forcar SETUP_MODE em bancada
+
+Se voce quiser testar o modo bloqueante de setup sem depender de falha real de conectividade:
 
 1. abra [include/app_config.h](../include/app_config.h)
 2. defina `FORCE_SETUP_MODE_ON_BOOT = true`
 3. grave o firmware
 4. reinicie o ESP32
-5. procure a rede `Queda-Setup-*`
+5. procure a rede `Q-ESP32-*`
 
 Depois do teste, volte `FORCE_SETUP_MODE_ON_BOOT = false` para restaurar o comportamento normal.
 
@@ -166,7 +180,7 @@ Estado validado nesta bancada:
 
 ## Captive portal e acesso pelo celular
 
-Quando o ESP32 entra em setup:
+Quando o ESP32 entra em setup ou quando o portal de manutencao esta sempre ativo:
 
 - sobe `AP + WebServer + DNSServer`
 - responde probes comuns de captive portal
@@ -185,12 +199,12 @@ No iOS, a notificacao de "fazer login na rede" pode variar mais. Se ela nao apar
 
 ### Saude operacional no portal
 
-Como o portal existe principalmente em `SETUP_MODE`, a leitura de saude precisa ser honesta:
+Como o portal pode existir tanto em `SETUP_MODE` quanto em manutencao paralela, a leitura de saude precisa ser honesta:
 
 - `Wi-Fi conectado` usa o estado station atual do ESP32
 - `MQTT OK` pode vir de conexao atual ou do ultimo `Testar MQTT`
 - `Backend API` mostra validade da URL e ultimo `Testar backend`
-- `Pronto para operar` so aparece quando configuracao, backend e MQTT ja responderam de forma coerente
+- em manutencao, `Pronto para operar` foca em Wi-Fi station + MQTT; em setup/fallback, tambem exige os testes esperados de configuracao
 
 Isso evita prometer que o device ja esta operando normalmente quando ele ainda esta apenas em fase de ajuste/configuracao.
 
@@ -203,19 +217,23 @@ Nesta baseline, a telemetria continua sendo publicada em alta frequencia, mas ag
 
 Com isso, o backend consegue manter bateria, RSSI e `lastSeenAt` mais coerentes nas telas sem depender apenas do `status` periodico.
 
+Se o ESP32 ainda nao sincronizou NTP e mandar `timestamp = millis()/1000`, o backend passa a descartar esse timestamp implausivel e usa a hora de recebimento. Isso evita telemetria recem-chegada com data antiga e status falsamente offline.
+
 ## Buzzer e motion test
 
-O buzzer recebeu dois ajustes conservadores:
+O buzzer esta conservador para bancada:
 
+- `BUZZER_ENABLED = false` por padrao
 - polaridade explicita via `BUZZER_ACTIVE_HIGH`
+- default `BUZZER_ACTIVE_HIGH = false`, adequado para modulos active-low comuns
 - `MOTION_TEST_MODE_ENABLED = false` por padrao
 
 Na pratica:
 
-- o alarme real por queda/SOS continua disponivel
+- boot, Wi-Fi connecting, MQTT connecting, setup mode e warning visual nao devem acionar buzzer
+- o alarme real por queda/SOS continua disponivel quando `BUZZER_ENABLED = true`
 - o teste de bancada deixa de ficar habilitado por padrao em uso normal
 - se a placa usar buzzer ativo-low, a inversao agora pode ser tratada em `include/app_config.h` sem mexer na logica do alarme
-- ou conecte no AP do ESP32 e tente abrir qualquer site
 
 ## Multiplas redes Wi-Fi e saude de conectividade
 
@@ -226,7 +244,8 @@ Comportamento atual:
 - tenta as redes em ordem
 - a primeira e tratada como preferida
 - salvar o mesmo `SSID` atualiza a rede existente
-- se nenhuma conectar, entra em `SETUP_MODE`
+- se nenhuma conectar e `SETUP_PORTAL_ALWAYS_ON = false`, entra em `SETUP_MODE`
+- se nenhuma conectar e `SETUP_PORTAL_ALWAYS_ON = true`, mantem o portal de manutencao ativo sem bloquear o loop principal
 
 Estados logicos de conectividade:
 
@@ -247,6 +266,8 @@ O firmware tambem entra em setup quando:
 - a configuracao estiver incompleta
 
 Isso evita o estado ruim de "Wi-Fi ok, mas broker quebrado sem caminho claro de recuperacao".
+
+Com `SETUP_PORTAL_ALWAYS_ON = true`, falhas repetidas de MQTT deixam o portal ja disponivel para correcao, mas nao desconectam o MQTT nem interrompem sensor, status/eventos e tentativas normais. Com a flag em `false`, o fallback antigo para `SETUP_MODE` permanece.
 
 ## Persistencia leve de eventos criticos
 
@@ -374,7 +395,7 @@ No arquivo [include/app_config.h](../include/app_config.h):
 ### Como testar em bancada
 
 1. habilite `MOTION_TEST_MODE_ENABLED = true`
-2. mantenha `BUZZER_ENABLED = true`
+2. habilite `BUZZER_ENABLED = true` apenas para esse teste controlado
 3. grave o firmware
 4. abra o monitor serial em `115200`
 5. mova o conjunto `ESP32 + MPU6050`
@@ -395,7 +416,7 @@ No arquivo [include/app_config.h](../include/app_config.h):
 | `MPU6050` | `INT` | nao usado | inativo | pode ser aproveitado no futuro |
 | `MPU6050` | `AD0` | `GND` | recomendado | mantem endereco `0x68` |
 | Botao SOS | sinal | `GPIO27` | opcional | requer `SOS_BUTTON_ENABLED = true` |
-| Buzzer ativo | `SIG` | `GPIO25` | opcional | hoje `BUZZER_ENABLED = true` |
+| Buzzer ativo | `SIG` | `GPIO25` | opcional | hoje `BUZZER_ENABLED = false`; revise `BUZZER_ACTIVE_HIGH` antes de habilitar |
 | LED de status | anodo via resistor | `GPIO26` | opcional | requer `STATUS_LED_ENABLED = true` |
 
 ## Ligacoes recomendadas

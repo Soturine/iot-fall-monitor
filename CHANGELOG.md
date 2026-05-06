@@ -1,5 +1,41 @@
 # Changelog
 
+## [v0.8.12] - 2026-05-06
+### Adicionado
+- `SETUP_PORTAL_ALWAYS_ON = true` no firmware para manter o AP/portal de manutencao ativo em paralelo ao fluxo normal de Wi-Fi station, MQTT, leitura do sensor e publicacao de telemetria
+- logs de diagnostico MQTT no firmware, protegidos por `FIRMWARE_CONNECTIVITY_DEBUG_ENABLED`, com host/porta/clientId efetivos, topicos e resultado de publish
+- logs de ingestao no backend para `status` e `telemetry`, incluindo topico recebido, device resolvido, escopo e motivo de descarte quando aplicavel
+
+### Alterado
+- versao alinhada para `0.8.12` em `CHANGELOG.md`, `README.md`, `package.json` da raiz, `backend/package.json`, `backend/package-lock.json`, `frontend/package.json` e `frontend/package-lock.json`
+- SSID do portal do ESP32 encurtado para o padrao `Q-ESP32-xxxxxx`, sem incluir `deviceId` por padrao
+- portal local passou a diferenciar AP de manutencao ativo de `SETUP_MODE`, exibindo que o ESP32 pode continuar publicando MQTT enquanto o portal esta aberto
+- buzzer ficou desabilitado por padrao em bancada com `BUZZER_ENABLED = false` e polaridade default conservadora `BUZZER_ACTIVE_HIGH = false`
+- o Socket.IO do frontend agora e criado apenas depois da hidratacao minima da sessao, evitando conexao com token/organizacao em estado intermediario apos F5
+
+### Corrigido
+- o AP do ESP32 deixava de aparecer quando o firmware saia do `SETUP_MODE`; agora, em desenvolvimento, o portal de manutencao permanece disponivel sem desconectar MQTT nem bloquear telemetria
+- timestamps MQTT implausiveis vindos do fallback `millis()/1000` do ESP32 passam a ser substituidos pela hora de recebimento no backend, evitando `lastSeenAt` antigo e falso offline
+- refresh/F5 com organizacao salva invalida deixa de derrubar a sessao inteira: o frontend remove apenas a organizacao local invalida, tenta `/me` novamente e escolhe uma membership valida
+- estados normais de boot, Wi-Fi connecting, MQTT connecting, setup e warning visual deixam de expor o buzzer a acionamento sonoro por padrao
+
+### Documentado
+- diferenca entre AP de setup/fallback e AP de manutencao sempre ativo
+- novo SSID curto `Q-ESP32-*`
+- validacao de MQTT por TCP, handshake `CONNACK`, logs de ingestao e sinais esperados no dashboard
+- teste de refresh/F5 do frontend e comportamento esperado da hidratacao de sessao
+- estado atual conservador do buzzer em bancada
+
+### Pendente / Faltando
+- validar em hardware real se o AP `Q-ESP32-*` permanece visivel enquanto MQTT conecta e publica telemetria no broker local
+- confirmar no dashboard real se `telemetry:new` atualiza `lastSeenAt`, RSSI, bateria e heuristica sem F5
+- confirmar na placa fisica se `BUZZER_ACTIVE_HIGH = false` corresponde ao modulo usado; inverter em `app_config.h` se o lote for active-high
+
+### Limitacoes conhecidas
+- firewall local, rede institucional ou backend apontado para broker diferente ainda podem impedir ingestao mesmo com o firmware operacional
+- o portal local continua sem autenticacao propria e deve ser tratado como ferramenta de bancada/manutencao
+- a rodada estabiliza observabilidade e estado de bancada, mas ainda depende de teste real no ESP32 para fechar a validacao fisica
+
 ## [v0.8.11] - 2026-04-29
 ### Adicionado
 - script `backend/scripts/testMqttConnection.js` e comando `npm run mqtt:test -- HOST PORT` para validar handshake MQTT com recebimento de `CONNACK`

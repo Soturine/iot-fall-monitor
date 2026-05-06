@@ -2,7 +2,7 @@ import {
   createContext,
   useContext,
   useEffect,
-  useEffectEvent,
+  useRef,
   useState,
   type PropsWithChildren,
 } from "react";
@@ -123,7 +123,11 @@ export function AuthProvider({ children }: PropsWithChildren) {
     getStoredOrganizationId(),
   );
   const [loading, setLoading] = useState(Boolean(initialToken));
-  const hasLocalUser = useEffectEvent(() => Boolean(user));
+  const userRef = useRef<User | null>(initialUser);
+
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
 
   function applySession(nextUser: User | null, nextToken: string | null) {
     setUser(nextUser);
@@ -204,9 +208,44 @@ export function AuthProvider({ children }: PropsWithChildren) {
           return;
         }
 
+        const status = axios.isAxiosError(error) ? error.response?.status || 0 : 0;
+        const hadStoredOrganizationId = Boolean(getStoredOrganizationId());
+
+        if (status === 403 && hadStoredOrganizationId) {
+          clearStoredOrganizationId();
+
+          try {
+            const retryResponse = await api.get<{ user: User }>("/me");
+            const retryUser = normalizeUser(retryResponse.data.user);
+
+            if (!retryUser) {
+              throw new Error("Sessao local invalida.");
+            }
+
+            if (!cancelled) {
+              applySession(retryUser, token);
+            }
+            return;
+          } catch (retryError) {
+            if (cancelled) {
+              return;
+            }
+
+            if (
+              axios.isAxiosError(retryError) &&
+              [401, 403].includes(retryError.response?.status || 0)
+            ) {
+              applySession(null, null);
+            } else if (!userRef.current) {
+              applySession(null, null);
+            }
+            return;
+          }
+        }
+
         if (axios.isAxiosError(error) && [401, 403].includes(error.response?.status || 0)) {
           applySession(null, null);
-        } else if (!hasLocalUser()) {
+        } else if (!userRef.current) {
           applySession(null, null);
         }
       } finally {

@@ -1,3 +1,6 @@
+const MIN_PLAUSIBLE_DEVICE_UNIX_SECONDS = 1_700_000_000;
+const MAX_DEVICE_CLOCK_SKEW_SECONDS = 7 * 24 * 60 * 60;
+
 function toDateFromUnixSeconds(value) {
   const numericValue = Number(value);
 
@@ -6,6 +9,26 @@ function toDateFromUnixSeconds(value) {
   }
 
   return new Date(numericValue * 1000);
+}
+
+function isPlausibleDeviceUnixSeconds(value) {
+  const numericValue = Number(value);
+
+  if (!Number.isFinite(numericValue)) {
+    return false;
+  }
+
+  const maxFutureSeconds = Math.floor(Date.now() / 1000) + MAX_DEVICE_CLOCK_SKEW_SECONDS;
+  return numericValue >= MIN_PLAUSIBLE_DEVICE_UNIX_SECONDS &&
+    numericValue <= maxFutureSeconds;
+}
+
+function toDateFromDeviceTimestamp(value) {
+  if (!isPlausibleDeviceUnixSeconds(value)) {
+    return new Date();
+  }
+
+  return toDateFromUnixSeconds(value);
 }
 
 function toIsoDate(value) {
@@ -33,7 +56,9 @@ function parseDateBoundary(value, endOfDay = false) {
 }
 
 module.exports = {
+  isPlausibleDeviceUnixSeconds,
   parseDateBoundary,
+  toDateFromDeviceTimestamp,
   toDateFromUnixSeconds,
   toIsoDate,
 };

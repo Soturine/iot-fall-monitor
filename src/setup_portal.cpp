@@ -129,8 +129,9 @@ void SetupPortal::begin(const DeviceSettings::DeviceConfig& config,
                         const String& stateLabel,
                         const String& reason,
                         bool stationConnected,
-                        const IPAddress& stationIp) {
-  syncContext(config, stateLabel, reason, stationConnected, stationIp);
+                        const IPAddress& stationIp,
+                        bool maintenanceMode) {
+  syncContext(config, stateLabel, reason, stationConnected, stationIp, maintenanceMode);
   clearOperationalProbeResults();
   ensureApStarted();
   configureRoutes();
@@ -144,12 +145,14 @@ void SetupPortal::syncContext(const DeviceSettings::DeviceConfig& config,
                               const String& stateLabel,
                               const String& reason,
                               bool stationConnected,
-                              const IPAddress& stationIp) {
+                              const IPAddress& stationIp,
+                              bool maintenanceMode) {
   config_ = config;
   stateLabel_ = stateLabel;
   reason_ = reason;
   stationConnected_ = stationConnected;
   stationIp_ = stationIp;
+  maintenanceMode_ = maintenanceMode;
 }
 
 void SetupPortal::update() {
@@ -209,11 +212,15 @@ void SetupPortal::ensureApStarted() {
     WiFi.softAP(apSsid.c_str(), AppConfig::SETUP_AP_PASSWORD);
   }
 
-  AppLog::warn("=== SETUP MODE ===");
-  AppLog::infof("AP de configuracao: %s\n", apSsid.c_str());
+  AppLog::warn(maintenanceMode_ ? "=== PORTAL DE MANUTENCAO ===" : "=== SETUP MODE ===");
+  AppLog::infof("%s: %s\n",
+                maintenanceMode_ ? "AP de manutencao" : "AP de configuracao",
+                apSsid.c_str());
   AppLog::infof("Portal local: %s\n", AppConfig::SETUP_PORTAL_LOCAL_URL);
   AppLog::infof("Portal manual: %s\n", AppConfig::SETUP_PORTAL_IP);
-  AppLog::warnf("Motivo: %s\n", reason_.c_str());
+  AppLog::warnf("%s: %s\n",
+                maintenanceMode_ ? "Contexto" : "Motivo",
+                reason_.c_str());
 
   if (stationConnected_) {
     AppLog::infof("Tambem acessivel pela rede atual em http://%s\n",
@@ -615,14 +622,24 @@ void SetupPortal::appendPageHead(String& html) const {
 }
 
 void SetupPortal::appendHeaderCard(String& html) const {
-  html += "<div class='card'><h1>Portal local do ESP32</h1>";
-  html += "<p class='muted'>Use esta pagina para cadastrar redes Wi-Fi, broker MQTT e identidade do dispositivo sem recompilar o firmware.</p>";
+  html += "<div class='card'><h1>";
+  html += maintenanceMode_ ? "Portal de manutencao do ESP32" : "Portal local do ESP32";
+  html += "</h1>";
+  if (maintenanceMode_) {
+    html += "<p class='muted'><strong>Portal de manutencao ativo.</strong> O ESP32 pode continuar publicando MQTT enquanto este portal esta aberto.</p>";
+  } else {
+    html += "<p class='muted'>Use esta pagina para cadastrar redes Wi-Fi, broker MQTT e identidade do dispositivo sem recompilar o firmware.</p>";
+  }
   html += "<div class='row'><span class='badge'>Estado: ";
   html += htmlEscape(stateLabel_);
+  html += "</span><span class='badge'>Modo: ";
+  html += maintenanceMode_ ? "Manutencao" : "Setup/Fallback";
   html += "</span><span class='badge'>AP: ";
   html += htmlEscape(DeviceSettings::buildSetupApSsid(config_));
   html += "</span></div>";
-  html += "<p><strong>Motivo do setup:</strong> ";
+  html += "<p><strong>";
+  html += maintenanceMode_ ? "Contexto:" : "Motivo do setup:";
+  html += "</strong> ";
   html += htmlEscape(reason_);
   html += "</p><p><strong>Acesso rapido:</strong> <span class='mono'>";
   html += AppConfig::SETUP_PORTAL_LOCAL_URL;
@@ -653,8 +670,13 @@ String SetupPortal::renderOperationalHealthSummary() const {
       DeviceSettings::hasWifiNetworks(config_) && mqttConfigValid && backendApiValid;
   const bool mqttOperationalOk = mqttClient_.isConnected() || (mqttProbeChecked_ && mqttProbeSuccess_);
   const bool backendOperationalOk = backendProbeChecked_ && backendProbeSuccess_;
+  const bool runtimeOperational =
+      wifiConnected && mqttOperationalOk &&
+      DeviceSettings::hasWifiNetworks(config_) && mqttConfigValid;
   const bool readyToOperate =
-      wifiConnected && mqttOperationalOk && backendOperationalOk && configurationCoherent;
+      maintenanceMode_ ? runtimeOperational
+                       : wifiConnected && mqttOperationalOk && backendOperationalOk &&
+                             configurationCoherent;
 
   const String wifiDetail = wifiConnected
                                 ? String("SSID ") + WiFi.SSID() + " | IP " + WiFi.localIP().toString()
@@ -674,8 +696,12 @@ String SetupPortal::renderOperationalHealthSummary() const {
                                                  ? String("URL valida. Use Testar backend para confirmar o alcance agora.")
                                                  : String("Informe uma Backend API base URL valida antes de operar.")));
   const String readyDetail = readyToOperate
-                                 ? String("Wi-Fi, backend e MQTT responderam. Salve e reinicie para sair do setup com mais previsibilidade.")
-                                 : String("Enquanto algum item ficar pendente, o portal continua sendo a forma mais honesta de ajustar a configuracao.");
+                                 ? (maintenanceMode_
+                                        ? String("Wi-Fi station e MQTT estao operacionais enquanto o AP de manutencao permanece ativo.")
+                                        : String("Wi-Fi, backend e MQTT responderam. Salve e reinicie para sair do setup com mais previsibilidade."))
+                                 : (maintenanceMode_
+                                        ? String("O portal segue disponivel para ajuste, sem bloquear novas tentativas de Wi-Fi/MQTT.")
+                                        : String("Enquanto algum item ficar pendente, o portal continua sendo a forma mais honesta de ajustar a configuracao."));
 
   String html = "<div class='status-grid'>";
 
@@ -711,7 +737,11 @@ String SetupPortal::renderOperationalHealthSummary() const {
 
 void SetupPortal::appendOperationalHealthCard(String& html) const {
   html += "<div class='card'><h2>Saude operacional atual</h2>";
-  html += "<p class='muted'>Este bloco separa conectividade do portal, validade da configuracao e testes executados agora. Em setup mode, MQTT pode estar em prova/ajuste mesmo com o AP local funcionando.</p>";
+  if (maintenanceMode_) {
+    html += "<p class='muted'>Este portal esta em paralelo com a operacao normal. AP de manutencao ativo nao significa que o device parou: Wi-Fi station, MQTT, status e telemetria podem continuar rodando.</p>";
+  } else {
+    html += "<p class='muted'>Este bloco separa conectividade do portal, validade da configuracao e testes executados agora. Em setup mode, MQTT pode estar em prova/ajuste mesmo com o AP local funcionando.</p>";
+  }
   html += renderOperationalHealthSummary();
   if (!mqttClient_.lastFailureReason().isEmpty() &&
       mqttClient_.lastFailureCode() != MQTT_DISCONNECTED &&
@@ -881,10 +911,14 @@ String SetupPortal::renderPatientProfileSummary() const {
 
 String SetupPortal::stationAccessSummary() const {
   if (WiFi.status() != WL_CONNECTED) {
-    return "<p class='muted'>Mesmo sem Wi-Fi funcional, o AP de setup continua disponivel para configuracao.</p>";
+    return maintenanceMode_
+               ? "<p class='muted'>O AP de manutencao continua disponivel mesmo enquanto o Wi-Fi station ainda nao conectou.</p>"
+               : "<p class='muted'>Mesmo sem Wi-Fi funcional, o AP de setup continua disponivel para configuracao.</p>";
   }
 
-  String html = "<p><strong>Tambem disponivel na rede atual:</strong> <span class='mono'>http://";
+  String html = "<p><strong>";
+  html += maintenanceMode_ ? "Portal tambem disponivel na rede atual:" : "Tambem disponivel na rede atual:";
+  html += "</strong> <span class='mono'>http://";
   html += WiFi.localIP().toString();
   html += "</span>";
   if (!WiFi.SSID().isEmpty()) {
@@ -893,5 +927,8 @@ String SetupPortal::stationAccessSummary() const {
     html += "</span>";
   }
   html += "</p>";
+  if (maintenanceMode_) {
+    html += "<p class='muted'>AP de manutencao ativo e device operacional sao estados diferentes: o AP aberto serve para bancada, enquanto o status MQTT vem do broker/backend.</p>";
+  }
   return html;
 }

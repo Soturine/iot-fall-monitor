@@ -166,6 +166,8 @@ Depois do login, o frontend abre conexao `Socket.IO` e reage a:
 
 Quando a organizacao ativa muda, a conexao e refeita para alinhar o escopo do socket ao tenant selecionado.
 
+No refresh/F5, o app reidrata a sessao por `GET /api/me`, descarta apenas uma organizacao salva invalida e cria o Socket.IO somente depois de token, usuario e organizacao ativa estarem coerentes.
+
 ## Relacao com o portal local do ESP32
 
 O portal do ESP32 nao substitui o frontend principal.
@@ -176,7 +178,7 @@ Na pratica:
 - o portal do ESP32 foi simplificado para URL do backend + codigo de pareamento + botao de envio
 - o dashboard principal continua sendo a interface de operacao humana
 - o modo de teste `MPU6050 + buzzer` segue sendo apenas local ao firmware e nao cria telas novas aqui
-- o AP `Queda-Setup-*` so aparece quando o firmware entra em `SETUP_MODE` ou quando `FORCE_SETUP_MODE_ON_BOOT = true`
+- em bancada, o AP curto `Q-ESP32-*` pode ficar ativo em paralelo com Wi-Fi/MQTT por `SETUP_PORTAL_ALWAYS_ON = true`
 - se a equipe estiver depurando o ESP32 no Windows e a serial travar, o helper `.\scripts\free-serial-port.ps1 -Port COM4` pode liberar o monitor do `PlatformIO` sem impactar o frontend
 
 ## Como rodar isoladamente

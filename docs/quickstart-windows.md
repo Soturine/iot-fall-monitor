@@ -231,21 +231,23 @@ Compile e grave o firmware no ESP32.
 
 ### Passo 2: configurar rede e MQTT no portal
 
-Se o device entrar em `SETUP_MODE`:
+Se o device entrar em `SETUP_MODE` ou se o portal de manutencao estiver ativo:
 
-1. conecte no AP `Queda-Setup-*`
+1. conecte no AP `Q-ESP32-*`
 2. abra `http://setup.queda` ou `http://192.168.4.1`
 3. cadastre Wi-Fi
 4. preencha `MQTT_HOST`, `MQTT_PORT`, usuario/senha se houver
 5. preencha `DEVICE_ID`, `MQTT_CLIENT_ID` e `BACKEND_API_BASE_URL`
 
-Se voce estiver em bancada e quiser testar o portal mesmo com configuracao ja salva:
+Na bancada atual, `SETUP_PORTAL_ALWAYS_ON = true` deixa esse AP visivel em paralelo com Wi-Fi station e MQTT. Isso nao e `SETUP_MODE`: o ESP32 pode continuar publicando status, eventos e telemetria enquanto o portal esta aberto.
+
+Se voce quiser testar especificamente o modo bloqueante de setup:
 
 1. abra [include/app_config.h](../include/app_config.h)
 2. defina `FORCE_SETUP_MODE_ON_BOOT = true`
 3. grave o firmware
 4. reinicie o ESP32
-5. procure a rede `Queda-Setup-*`
+5. procure a rede `Q-ESP32-*`
 
 ### Passo 3: gerar codigo de pairing no dashboard
 
@@ -329,6 +331,18 @@ Observacoes:
 - `127.0.0.1`, `localhost` e `::1` sao locais do proprio computador
 - o ESP32 deve usar o IPv4 real do notebook na rede atual
 - em rede institucional, ainda pode haver isolamento entre clientes mesmo com o bind correto
+- no backend, logs `MQTT status recebido/processado` e `MQTT telemetry recebida/processada` confirmam topico, device resolvido e persistencia
+- no dashboard, `lastSeenAt` deve acompanhar a hora de recebimento mesmo quando o ESP32 ainda nao sincronizou NTP
+
+### Validar F5 no frontend
+
+Depois do login:
+
+1. abra `/dashboard`, `/devices` ou `/devices/:id`
+2. pressione F5
+3. confirme que a tela fica em `Validando sessao...` e depois reabre sem exigir logout/login
+4. se a organizacao salva no navegador estiver invalida, o app deve escolher uma membership valida do usuario
+5. o realtime deve conectar somente depois dessa hidratacao
 
 ### Cenario B: hotspot do celular
 
@@ -354,11 +368,12 @@ Passo a passo:
 
 1. abra [include/app_config.h](../include/app_config.h)
 2. defina `MOTION_TEST_MODE_ENABLED = true`
-3. confirme `BUZZER_ENABLED = true`
-4. ajuste thresholds se necessario
-5. grave o firmware
-6. abra o monitor serial
-7. mova o conjunto `ESP32 + MPU6050`
+3. habilite `BUZZER_ENABLED = true` apenas para esse teste controlado
+4. revise `BUZZER_ACTIVE_HIGH` conforme a polaridade do modulo
+5. ajuste thresholds se necessario
+6. grave o firmware
+7. abra o monitor serial
+8. mova o conjunto `ESP32 + MPU6050`
 
 Esse modo serve apenas para diagnostico local e nao muda o dashboard principal.
 
@@ -404,18 +419,24 @@ Como resolver:
 - gere um novo codigo no dashboard
 - confira se o device e o notebook estao na mesma rede
 
-### `O ESP32 conecta no Wi-Fi, mas volta ao setup`
+### `O ESP32 conecta no Wi-Fi, mas o dashboard continua offline`
 
 Provavel causa:
 
 - broker MQTT inacessivel
 - `MQTT_HOST` configurado com `localhost`
+- backend ouvindo outro broker
+- device ainda sem claim na organizacao do usuario
+- firewall/rede bloqueando o broker pelo IPv4 real
+- timestamps antigos por NTP ainda nao sincronizado em firmware antigo
 
 Como resolver:
 
 - use o IP real do notebook ou um broker externo
 - no Windows, confirme `Test-NetConnection IP_DO_NOTEBOOK -Port 1883`
+- confirme `npm run mqtt:test -- IP_DO_NOTEBOOK 1883`
 - revise a secao MQTT do portal
+- acompanhe os logs de ingestao MQTT no backend e procure `telemetry processada`
 
 ### `A COM4 esta ocupada e o monitor/upload nao funciona`
 

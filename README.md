@@ -6,9 +6,9 @@ O objetivo do repositório é integrar hardware embarcado, ingestão de eventos,
 
 ## Baseline Atual
 
-Baseline atual do repositório: `v0.8.11`.
+Baseline atual do repositório: `v0.8.12`.
 
-A baseline `v0.8.11` corrige a inicialização do broker MQTT local de desenvolvimento para completar o handshake MQTT, melhora os logs do broker e adiciona um teste local de `CONNACK`.
+A baseline `v0.8.12` mantém o portal/AP de manutenção do ESP32 ativo em paralelo ao fluxo normal de Wi-Fi/MQTT durante desenvolvimento, corrige timestamps MQTT implausíveis antes de persistir telemetria, estabiliza a hidratação de sessão após F5 e deixa o buzzer conservador por padrão.
 
 Para a experiência local prevista nesta fase, o projeto está estabilizado para `Node.js 20+`.
 
@@ -39,6 +39,7 @@ O modelo atual deixou de ser um painel global único e passou a trabalhar com or
 - telemetria em tempo real no dashboard
 - atualização do navegador via `Socket.IO`
 - portal local do ESP32 para Wi-Fi, MQTT, backend e pareamento
+- opção de AP/portal de manutenção sempre ativo em bancada, sem bloquear telemetria MQTT
 - bloco de saúde operacional no portal do ESP32 com testes de backend e MQTT
 - diagnóstico de realtime/socket no frontend
 - separação entre saúde do socket do navegador e saúde operacional do dispositivo
@@ -219,7 +220,7 @@ O pareamento definitivo do dispositivo não acontece por MQTT. Ele acontece por 
 
 1. Um usuário com permissão gera um código temporário no dashboard.
 2. O dashboard consulta `GET /api/system/network-info` para sugerir uma URL de backend acessível na rede atual.
-3. O ESP32 abre o portal local `Queda-Setup-*` quando entra em modo de configuração.
+3. O ESP32 abre o portal local `Q-ESP32-*` quando entra em modo de configuração ou mantém esse AP de manutenção ativo em bancada com `SETUP_PORTAL_ALWAYS_ON = true`.
 4. O usuário informa `BACKEND_API_BASE_URL` e o código temporário no portal.
 5. O ESP32 envia `device_uid`, `device_id`, `device_name` e `pairing_code` para `POST /api/pairing/claim`.
 6. O backend valida código, expiração, uso único e organização.
@@ -247,6 +248,10 @@ Eventos `Socket.IO` atuais:
 - `telemetry:new`
 
 O diagnóstico de realtime no frontend separa o socket do navegador da saúde MQTT/device. Portanto, uma mensagem de socket indisponível no navegador não significa necessariamente que o ESP32, o broker MQTT ou a ingestão MQTT tenham caído.
+
+No firmware, os tópicos continuam seguindo `queda/devices/{deviceId}/status`, `queda/devices/{deviceId}/telemetry` e `queda/devices/{deviceId}/events`. Se o NTP do ESP32 ainda não sincronizou e o payload trouxer um timestamp monotônico de boot, o backend usa a hora de recebimento para evitar `lastSeenAt` antigo e falso offline.
+
+Após F5 em rota protegida, o frontend preserva o token, reidrata o usuário via `GET /api/me`, descarta apenas uma organização salva inválida e só cria o Socket.IO depois que a sessão mínima está hidratada.
 
 ## Status Heurístico Experimental
 
@@ -281,7 +286,7 @@ O frontend exibe esse status de forma discreta no dashboard, na lista de disposi
 - Os thresholds de queda, imobilidade e postura ainda precisam de validação prática com hardware real.
 - A leitura de bateria do firmware real ainda pode ser placeholder se não houver circuito de medição dedicado.
 - O fluxo padrão continua usando `mqtt://`; `mqtts://` existe como preparação opt-in e depende de configuração coerente.
-- O buzzer e o motion test dependem do hardware real, da montagem e da polaridade do módulo.
+- O buzzer fica desabilitado por padrão em bancada; para teste manual ou alarme sonoro real, revise `BUZZER_ENABLED` e `BUZZER_ACTIVE_HIGH` conforme a polaridade do módulo.
 - O portal local do ESP32 não substitui o dashboard principal.
 - O portal local do ESP32 não possui autenticação local própria.
 - O pairing depende de o backend estar acessível ao ESP32 pela rede atual.

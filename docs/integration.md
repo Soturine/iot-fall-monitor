@@ -57,6 +57,7 @@ Observacoes importantes:
 - os topicos continuam sendo montados a partir de `device_id`
 - o backend continua conseguindo trabalhar com o mock publisher e com devices antigos
 - backend e firmware foram preparados para `MQTT/TLS` de forma opt-in, sem mudar o fluxo padrao atual com `mqtt://`
+- em debug de conectividade, o firmware imprime topicos efetivos, host/porta MQTT e clientId sem expor senha
 
 ## Payloads reais do firmware
 
@@ -78,6 +79,8 @@ Exemplo de `fall_detected`:
   "battery_level": 100
 }
 ```
+
+O campo `timestamp` deve ser Unix time em segundos quando o NTP ja sincronizou. Se o firmware ainda estiver no fallback monotônico de boot (`millis()/1000`), o backend considera o valor implausivel e usa a hora de recebimento para `lastSeenAt`, `event_time` e `created_at`.
 
 ### `status`
 
@@ -218,7 +221,7 @@ No portal local do ESP32, a rodada atual tambem adicionou um bloco de saude oper
 - `Backend API`
 - `Pronto para operar`
 
-O portal continua honesto sobre o fato de estar em `SETUP_MODE`: quando o broker ainda nao esta conectado de fato, o operador pode usar `Testar backend` e `Testar MQTT` para validar a configuracao antes de reiniciar o ESP32.
+Com `SETUP_PORTAL_ALWAYS_ON = true`, o portal tambem pode ficar em modo de manutencao paralelo: o AP `Q-ESP32-*` permanece visivel, mas Wi-Fi station, MQTT, sensor, status/eventos e telemetria continuam no loop normal. Em `SETUP_MODE`, o portal continua sendo fallback/configuracao e o operador pode usar `Testar backend` e `Testar MQTT` para validar a configuracao antes de reiniciar o ESP32.
 
 ### Broker MQTT local no Windows
 
@@ -408,10 +411,12 @@ Na inicializacao da interface web:
 
 1. o frontend le token e organizacao ativa do `localStorage`
 2. reidrata o usuario com `GET /api/me`
-3. normaliza memberships e organizacao ativa antes de abrir as rotas protegidas
-4. passa a enviar `X-Organization-Id` e `organizationId` do socket com base nesse contexto atualizado
+3. se a organizacao salva nao for mais valida para o usuario, remove apenas esse ID local e tenta `/me` novamente
+4. normaliza memberships e organizacao ativa antes de abrir as rotas protegidas
+5. cria o Socket.IO somente depois que token, usuario e organizacao ativa estao minimamente hidratados
+6. passa a enviar `X-Organization-Id` e `organizationId` do socket com base nesse contexto atualizado
 
-Isso reduz quebra por sessao antiga salva no navegador depois de mudancas de contrato no backend.
+Isso reduz quebra por F5/refresh e por sessao antiga salva no navegador depois de mudancas de contrato no backend.
 
 ## Dashboard e tempo real
 
@@ -477,7 +482,7 @@ Isso ajuda a pegar regressao real de escopo, em vez de apenas confirmar que o ba
 - `battery_level` do firmware real ainda e placeholder
 - o firmware so considera o device realmente saudavel quando `Wi-Fi + MQTT` estao simultaneamente ok
 - eventos criticos pendentes agora contam com um snapshot pequeno em `NVS`, reduzindo perda apos reboot rapido
-- o AP de setup `Queda-Setup-*` nao fica sempre ativo; ele aparece apenas em `SETUP_MODE` ou quando `FORCE_SETUP_MODE_ON_BOOT = true`
+- o AP curto `Q-ESP32-*` pode ficar sempre ativo em bancada com `SETUP_PORTAL_ALWAYS_ON = true`; com a flag desligada, aparece apenas em `SETUP_MODE` ou quando `FORCE_SETUP_MODE_ON_BOOT = true`
 - para depuracao local no Windows, a porta serial tambem pode ser liberada com `.\scripts\free-serial-port.ps1 -Port COM4` quando um monitor `PlatformIO` antigo ficar preso
 - o fluxo de upload do firmware na placa atual pode ainda exigir `BOOT` manual durante o `Connecting...`; isso nao altera o contrato MQTT nem o backend
 - o pairing depende de o backend estar acessivel ao ESP32 pela rede atual
