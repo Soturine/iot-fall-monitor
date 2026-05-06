@@ -105,6 +105,16 @@ Na ingestao atual, se chegar um `device_uid` real para um `device_id` que ja pos
 
 Quando a mensagem chega sem `device_uid`, o backend ainda preserva o fallback legado. Depois da reconciliacao, ele tenta resolver pelo `device_id` apenas se existir exatamente um device pareado com esse identificador, evitando associacao ambigua.
 
+### Concorrencia e idempotencia
+
+A ingestao MQTT usa um lock leve em memoria por `device_id` para serializar mensagens simultaneas do mesmo ESP32 dentro de uma instancia Node. Isso reduz corrida entre reconciliacao de identidade, atualizacao de `device_status`, persistencia de telemetria/eventos e emissao realtime. Em uma topologia com multiplas instancias de backend, ainda sera necessario trocar esse lock por coordenacao distribuida ou garantir particionamento por device no consumidor MQTT.
+
+A criacao de alertas para eventos de queda/SOS e idempotente sobre o indice unico `alerts.event_id`: se duas rotas tentarem criar o mesmo alerta, o backend reaproveita o registro existente por `LAST_INSERT_ID(id)`.
+
+O Socket.IO usa rooms por escopo (`organization`, `patient` e plataforma global), evitando varrer todos os sockets a cada telemetria. Usuarios com escopo restrito por paciente entram apenas nas rooms de seus pacientes atribuidos.
+
+O schema tambem possui indices de apoio para leituras recentes de telemetria, eventos por device/tipo, status online stale e filas de alertas por organizacao/status.
+
 ## O que mudou no modelo do backend
 
 O backend deixou de ser global/single-tenant.

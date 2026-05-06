@@ -205,6 +205,14 @@ Isso evita o caso em que o broker recebe telemetria corretamente, mas o dashboar
 
 Isso reduz a chance de interpretar uma falha do navegador como se o ESP32 tivesse realmente caido.
 
+### Concorrencia no realtime/MQTT
+
+Nesta baseline, mensagens MQTT do mesmo `device_id` sao serializadas por um lock leve em memoria dentro da instancia Node. O objetivo e impedir que dois pacotes simultaneos do mesmo ESP32 tentem reconciliar identidade, atualizar status e emitir realtime em ordem conflitante.
+
+O lock e local ao processo. Ele cobre o ambiente atual de desenvolvimento e instancia unica; se o backend for escalado horizontalmente, a garantia precisa migrar para um lock distribuido, uma fila particionada por device ou outro mecanismo equivalente.
+
+A entrega Socket.IO deixou de iterar todos os sockets conectados a cada evento. Cada conexao entra em rooms de organizacao, paciente ou plataforma global conforme o contexto de acesso, e `emitScopedEvent` publica diretamente nessas rooms.
+
 ## Pairing por codigo temporario
 
 O pairing nao acontece via MQTT. Ele acontece por HTTP entre o portal do ESP32 e o backend.

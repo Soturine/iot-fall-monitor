@@ -3,6 +3,7 @@ const { Server } = require("socket.io");
 const { verifyToken } = require("../utils/auth");
 const { logger } = require("../utils/logger");
 const { loadAccessContext } = require("../services/scopeService");
+const { joinScopedRooms } = require("./scopedEmitter");
 
 function buildSocketAuthError(message, code) {
   const error = new Error(message);
@@ -52,10 +53,13 @@ function createSocketServer(httpServer) {
   });
 
   io.on("connection", (socket) => {
+    const rooms = joinScopedRooms(socket);
+
     logger.debug("Cliente Socket.IO conectado.", {
       socketId: socket.id,
       userId: socket.user?.id || null,
       organizationId: socket.accessContext?.activeOrganizationId || null,
+      roomCount: rooms.length,
     });
 
     socket.on("disconnect", (reason) => {

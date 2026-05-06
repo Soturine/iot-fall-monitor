@@ -127,20 +127,6 @@ async function fetchAlertRow(alertId, executor = null) {
 }
 
 async function createAlertForEvent(event, executor = null) {
-  const existing = await one(
-    executor,
-    `
-      SELECT id
-      FROM alerts
-      WHERE event_id = ?
-    `,
-    [event.id],
-  );
-
-  if (existing) {
-    return fetchAlertRow(existing.id, executor);
-  }
-
   const result = await execute(
     executor,
     `
@@ -152,6 +138,8 @@ async function createAlertForEvent(event, executor = null) {
         status
       )
       VALUES (?, ?, ?, ?, 'open')
+      ON DUPLICATE KEY UPDATE
+        id = LAST_INSERT_ID(id)
     `,
     [event.organizationId || null, event.patientId || null, event.id, event.device.id],
   );

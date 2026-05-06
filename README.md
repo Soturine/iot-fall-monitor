@@ -6,9 +6,9 @@ O objetivo do repositório é integrar hardware embarcado, ingestão de eventos,
 
 ## Baseline Atual
 
-Baseline atual do repositório: `v0.8.13`.
+Baseline atual do repositório: `v0.8.14`.
 
-A baseline `v0.8.13` mantém os ajustes de bancada do ESP32 e corrige a ingestão realtime quando o firmware publica um `device_uid` real para um device legado já pareado. O backend reconcilia esse caso com o cadastro da organização, preserva telemetrias/eventos de duplicados técnicos sem tenant, e o detalhe do frontend passa a combinar `telemetry:new` com refresh HTTP leve para evitar gráfico travado após perda de evento.
+A baseline `v0.8.14` reforça a concorrência do backend: ingestão MQTT por device passa por lock leve no processo Node, criação de alertas fica idempotente sobre o índice único de evento, Socket.IO usa rooms por escopo em vez de varrer todos os sockets, e o caminho quente de telemetria evita snapshots completos repetidos por amostra.
 
 Para a experiência local prevista nesta fase, o projeto está estabilizado para `Node.js 20+`.
 
@@ -36,6 +36,8 @@ O modelo atual deixou de ser um painel global único e passou a trabalhar com or
 - controle de acesso por papel e organização ativa
 - ingestão MQTT de eventos, status e telemetria
 - reconciliação segura entre `device_uid` real do ESP32 e cadastros legados `legacy:{device_id}` já pareados
+- lock leve por device na ingestão MQTT para reduzir corrida entre status/eventos/telemetria simultâneos
+- alertas idempotentes por evento MQTT persistido
 - alertas de queda e imobilidade
 - telemetria em tempo real no dashboard
 - atualização do navegador via `Socket.IO`

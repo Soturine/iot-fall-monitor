@@ -96,6 +96,35 @@ function mapDeviceRow(row) {
   };
 }
 
+function mapDeviceIdentityRow(row) {
+  const currentPatient = row.currentPatientId || row.current_patient_id
+    ? {
+        id: Number(row.currentPatientId || row.current_patient_id),
+        fullName: row.currentPatientName || row.current_patient_name,
+      }
+    : null;
+
+  return {
+    id: Number(row.id),
+    deviceUid: row.deviceUid || row.device_uid,
+    deviceIdentifier: row.deviceIdentifier || row.device_identifier,
+    name: row.name,
+    currentAssignmentHistoryId: row.currentAssignmentHistoryId
+      ? Number(row.currentAssignmentHistoryId)
+      : row.current_assignment_history_id
+        ? Number(row.current_assignment_history_id)
+        : null,
+    organization: row.organizationId || row.organization_id
+      ? {
+          id: Number(row.organizationId || row.organization_id),
+          name: row.organizationName || row.organization_name,
+          type: row.organizationType || row.organization_type,
+        }
+      : null,
+    currentPatient,
+  };
+}
+
 function mapTelemetryRow(row) {
   return {
     id: Number(row.id),
@@ -244,6 +273,58 @@ async function fetchRecentFallEventsByDeviceIds(deviceIds, executor = null) {
   }));
 }
 
+async function fetchTelemetryWindowByDeviceId(deviceId, sampleLimit = 6, executor = null) {
+  const rows = await execute(
+    executor,
+    `
+      SELECT *
+      FROM telemetry_logs
+      WHERE device_id = ?
+      ORDER BY created_at DESC, id DESC
+      LIMIT ?
+    `,
+    [deviceId, sampleLimit],
+  );
+
+  return rows.map(mapTelemetryRow);
+}
+
+async function fetchRecentFallEventByDeviceId(deviceId, executor = null) {
+  const row = await one(
+    executor,
+    `
+      SELECT
+        e.device_id,
+        e.event_type,
+        e.severity,
+        e.immobility,
+        e.event_time,
+        e.created_at
+      FROM events e
+      WHERE e.device_id = ?
+        AND e.event_type = 'fall_detected'
+        AND e.event_time >= UTC_TIMESTAMP() - INTERVAL 10 MINUTE
+      ORDER BY e.event_time DESC, e.id DESC
+      LIMIT 1
+    `,
+    [deviceId],
+  );
+
+  if (!row) {
+    return [];
+  }
+
+  return [
+    {
+      eventType: row.event_type,
+      severity: row.severity,
+      immobility: toBoolean(row.immobility),
+      eventTime: toIso(row.event_time),
+      createdAt: toIso(row.created_at),
+    },
+  ];
+}
+
 async function attachBehaviorToDevices(devices, executor = null) {
   if (!devices.length) {
     return devices;
@@ -377,6 +458,47 @@ async function getDeviceStatusSnapshot(deviceId, executor = null) {
 
   const [device] = await attachBehaviorToDevices([mapDeviceRow(row)], executor);
   return device;
+}
+
+async function getDeviceIdentitySnapshot(deviceId, executor = null) {
+  const row = await one(
+    executor,
+    `
+      SELECT
+        d.id,
+        d.device_uid AS deviceUid,
+        d.device_identifier AS deviceIdentifier,
+        d.name,
+        d.current_assignment_history_id AS currentAssignmentHistoryId,
+        o.id AS organizationId,
+        o.name AS organizationName,
+        o.type AS organizationType,
+        p.id AS currentPatientId,
+        p.full_name AS currentPatientName
+      FROM devices d
+      LEFT JOIN organizations o ON o.id = d.organization_id
+      LEFT JOIN patients p ON p.id = d.current_patient_id
+      WHERE d.id = ?
+    `,
+    [deviceId],
+  );
+
+  if (!row) {
+    throw new HttpError(404, "Dispositivo nÃ£o encontrado.");
+  }
+
+  return mapDeviceIdentityRow(row);
+}
+
+async function getDeviceBehaviorSnapshot(deviceId, status, executor = null) {
+  const telemetrySamples = await fetchTelemetryWindowByDeviceId(deviceId, 6, executor);
+  const recentEvents = await fetchRecentFallEventByDeviceId(deviceId, executor);
+
+  return computeDeviceBehavior({
+    status,
+    telemetrySamples,
+    recentEvents,
+  });
 }
 
 async function getDeviceForUpdate(deviceId, executor = null) {
@@ -697,7 +819,7 @@ async function getOrCreateDeviceByIdentity({ deviceUid, deviceIdentifier, name }
   await ensureDeviceStatusRow(row.id, executor);
   await syncDeviceScopeToStatus(row.id, executor);
 
-  return getDeviceStatusSnapshot(row.id, executor);
+  return getDeviceIdentitySnapshot(row.id, executor);
 }
 
 async function claimDeviceToOrganization(
@@ -923,7 +1045,7 @@ async function setDevicePatientAssignment(
   return getDeviceStatusSnapshot(deviceId, executor);
 }
 
-async function upsertDeviceStatus(deviceId, fields, scope = null, executor = null) {
+async function upsertDeviceStatus(deviceId, fields, scope = null, executor = null, options = {}) {
   const status = {
     online: fields.online === undefined ? true : Boolean(fields.online),
     wifiRssi: toNullableNumber(fields.wifiRssi),
@@ -973,6 +1095,31 @@ async function upsertDeviceStatus(deviceId, fields, scope = null, executor = nul
       status.lastSeenAt,
     ],
   );
+
+  if (options.returnSnapshot === false) {
+    const statusPatch = {
+      online: status.online,
+      lastSeenAt: toIso(status.lastSeenAt),
+      updatedAt: new Date().toISOString(),
+    };
+
+    if (status.wifiRssi != null) {
+      statusPatch.wifiRssi = status.wifiRssi;
+    }
+
+    if (status.batteryPercent != null) {
+      statusPatch.batteryPercent = status.batteryPercent;
+    }
+
+    if (status.firmwareVersion) {
+      statusPatch.firmwareVersion = status.firmwareVersion;
+    }
+
+    return {
+      status: statusPatch,
+      scope: effectiveScope,
+    };
+  }
 
   return getDeviceStatusSnapshot(deviceId, executor);
 }
@@ -1506,6 +1653,7 @@ module.exports = {
   deleteDevice,
   ensureDeviceStatusRow,
   getDeviceById,
+  getDeviceBehaviorSnapshot,
   getDeviceScopeSnapshot,
   getDeviceStatusSnapshot,
   getOrCreateDeviceByIdentity,

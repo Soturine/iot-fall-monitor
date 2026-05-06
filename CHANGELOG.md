@@ -1,5 +1,32 @@
 # Changelog
 
+## [v0.8.14] - 2026-05-06
+### Adicionado
+- lock leve em memoria por `device_id` na ingestao MQTT para serializar mensagens simultaneas do mesmo ESP32 dentro de uma instancia Node
+- rooms Socket.IO por escopo de acesso (`organization`, `patient` e plataforma global), reduzindo emissao realtime de varredura `O(sockets)` para entrega direta por room
+- indices de apoio no schema para status stale online, telemetria recente por organizacao/device, eventos por organizacao/device/tipo e alertas por organizacao/status
+
+### Alterado
+- versao alinhada para `0.8.14` em `CHANGELOG.md`, `README.md`, `package.json` da raiz, `backend/package.json`, `backend/package-lock.json`, `frontend/package.json` e `frontend/package-lock.json`
+- o caminho quente de telemetria MQTT deixou de montar snapshot completo repetido por amostra; agora reaproveita o status recem-gravado e calcula apenas a janela de comportamento necessaria
+- `getOrCreateDeviceByIdentity` passou a retornar snapshot tecnico/escopo mais leve para fluxos internos de MQTT, pairing e cadastro manual
+
+### Corrigido
+- criacao de alerta por evento ficou idempotente sobre `alerts.event_id` com `ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)`, evitando falha em corrida de criacao duplicada
+- patches realtime de status enviados pela telemetria deixam de mandar `null` para RSSI/bateria/firmware quando o payload MQTT nao trouxe esses campos, preservando o ultimo valor valido no frontend
+
+### Documentado
+- limites do lock em memoria por device e necessidade de lock distribuido/fila particionada em backend horizontal
+- uso de rooms Socket.IO por escopo e indices de performance no schema
+
+### Pendente / Faltando
+- aplicar os novos indices em bancos ja existentes; `database/schema.sql` cobre resets/ambientes novos, mas instalacoes atuais precisam de migracao/manual SQL equivalente
+- validar em bancada com fluxo real de MQTT se a ordem status/telemetry/event permanece estavel sob rajadas do ESP32
+
+### Limitacoes conhecidas
+- o lock MQTT e por processo Node; multiplas instancias do backend ainda podem processar o mesmo device em paralelo sem coordenacao externa
+- a idempotencia de alertas cobre duplicidade por `event_id`; duplicidade semantica de eventos MQTT iguais ainda depende de uma futura chave de deduplicacao de mensagem/evento
+
 ## [v0.8.13] - 2026-05-06
 ### Alterado
 - versao alinhada para `0.8.13` em `CHANGELOG.md`, `README.md`, `package.json` da raiz, `backend/package.json`, `backend/package-lock.json`, `frontend/package.json` e `frontend/package-lock.json`

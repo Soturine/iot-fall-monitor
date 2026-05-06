@@ -6,8 +6,8 @@ const {
   toDateFromDeviceTimestamp,
 } = require("../utils/time");
 const {
+  getDeviceBehaviorSnapshot,
   getOrCreateDeviceByIdentity,
-  getDeviceStatusSnapshot,
   upsertDeviceStatus,
 } = require("./deviceService");
 const {
@@ -17,6 +17,7 @@ const {
 } = require("./eventService");
 const { createAlertForEvent } = require("./alertService");
 const { emitScopedEvent } = require("../socket/scopedEmitter");
+const { runWithKeyedLock } = require("../utils/keyedLock");
 
 function toNullableNumber(value) {
   if (value == null || value === "") {
@@ -106,167 +107,175 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
     });
   }
 
-  const result = await transaction(async (connection) => {
-    const device = await getOrCreateDeviceByIdentity(
-      {
-        deviceUid,
-        deviceIdentifier,
-        name: payload.device_name || payload.name || deviceIdentifier,
-      },
-      connection,
-    );
-
-    const currentScope = {
-      organizationId: device.organization?.id || null,
-      patientId: device.currentPatient?.id || null,
-      assignmentHistoryId: device.currentAssignmentHistoryId || null,
-    };
-    const deviceLog = {
-      id: device.id,
-      deviceUid: device.deviceUid,
-      deviceIdentifier: device.deviceIdentifier,
-      organizationId: currentScope.organizationId,
-      patientId: currentScope.patientId,
-    };
-
-    if (topicInfo.channel === "status") {
-      const status = await upsertDeviceStatus(
-        device.id,
-        buildStatusUpdateFromPayload(payload),
-        currentScope,
+  return runWithKeyedLock(`mqtt:${deviceIdentifier}`, async () => {
+    const result = await transaction(async (connection) => {
+      const device = await getOrCreateDeviceByIdentity(
+        {
+          deviceUid,
+          deviceIdentifier,
+          name: payload.device_name || payload.name || deviceIdentifier,
+        },
         connection,
       );
 
-      return {
-        channel: "status",
-        deviceLog,
-        status,
+      const currentScope = {
+        organizationId: device.organization?.id || null,
+        patientId: device.currentPatient?.id || null,
+        assignmentHistoryId: device.currentAssignmentHistoryId || null,
       };
-    }
+      const deviceLog = {
+        id: device.id,
+        deviceUid: device.deviceUid,
+        deviceIdentifier: device.deviceIdentifier,
+        organizationId: currentScope.organizationId,
+        patientId: currentScope.patientId,
+      };
 
-    if (topicInfo.channel === "telemetry") {
+      if (topicInfo.channel === "status") {
+        const status = await upsertDeviceStatus(
+          device.id,
+          buildStatusUpdateFromPayload(payload),
+          currentScope,
+          connection,
+        );
+
+        return {
+          channel: "status",
+          deviceLog,
+          status,
+        };
+      }
+
+      if (topicInfo.channel === "telemetry") {
+        const statusUpdate = await upsertDeviceStatus(
+          device.id,
+          buildStatusUpdateFromPayload(payload),
+          currentScope,
+          connection,
+          { returnSnapshot: false },
+        );
+
+        const telemetry = await recordTelemetryFromMqtt(
+          {
+            device,
+            payload,
+          },
+          connection,
+        );
+        const deviceBehavior = await getDeviceBehaviorSnapshot(
+          device.id,
+          statusUpdate.status,
+          connection,
+        );
+
+        return {
+          channel: "telemetry",
+          deviceLog,
+          telemetry: {
+            ...telemetry,
+            deviceIdentifier: device.deviceIdentifier,
+            deviceUid: device.deviceUid,
+            deviceStatusPatch: statusUpdate.status,
+            deviceBehavior,
+          },
+        };
+      }
+
       await upsertDeviceStatus(
         device.id,
-        buildStatusUpdateFromPayload(payload),
+        {
+          online: true,
+          lastSeenAt: normalizeTimestamp(payload.timestamp),
+        },
         currentScope,
         connection,
+        { returnSnapshot: false },
       );
 
-      const telemetry = await recordTelemetryFromMqtt(
+      const event = await recordEventFromMqtt(
         {
           device,
           payload,
         },
         connection,
       );
-      const deviceSnapshot = await getDeviceStatusSnapshot(device.id, connection);
 
-      return {
-        channel: "telemetry",
-        deviceLog,
-        telemetry: {
-          ...telemetry,
-          deviceIdentifier: deviceSnapshot.deviceIdentifier,
-          deviceUid: deviceSnapshot.deviceUid,
-          deviceStatusPatch: deviceSnapshot.status,
-          deviceBehavior: deviceSnapshot.behavior,
-        },
-      };
-    }
+      if (shouldCreateAlert(event.eventType)) {
+        const alert = await createAlertForEvent(event.id, connection);
 
-    await upsertDeviceStatus(
-      device.id,
-      {
-        online: true,
-        lastSeenAt: normalizeTimestamp(payload.timestamp),
-      },
-      currentScope,
-      connection,
-    );
-
-    const event = await recordEventFromMqtt(
-      {
-        device,
-        payload,
-      },
-      connection,
-    );
-
-    if (shouldCreateAlert(event.eventType)) {
-      const alert = await createAlertForEvent(event.id, connection);
+        return {
+          channel: "events",
+          deviceLog,
+          event,
+          alert,
+        };
+      }
 
       return {
         channel: "events",
         deviceLog,
         event,
-        alert,
+        alert: null,
       };
-    }
-
-    return {
-      channel: "events",
-      deviceLog,
-      event,
-      alert: null,
-    };
-  });
-
-  if (result.channel === "status") {
-    logger.info("MQTT status processado.", {
-      topic: topicInfo.topic,
-      device: result.deviceLog,
-      online: result.status.status?.online ?? null,
-      lastSeenAt: result.status.status?.lastSeenAt || null,
     });
-    if (!result.status.organization?.id) {
-      logger.warn("MQTT status processado sem organizacao pareada; realtime tenant nao sera entregue.", {
+
+    if (result.channel === "status") {
+      logger.info("MQTT status processado.", {
         topic: topicInfo.topic,
         device: result.deviceLog,
-        reason: "device_without_organization_scope",
+        online: result.status.status?.online ?? null,
+        lastSeenAt: result.status.status?.lastSeenAt || null,
       });
+      if (!result.status.organization?.id) {
+        logger.warn("MQTT status processado sem organizacao pareada; realtime tenant nao sera entregue.", {
+          topic: topicInfo.topic,
+          device: result.deviceLog,
+          reason: "device_without_organization_scope",
+        });
+      }
+      emitScopedEvent(io, "device:status", result.status, {
+        organizationId: result.status.organization?.id || null,
+        patientId: result.status.currentPatient?.id || null,
+      });
+      return;
     }
-    emitScopedEvent(io, "device:status", result.status, {
-      organizationId: result.status.organization?.id || null,
-      patientId: result.status.currentPatient?.id || null,
-    });
-    return;
-  }
 
-  if (result.channel === "telemetry") {
-    logger.info("MQTT telemetry processada.", {
-      topic: topicInfo.topic,
-      device: result.deviceLog,
-      telemetryId: result.telemetry.id,
-      createdAt: result.telemetry.createdAt,
-    });
-    if (!result.telemetry.organizationId) {
-      logger.warn("MQTT telemetry processada sem organizacao pareada; realtime tenant nao sera entregue.", {
+    if (result.channel === "telemetry") {
+      logger.info("MQTT telemetry processada.", {
         topic: topicInfo.topic,
         device: result.deviceLog,
         telemetryId: result.telemetry.id,
-        reason: "device_without_organization_scope",
+        createdAt: result.telemetry.createdAt,
+      });
+      if (!result.telemetry.organizationId) {
+        logger.warn("MQTT telemetry processada sem organizacao pareada; realtime tenant nao sera entregue.", {
+          topic: topicInfo.topic,
+          device: result.deviceLog,
+          telemetryId: result.telemetry.id,
+          reason: "device_without_organization_scope",
+        });
+      }
+      emitScopedEvent(io, "telemetry:new", result.telemetry, {
+        organizationId: result.telemetry.organizationId || null,
+        patientId: result.telemetry.patientId || null,
+      });
+      return;
+    }
+
+    logger.debug("MQTT event processado.", {
+      topic: topicInfo.topic,
+      device: result.deviceLog,
+      eventId: result.event.id,
+      eventType: result.event.eventType,
+    });
+
+    if (result.alert) {
+      emitScopedEvent(io, "alert:new", result.alert, {
+        organizationId: result.alert.organizationId || null,
+        patientId: result.alert.patientId || null,
       });
     }
-    emitScopedEvent(io, "telemetry:new", result.telemetry, {
-      organizationId: result.telemetry.organizationId || null,
-      patientId: result.telemetry.patientId || null,
-    });
-    return;
-  }
-
-  logger.debug("MQTT event processado.", {
-    topic: topicInfo.topic,
-    device: result.deviceLog,
-    eventId: result.event.id,
-    eventType: result.event.eventType,
   });
-
-  if (result.alert) {
-    emitScopedEvent(io, "alert:new", result.alert, {
-      organizationId: result.alert.organizationId || null,
-      patientId: result.alert.patientId || null,
-    });
-  }
 }
 
 module.exports = {

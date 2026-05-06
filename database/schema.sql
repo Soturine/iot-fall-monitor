@@ -207,6 +207,7 @@ CREATE TABLE IF NOT EXISTS device_status (
   UNIQUE KEY uq_device_status_device (device_id),
   KEY idx_device_status_scope (organization_id, patient_id),
   KEY idx_device_status_online (online),
+  KEY idx_device_status_online_last_seen (online, last_seen_at),
   KEY idx_device_status_last_seen (last_seen_at),
   CONSTRAINT fk_device_status_device
     FOREIGN KEY (device_id) REFERENCES devices (id)
@@ -241,7 +242,9 @@ CREATE TABLE IF NOT EXISTS telemetry_logs (
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY idx_telemetry_scope_created (organization_id, patient_id, created_at),
+  KEY idx_telemetry_org_created (organization_id, created_at),
   KEY idx_telemetry_device_created (device_id, created_at),
+  KEY idx_telemetry_device_created_id (device_id, created_at, id),
   CONSTRAINT fk_telemetry_device
     FOREIGN KEY (device_id) REFERENCES devices (id)
     ON DELETE CASCADE,
@@ -272,7 +275,9 @@ CREATE TABLE IF NOT EXISTS events (
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY idx_events_scope_time (organization_id, patient_id, event_time),
+  KEY idx_events_org_time (organization_id, event_time),
   KEY idx_events_device_time (device_id, event_time),
+  KEY idx_events_device_type_time (device_id, event_type, event_time),
   KEY idx_events_type (event_type),
   KEY idx_events_severity (severity),
   CONSTRAINT fk_events_device
@@ -307,6 +312,7 @@ CREATE TABLE IF NOT EXISTS alerts (
   PRIMARY KEY (id),
   UNIQUE KEY uq_alerts_event (event_id),
   KEY idx_alerts_scope_status (organization_id, patient_id, status),
+  KEY idx_alerts_org_status_updated (organization_id, status, updated_at),
   KEY idx_alerts_device_status (device_id, status),
   KEY idx_alerts_updated (updated_at),
   CONSTRAINT fk_alerts_event
