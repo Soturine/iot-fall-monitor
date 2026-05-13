@@ -1,3 +1,6 @@
+const { elapsedMsSince } = require("../utils/correlation");
+const { logger } = require("../utils/logger");
+
 const GLOBAL_PLATFORM_ROOM = "scope:platform:global";
 
 function organizationRoom(organizationId) {
@@ -58,17 +61,27 @@ function joinScopedRooms(socket) {
   return rooms;
 }
 
-function emitScopedEvent(io, eventName, payload, scope) {
+function emitScopedEvent(io, eventName, payload, scope, diagnostics = {}) {
   if (!io) {
     return;
   }
 
+  const startedAt = process.hrtime.bigint();
   const rooms = getRoomsForScope(scope);
   if (!rooms.length) {
     return;
   }
 
   io.to(rooms).emit(eventName, payload);
+  logger.debug("Realtime escopado emitido.", {
+    correlationId: diagnostics.correlationId || null,
+    eventName,
+    roomCount: rooms.length,
+    rooms,
+    organizationId: scope?.organizationId || null,
+    patientId: scope?.patientId || null,
+    durationMs: elapsedMsSince(startedAt),
+  });
 }
 
 module.exports = {

@@ -2,7 +2,7 @@
 
 Este documento descreve o contrato MQTT real do projeto, o fluxo de pairing por codigo temporario e como os dados percorrem firmware, backend, banco e frontend no modelo multi-tenant atual.
 
-Para hardware, pinagem e calibracao do detector, consulte [firmware-hardware.md](firmware-hardware.md). Para setup geral do projeto, consulte o [README da raiz](../README.md). Para o passo a passo operacional no Windows, consulte [quickstart-windows.md](quickstart-windows.md).
+Para hardware, pinagem e calibracao do detector, consulte [firmware-hardware.md](firmware-hardware.md). Para o fluxo detalhado de queda/SOS e alertas internos, consulte [alerting-architecture.md](alerting-architecture.md). Para setup geral do projeto, consulte o [README da raiz](../README.md). Para o passo a passo operacional no Windows, consulte [quickstart-windows.md](quickstart-windows.md).
 
 ## O que mudou na integracao
 
@@ -492,6 +492,35 @@ Fluxo:
 4. valida `organization`, `patients`, `dashboard`, `devices` e `alerts`
 
 Isso ajuda a pegar regressao real de escopo, em vez de apenas confirmar que o backend subiu.
+
+## Testes de alertas, MQTT e stress
+
+A rodada `v0.8.15` adicionou testes `node:test` focados no backend:
+
+```powershell
+npm test --prefix backend
+npm run test:alerts --prefix backend
+npm run test:mqtt --prefix backend
+npm run stress:alerts --prefix backend
+```
+
+Os testes cobrem:
+
+- severidade e decisao de criar alerta em `eventService`
+- criacao idempotente e transicoes de `alertService`
+- descartes e persistencia simulada em `mqttIngestionService`
+- lock por `device_id` em mensagens simultaneas
+- emissao Socket.IO escopada para organizacao/paciente/plataforma
+- grafico frontend com eixo temporal numerico para reduzir aparencia de telemetria travada
+
+A suite `stress:alerts` roda em dry-run local e gera:
+
+```text
+backend/logs/stress/stress-<runId>.jsonl
+backend/logs/stress/summary-<runId>.json
+```
+
+Ela nao dispara notificacao externa. No estado atual do projeto, alerta significa registro interno em banco e realtime no painel; SMS, WhatsApp, e-mail, push e webhook ficam como camada futura documentada em [alerting-architecture.md](alerting-architecture.md).
 
 ## Observacoes operacionais importantes
 

@@ -1,5 +1,38 @@
 # Changelog
 
+## [v0.8.15] - 2026-05-12
+### Adicionado
+- documentacao tecnica `docs/alerting-architecture.md` com fluxo real ESP32 -> MQTT -> backend -> banco -> Socket.IO -> frontend para quedas e SOS
+- testes `node:test` para `eventService`, `alertService`, ingestao MQTT e emissao realtime escopada
+- suite `npm run stress:alerts --prefix backend` em dry-run com cenarios de rajada de telemetria, queda/SOS, payloads ruins e concorrencia do mesmo device
+- logger de stress em JSON Lines com resumo final em `backend/logs/stress/`
+- scripts `test`, `test:alerts`, `test:mqtt`, `test:stress`, `stress:alerts` e `stress:cleanup` no backend
+
+### Alterado
+- versao alinhada para `0.8.15` em `CHANGELOG.md`, `README.md`, `package.json` da raiz, `backend/package.json`, `backend/package-lock.json`, `frontend/package.json` e `frontend/package-lock.json`
+- ingestao MQTT passou a propagar `correlationId`, `durationMs`, topico, escopo, device resolvido e motivo de descarte nos logs diagnosticos
+- `npm run check --prefix backend` agora valida sintaxe de `src`, `scripts` e `tests`
+- grafico de telemetria do detalhe do device passou a usar eixo temporal numerico, ordenacao defensiva, filtro de amostras invalidas e separacao minima para timestamps duplicados
+
+### Corrigido
+- fluxo MQTT de `fall_detected` voltou a passar o objeto completo do evento para `createAlertForEvent`, preservando criacao de alerta interno e emissao `alert:new`
+- grafico de telemetria deixou de depender de `createdAt` como categoria textual, reduzindo aparencia de travamento quando ha poucas amostras ou timestamps no mesmo minuto
+
+### Documentado
+- diferenca entre alerta interno e futura notificacao externa
+- contrato sugerido para futura camada `notificationService`
+- como rodar testes normais, testes MQTT e stress local
+- local e formato dos logs/relatorios de stress
+
+### Pendente / Faltando
+- validar com ESP32 fisico se a telemetria real preenche o grafico continuamente apos varios minutos de bancada
+- avaliar chave futura de idempotencia de evento MQTT se o firmware passar a reenviar exatamente o mesmo evento com identificador proprio
+- se o backend for escalado para multiplas instancias, migrar lock por device para fila particionada ou lock distribuido
+
+### Limitacoes conhecidas
+- `stress:alerts` e dry-run: ele mede o caminho de servicos com mocks controlados, nao substitui teste de carga com MySQL e broker reais
+- alerta interno ainda nao envia SMS, WhatsApp, e-mail, push ou webhook externo
+
 ## [v0.8.14] - 2026-05-06
 ### Adicionado
 - lock leve em memoria por `device_id` na ingestao MQTT para serializar mensagens simultaneas do mesmo ESP32 dentro de uma instancia Node

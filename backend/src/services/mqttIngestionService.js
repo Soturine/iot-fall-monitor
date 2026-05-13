@@ -1,4 +1,8 @@
 const { transaction } = require("../db/pool");
+const {
+  createCorrelationId,
+  elapsedMsSince,
+} = require("../utils/correlation");
 const { logger } = require("../utils/logger");
 const { toBoolean } = require("../utils/formatters");
 const {
@@ -47,6 +51,8 @@ function buildStatusUpdateFromPayload(payload) {
 }
 
 async function handleMqttMessage({ topicInfo, payloadText, io }) {
+  const correlationId = createCorrelationId("mqtt");
+  const messageStartedAt = process.hrtime.bigint();
   let payload;
 
   try {
@@ -55,8 +61,10 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
     logger.warn("Mensagem MQTT ignorada por JSON inválido.", {
       topic: topicInfo.topic,
       channel: topicInfo.channel,
+      correlationId,
       payloadBytes: Buffer.byteLength(payloadText || "", "utf8"),
       reason: "invalid_json",
+      durationMs: elapsedMsSince(messageStartedAt),
     });
     return;
   }
@@ -70,8 +78,10 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
     logger.warn("Mensagem MQTT ignorada sem device_id.", {
       topic: topicInfo.topic,
       channel: topicInfo.channel,
+      correlationId,
       payloadKeys: Object.keys(payload || {}),
       reason: "missing_device_id",
+      durationMs: elapsedMsSince(messageStartedAt),
     });
     return;
   }
@@ -80,7 +90,9 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
     logger.warn("Mensagem MQTT ignorada por canal não suportado.", {
       topic: topicInfo.topic,
       channel: topicInfo.channel,
+      correlationId,
       reason: "unsupported_channel",
+      durationMs: elapsedMsSince(messageStartedAt),
     });
     return;
   }
@@ -91,6 +103,7 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
       topicDeviceIdentifier: topicInfo.deviceIdentifier,
       payloadDeviceId: deviceIdentifier,
       deviceUid: deviceUid || null,
+      correlationId,
     });
   }
 
@@ -103,6 +116,7 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
       channel: topicInfo.channel,
       payloadDeviceId: deviceIdentifier,
       timestamp: payload.timestamp,
+      correlationId,
       reason: "implausible_device_timestamp",
     });
   }
@@ -129,6 +143,7 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
         deviceIdentifier: device.deviceIdentifier,
         organizationId: currentScope.organizationId,
         patientId: currentScope.patientId,
+        correlationId,
       };
 
       if (topicInfo.channel === "status") {
@@ -159,6 +174,7 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
           {
             device,
             payload,
+            correlationId,
           },
           connection,
         );
@@ -196,12 +212,13 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
         {
           device,
           payload,
+          correlationId,
         },
         connection,
       );
 
       if (shouldCreateAlert(event.eventType)) {
-        const alert = await createAlertForEvent(event.id, connection);
+        const alert = await createAlertForEvent(event, connection, { correlationId });
 
         return {
           channel: "events",
@@ -222,58 +239,69 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
     if (result.channel === "status") {
       logger.info("MQTT status processado.", {
         topic: topicInfo.topic,
+        correlationId,
         device: result.deviceLog,
         online: result.status.status?.online ?? null,
         lastSeenAt: result.status.status?.lastSeenAt || null,
+        durationMs: elapsedMsSince(messageStartedAt),
       });
       if (!result.status.organization?.id) {
         logger.warn("MQTT status processado sem organizacao pareada; realtime tenant nao sera entregue.", {
           topic: topicInfo.topic,
+          correlationId,
           device: result.deviceLog,
           reason: "device_without_organization_scope",
+          durationMs: elapsedMsSince(messageStartedAt),
         });
       }
       emitScopedEvent(io, "device:status", result.status, {
         organizationId: result.status.organization?.id || null,
         patientId: result.status.currentPatient?.id || null,
-      });
+      }, { correlationId });
       return;
     }
 
     if (result.channel === "telemetry") {
       logger.info("MQTT telemetry processada.", {
         topic: topicInfo.topic,
+        correlationId,
         device: result.deviceLog,
         telemetryId: result.telemetry.id,
         createdAt: result.telemetry.createdAt,
+        durationMs: elapsedMsSince(messageStartedAt),
       });
       if (!result.telemetry.organizationId) {
         logger.warn("MQTT telemetry processada sem organizacao pareada; realtime tenant nao sera entregue.", {
           topic: topicInfo.topic,
+          correlationId,
           device: result.deviceLog,
           telemetryId: result.telemetry.id,
           reason: "device_without_organization_scope",
+          durationMs: elapsedMsSince(messageStartedAt),
         });
       }
       emitScopedEvent(io, "telemetry:new", result.telemetry, {
         organizationId: result.telemetry.organizationId || null,
         patientId: result.telemetry.patientId || null,
-      });
+      }, { correlationId });
       return;
     }
 
     logger.debug("MQTT event processado.", {
       topic: topicInfo.topic,
+      correlationId,
       device: result.deviceLog,
       eventId: result.event.id,
       eventType: result.event.eventType,
+      alertId: result.alert?.id || null,
+      durationMs: elapsedMsSince(messageStartedAt),
     });
 
     if (result.alert) {
       emitScopedEvent(io, "alert:new", result.alert, {
         organizationId: result.alert.organizationId || null,
         patientId: result.alert.patientId || null,
-      });
+      }, { correlationId });
     }
   });
 }

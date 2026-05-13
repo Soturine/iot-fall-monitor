@@ -24,7 +24,8 @@ function walk(directory) {
 
 const targets = [
   ...walk(path.resolve(__dirname, "../src")),
-  path.resolve(__dirname, "mockPublisher.js"),
+  ...walk(path.resolve(__dirname, "../scripts")),
+  ...walk(path.resolve(__dirname, "../tests")),
 ];
 
 targets.forEach((target) => {

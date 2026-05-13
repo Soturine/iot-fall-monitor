@@ -1,6 +1,8 @@
 const { execute, one, transaction } = require("../db/pool");
+const { elapsedMsSince } = require("../utils/correlation");
 const { parseMaybeJson, toBoolean } = require("../utils/formatters");
 const { HttpError } = require("../utils/httpError");
+const { logger } = require("../utils/logger");
 const { getPagination } = require("../utils/pagination");
 const { parseDateBoundary } = require("../utils/time");
 const { createAuditLog } = require("./auditService");
@@ -126,7 +128,8 @@ async function fetchAlertRow(alertId, executor = null) {
   return mapAlertRow(row);
 }
 
-async function createAlertForEvent(event, executor = null) {
+async function createAlertForEvent(event, executor = null, options = {}) {
+  const startedAt = process.hrtime.bigint();
   const result = await execute(
     executor,
     `
@@ -144,7 +147,20 @@ async function createAlertForEvent(event, executor = null) {
     [event.organizationId || null, event.patientId || null, event.id, event.device.id],
   );
 
-  return fetchAlertRow(result.insertId, executor);
+  const alert = await fetchAlertRow(result.insertId, executor);
+
+  logger.info("Alerta de evento garantido.", {
+    correlationId: options.correlationId || null,
+    eventId: event.id,
+    alertId: alert.id,
+    status: alert.status,
+    organizationId: alert.organizationId,
+    patientId: alert.patientId,
+    inserted: result.affectedRows === 1,
+    durationMs: elapsedMsSince(startedAt),
+  });
+
+  return alert;
 }
 
 function buildAlertFilters(filters, accessContext) {

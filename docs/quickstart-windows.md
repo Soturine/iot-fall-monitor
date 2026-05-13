@@ -7,6 +7,7 @@ Antes de continuar, vale ter em mao tambem:
 - [README.md](../README.md)
 - [firmware-hardware.md](firmware-hardware.md)
 - [integration.md](integration.md)
+- [alerting-architecture.md](alerting-architecture.md)
 
 ## 1. O que instalar
 
@@ -222,6 +223,35 @@ Na versao atual ele tambem:
 - envia `X-Organization-Id` nas consultas protegidas
 - valida `organization`, `patients`, `dashboard`, `devices` e `alerts`
 - trata a publicacao do mock como verificacao auxiliar, sem mascarar o sucesso do fluxo principal
+
+### Testes tecnicos de backend e stress
+
+Para validar a arquitetura de alertas e MQTT sem hardware fisico:
+
+```powershell
+npm run check --prefix backend
+npm test --prefix backend
+npm run test:alerts --prefix backend
+npm run test:mqtt --prefix backend
+npm run stress:alerts --prefix backend
+```
+
+O stress roda em dry-run e gera relatorios em:
+
+```text
+backend/logs/stress/
+```
+
+Arquivos esperados:
+
+- `stress-<runId>.jsonl`: eventos detalhados por fase, topico, device, latencia e erro
+- `summary-<runId>.json`: resumo com totais, p95/p99 e falhas
+
+Para limpar apenas logs locais de stress:
+
+```powershell
+npm run stress:cleanup --prefix backend -- --yes
+```
 
 ## 11. Como parear um ESP32 real
 

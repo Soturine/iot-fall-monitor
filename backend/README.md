@@ -251,6 +251,7 @@ Nesta rodada, a bridge MQTT tambem ficou preparada para:
 - `mqtts://` com configuracao opt-in por ambiente
 - niveis de log mais previsiveis sem introduzir framework de logging pesado
 - logs de ingestao para `status` e `telemetry` com topico recebido, device resolvido, escopo e motivo de descarte quando a mensagem e rejeitada
+- `correlationId` por mensagem MQTT, com `durationMs`, `eventId`, `alertId` e motivo de descarte quando aplicavel
 
 Na ingestao:
 
@@ -347,11 +348,25 @@ Importante:
 - `npm run dev`: inicia o backend em modo watch
 - `npm start`: inicia o backend em modo normal
 - `npm run check`: valida sintaxe dos arquivos JS
+- `npm test`: roda toda a suite `node:test`
+- `npm run test:alerts`: valida regras de eventos, criacao/transicao/escopo de alertas
+- `npm run test:mqtt`: valida ingestao MQTT, lock por device e realtime escopado
+- `npm run stress:alerts`: roda stress dry-run para telemetria, queda/SOS, payloads ruins e concorrencia
+- `npm run stress:cleanup`: lista/remover logs locais de stress quando chamado com `-- --yes`
 - `npm run mock:publisher`: publica dados simulados no broker MQTT configurado
 - `npm run dev:broker`: sobe um broker MQTT local leve com `Aedes`
 - `npm run db:init`: aplica schema e seed usando `mysql2` e o `backend/.env`
 
 O smoke test da raiz passou a validar tambem `GET /api/organization` e `GET /api/patients`, usando o `activeOrganizationId` retornado no login para montar o header `X-Organization-Id`.
+
+Os relatorios de stress ficam em:
+
+```text
+backend/logs/stress/stress-<runId>.jsonl
+backend/logs/stress/summary-<runId>.json
+```
+
+Eles sao artefatos locais e ficam ignorados pelo Git. O fluxo detalhado de alertas esta em [docs/alerting-architecture.md](../docs/alerting-architecture.md).
 
 ## Tempo real
 

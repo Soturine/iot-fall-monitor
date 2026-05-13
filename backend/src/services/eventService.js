@@ -1,6 +1,8 @@
 const { execute, one } = require("../db/pool");
+const { elapsedMsSince } = require("../utils/correlation");
 const { parseMaybeJson, toBoolean } = require("../utils/formatters");
 const { HttpError } = require("../utils/httpError");
+const { logger } = require("../utils/logger");
 const { getPagination } = require("../utils/pagination");
 const { parseDateBoundary, toDateFromDeviceTimestamp } = require("../utils/time");
 const { buildScopeFilter, canAccessScope } = require("./scopeService");
@@ -163,7 +165,8 @@ async function getEventById(eventId, accessContext, executor = null) {
   return mapEventRow(row);
 }
 
-async function recordEventFromMqtt({ device, payload }, executor = null) {
+async function recordEventFromMqtt({ device, payload, correlationId = null }, executor = null) {
+  const startedAt = process.hrtime.bigint();
   const eventType = String(payload.event_type || "device_event");
   const severity = deriveSeverity(eventType, payload);
   const message = deriveMessage(eventType, payload);
@@ -206,7 +209,7 @@ async function recordEventFromMqtt({ device, payload }, executor = null) {
     ],
   );
 
-  return one(
+  const event = await one(
     executor,
     `
       SELECT
@@ -223,9 +226,24 @@ async function recordEventFromMqtt({ device, payload }, executor = null) {
     `,
     [result.insertId],
   ).then(mapEventRow);
+
+  logger.debug("Evento MQTT persistido.", {
+    correlationId,
+    eventId: event.id,
+    eventType: event.eventType,
+    deviceId: device.id,
+    deviceIdentifier: device.deviceIdentifier,
+    deviceUid: device.deviceUid,
+    organizationId: event.organizationId,
+    patientId: event.patientId,
+    durationMs: elapsedMsSince(startedAt),
+  });
+
+  return event;
 }
 
-async function recordTelemetryFromMqtt({ device, payload }, executor = null) {
+async function recordTelemetryFromMqtt({ device, payload, correlationId = null }, executor = null) {
+  const startedAt = process.hrtime.bigint();
   const createdAt = payload.timestamp
     ? toDateFromDeviceTimestamp(payload.timestamp)
     : new Date();
@@ -281,7 +299,20 @@ async function recordTelemetryFromMqtt({ device, payload }, executor = null) {
     [result.insertId],
   );
 
-  return mapTelemetryRow(row);
+  const telemetry = mapTelemetryRow(row);
+
+  logger.debug("Telemetria MQTT persistida.", {
+    correlationId,
+    telemetryId: telemetry.id,
+    deviceId: device.id,
+    deviceIdentifier: device.deviceIdentifier,
+    deviceUid: device.deviceUid,
+    organizationId: telemetry.organizationId,
+    patientId: telemetry.patientId,
+    durationMs: elapsedMsSince(startedAt),
+  });
+
+  return telemetry;
 }
 
 function buildEventFilters(filters, accessContext) {
