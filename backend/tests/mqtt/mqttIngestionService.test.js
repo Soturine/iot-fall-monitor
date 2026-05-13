@@ -113,12 +113,21 @@ function buildHarness(options = {}) {
   const fakeEventService = {
     recordEventFromMqtt: async ({ payload }) => {
       calls.events.push(payload);
+      const eventType = payload.event_type || "device_event";
+      const evidenceStatus = eventType === "fall_detected"
+        ? options.fallEvidenceStatus || "linked"
+        : "none";
       return {
         id: eventId += 1,
         organizationId: organization?.id || null,
         patientId: currentPatient?.id || null,
-        eventType: payload.event_type || "device_event",
+        eventType,
         severity: payload.immobility_confirmed ? "critical" : "high",
+        evidenceStatus,
+        evidenceTelemetryId: evidenceStatus === "none" ? null : 200,
+        evidenceSampleCount: evidenceStatus === "linked" ? 2 : evidenceStatus === "partial" ? 1 : 0,
+        evidenceWindowSeconds: evidenceStatus === "none" ? 0 : 3,
+        evidenceSummary: null,
         device: {
           id: device.id,
           deviceUid: device.deviceUid,
@@ -148,6 +157,9 @@ function buildHarness(options = {}) {
       };
     },
     shouldCreateAlert: (eventType) => ["fall_detected", "sos_pressed"].includes(eventType),
+    shouldCreateAlertForEvent: (event) =>
+      event.eventType === "sos_pressed" ||
+      (event.eventType === "fall_detected" && ["linked", "partial"].includes(event.evidenceStatus)),
   };
   const fakeAlertService = {
     createAlertForEvent: async (event) => {
@@ -290,6 +302,31 @@ test("fall_detected e sos_pressed geram evento, alerta e alert:new", async () =>
     assert.equal(calls.events.length, 2);
     assert.equal(calls.alerts.length, 2);
     assert.deepEqual(calls.emits.map((entry) => entry.eventName), ["alert:new", "alert:new"]);
+  });
+});
+
+test("fall_detected sem evidencia suficiente nao cria alerta automatico", async () => {
+  await withHarness({ fallEvidenceStatus: "none" }, async ({ calls, handleMqttMessage }) => {
+    await handleMqttMessage({
+      topicInfo: topicInfo("events"),
+      payloadText: JSON.stringify({
+        device_id: "esp32_01",
+        event_type: "fall_detected",
+        immobility_confirmed: true,
+        timestamp: Math.floor(Date.now() / 1000),
+      }),
+      io: {},
+    });
+
+    assert.equal(calls.events.length, 1);
+    assert.equal(calls.alerts.length, 0);
+    assert.equal(calls.emits.length, 0);
+    assert.ok(
+      calls.logs.some(
+        (entry) => entry.metadata?.eventType === "fall_detected" &&
+          entry.metadata?.evidenceStatus === "none",
+      ),
+    );
   });
 });
 

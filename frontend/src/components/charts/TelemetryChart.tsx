@@ -13,6 +13,7 @@ import type { TelemetryLog } from "../../types/api";
 
 type ChartSample = TelemetryLog & {
   createdAtMs: number;
+  displayAtMs: number;
 };
 
 function toFiniteNumber(value: number | null) {
@@ -42,15 +43,41 @@ function buildChartSamples(data: TelemetryLog[]) {
         accelMagnitude,
         gyroMagnitude,
         createdAtMs: timestamp + offset,
+        displayAtMs: timestamp + offset,
       };
     })
     .filter((sample): sample is ChartSample => Boolean(sample))
     .sort((left, right) => left.createdAtMs - right.createdAtMs || left.id - right.id);
 }
 
+function buildDisplaySamples(samples: ChartSample[]) {
+  if (samples.length <= 1) {
+    return samples;
+  }
+
+  const first = samples[0].createdAtMs;
+  const last = samples.at(-1)?.createdAtMs || first;
+  const span = last - first;
+
+  if (span >= 5000) {
+    return samples.map((sample) => ({
+      ...sample,
+      displayAtMs: sample.createdAtMs,
+    }));
+  }
+
+  const readableSpan = 20000;
+  const step = readableSpan / Math.max(samples.length - 1, 1);
+
+  return samples.map((sample, index) => ({
+    ...sample,
+    displayAtMs: first + index * step,
+  }));
+}
+
 function buildTimeDomain(samples: ChartSample[]) {
-  const min = samples[0]?.createdAtMs || Date.now();
-  const max = samples.at(-1)?.createdAtMs || min;
+  const min = samples[0]?.displayAtMs || Date.now();
+  const max = samples.at(-1)?.displayAtMs || min;
   const span = Math.max(0, max - min);
   const padding = span === 0 ? 5000 : Math.min(Math.max(span * 0.08, 1000), 30000);
 
@@ -58,7 +85,7 @@ function buildTimeDomain(samples: ChartSample[]) {
 }
 
 export function TelemetryChart({ data }: { data: TelemetryLog[] }) {
-  const chartData = buildChartSamples(data);
+  const chartData = buildDisplaySamples(buildChartSamples(data));
 
   if (!chartData.length) {
     return (
@@ -83,6 +110,9 @@ export function TelemetryChart({ data }: { data: TelemetryLog[] }) {
 
   const domain = buildTimeDomain(chartData);
   const tickFormatter = new Intl.DateTimeFormat("pt-BR", tickFormatterOptions);
+  const sampleByDisplayTime = new Map(
+    chartData.map((sample) => [sample.displayAtMs, sample]),
+  );
 
   return (
     <div className="panel-soft p-4">
@@ -92,12 +122,17 @@ export function TelemetryChart({ data }: { data: TelemetryLog[] }) {
             <CartesianGrid stroke="rgba(79,115,103,0.12)" strokeDasharray="4 4" />
             <XAxis
               allowDataOverflow={false}
-              dataKey="createdAtMs"
+              dataKey="displayAtMs"
               domain={domain}
               minTickGap={40}
               scale="time"
               stroke="#4f7367"
-              tickFormatter={(value) => tickFormatter.format(new Date(Number(value)))}
+              tickFormatter={(value) => {
+                const sample = sampleByDisplayTime.get(Number(value));
+                const timestamp = sample?.createdAtMs ?? Number(value);
+                return tickFormatter.format(new Date(timestamp));
+              }}
+              ticks={chartData.length <= 6 ? chartData.map((sample) => sample.displayAtMs) : undefined}
               type="number"
             />
             <YAxis domain={["dataMin - 0.1", "dataMax + 0.1"]} stroke="#4f7367" />
@@ -111,7 +146,11 @@ export function TelemetryChart({ data }: { data: TelemetryLog[] }) {
                 typeof value === "number" ? value.toFixed(2) : String(value ?? "--")
               }
               labelFormatter={(value) =>
-                formatDateTime(new Date(Number(value)).toISOString())
+                formatDateTime(
+                  new Date(
+                    sampleByDisplayTime.get(Number(value))?.createdAtMs ?? Number(value),
+                  ).toISOString(),
+                )
               }
             />
             <Line

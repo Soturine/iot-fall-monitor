@@ -150,6 +150,8 @@ VALUES
   (@demo_org_id, @demo_patient_id, @demo_device_id, @demo_assignment_id, 0.04, -0.02, 0.98, 5.2, -1.1, 3.6, 0.98, 6.4, -3.1, 2.7, UTC_TIMESTAMP()),
   (@demo_org_id, @demo_patient_id, @demo_device_id, @demo_assignment_id, 0.06, 0.01, 1.01, 6.8, 1.9, 2.5, 1.01, 7.5, -1.6, 3.3, UTC_TIMESTAMP());
 
+SET @demo_evidence_telemetry_id = LAST_INSERT_ID();
+
 INSERT INTO events (
   organization_id,
   patient_id,
@@ -160,6 +162,11 @@ INSERT INTO events (
   intensity,
   immobility,
   message,
+  evidence_status,
+  evidence_telemetry_id,
+  evidence_sample_count,
+  evidence_window_seconds,
+  evidence_summary_json,
   event_time,
   raw_payload_json
 )
@@ -173,6 +180,17 @@ VALUES (
   3.74,
   1,
   'Queda simulada para demonstracao multi-organizacao.',
+  'linked',
+  @demo_evidence_telemetry_id,
+  2,
+  0.000,
+  JSON_OBJECT(
+    'maxAccelMagnitude', 3.74,
+    'maxGyroMagnitude', 182.5,
+    'immobilityConfirmed', TRUE,
+    'firstSampleAt', UTC_TIMESTAMP(),
+    'lastSampleAt', UTC_TIMESTAMP()
+  ),
   UTC_TIMESTAMP(),
   JSON_OBJECT(
     'device_uid', 'legacy:esp32_01',
@@ -187,6 +205,16 @@ VALUES (
 );
 
 SET @demo_event_id = LAST_INSERT_ID();
+
+INSERT INTO event_telemetry_evidence (
+  event_id,
+  telemetry_log_id,
+  relative_ms,
+  role
+)
+VALUES
+  (@demo_event_id, @demo_evidence_telemetry_id, 0, 'nearest'),
+  (@demo_event_id, @demo_evidence_telemetry_id + 1, 0, 'peak');
 
 INSERT INTO alerts (
   organization_id,

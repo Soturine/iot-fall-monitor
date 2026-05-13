@@ -1,4 +1,5 @@
 const { execute, one } = require("../db/pool");
+const { parseMaybeJson } = require("../utils/formatters");
 const { listAlerts } = require("./alertService");
 const { listDeviceStatus } = require("./deviceService");
 const { buildScopeFilter } = require("./scopeService");
@@ -165,6 +166,11 @@ async function getSummary(accessContext) {
           e.intensity,
           e.immobility,
           e.message,
+          e.evidence_status AS evidenceStatus,
+          e.evidence_telemetry_id AS evidenceTelemetryId,
+          e.evidence_sample_count AS evidenceSampleCount,
+          e.evidence_window_seconds AS evidenceWindowSeconds,
+          e.evidence_summary_json AS evidenceSummaryJson,
           e.event_time AS eventTime,
           e.raw_payload_json AS rawPayloadJson,
           e.created_at AS createdAt,
@@ -214,6 +220,11 @@ async function getSummary(accessContext) {
       intensity: row.intensity == null ? null : Number(row.intensity),
       immobility: Boolean(row.immobility),
       message: row.message,
+      evidenceStatus: row.evidenceStatus || "none",
+      evidenceTelemetryId: row.evidenceTelemetryId ? Number(row.evidenceTelemetryId) : null,
+      evidenceSampleCount: row.evidenceSampleCount == null ? 0 : Number(row.evidenceSampleCount),
+      evidenceWindowSeconds: row.evidenceWindowSeconds == null ? null : Number(row.evidenceWindowSeconds),
+      evidenceSummary: parseMaybeJson(row.evidenceSummaryJson),
       eventTime: toIso(row.eventTime),
       rawPayloadJson: null,
       createdAt: toIso(row.createdAt),

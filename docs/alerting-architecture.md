@@ -10,7 +10,9 @@ ESP32 detecta queda ou SOS
 -> backend recebe no mqttIngestionService
 -> backend valida JSON, canal e device
 -> backend resolve device_id/device_uid
--> backend grava evento
+-> backend busca telemetria do mesmo device em janela curta quando for fall_detected
+-> backend grava evento com status/resumo de evidencia
+-> backend vincula amostras em event_telemetry_evidence quando existirem
 -> backend decide se cria alerta
 -> backend garante alerta open idempotente por event_id
 -> backend emite alert:new por Socket.IO no escopo correto
@@ -90,6 +92,7 @@ Campos usados:
 ```
 
 Telemetria atualiza `device_status`, grava `telemetry_logs` e emite `telemetry:new`. Ela nao cria alerta por si so.
+Para queda, essas amostras tambem viram evidencia tecnica consultavel quando o evento `fall_detected` chega perto no tempo.
 
 ### Events
 
@@ -152,19 +155,52 @@ Se o device nao estiver pareado a uma organizacao, o backend persiste quando apl
 
 ## Eventos que geram alerta
 
-Hoje `shouldCreateAlert` retorna `true` para:
+Hoje `shouldCreateAlert` continua retornando `true` para tipos candidatos a alerta:
 
 - `fall_detected`
 - `sos_pressed`
 
+Regra de produto atual:
+
+- `fall_detected` com evidencia `linked` ou `partial`: grava evento e cria alerta interno.
+- `fall_detected` sem telemetria recente suficiente: grava evento tecnico com `evidenceStatus=none`, loga warning e nao cria alerta automatico.
+- `sos_pressed`: cria alerta mesmo sem telemetria, porque e acionamento manual.
+- payload invalido ou sem device: nao cria evento nem alerta.
+
 Severidade atual:
 
-- `fall_detected` com `immobility_confirmed=true`: `critical`
+- `fall_detected` com evidencia e `immobility_confirmed=true`: `critical`
 - `fall_detected` sem imobilidade: `high`
+- `fall_detected` sem evidencia: `medium`
 - `sos_pressed`: `high`
 - evento desconhecido: `medium`
 
 Eventos comuns como `device_status`, `heartbeat` ou qualquer outro tipo desconhecido sao gravados como evento quando chegam no canal `events`, mas nao criam alerta.
+
+## Evidencia de telemetria
+
+O backend nao trata mais `fall_detected` como alerta confiavel sem rastro de sensor. Quando recebe um evento de queda, ele procura amostras em `telemetry_logs` para o mesmo:
+
+- `device_id`
+- `organization_id`
+- `patient_id`
+- `device_assignment_history_id`
+
+A janela atual e conservadora:
+
+```text
+event_time - 10s ate event_time + 3s
+```
+
+O evento recebe:
+
+- `evidenceStatus`: `none`, `partial` ou `linked`
+- `evidenceTelemetryId`: amostra mais proxima do evento
+- `evidenceSampleCount`: quantidade de amostras relacionadas
+- `evidenceWindowSeconds`: intervalo entre primeira e ultima amostra vinculada
+- `evidenceSummary`: pico de aceleracao, pico de giro, imobilidade confirmada, primeira e ultima amostra
+
+A tabela `event_telemetry_evidence` guarda as amostras relacionadas com `relative_ms` e `role` (`nearest`, `peak`, `before_peak`, `after_peak`). Isso mantem compatibilidade com eventos antigos: se nao houver evidencia, os campos ficam nulos/default e a API devolve `evidenceStatus=none`.
 
 ## Persistencia do alerta
 
@@ -177,6 +213,8 @@ ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)
 ```
 
 O indice unico `alerts.event_id` impede alerta duplicado para o mesmo evento persistido. Duplicatas MQTT sem identificador externo ainda podem virar eventos distintos; hoje nao existe um `event_uid` no contrato do firmware.
+
+Para `fall_detected`, a criacao de alerta agora acontece somente depois de `recordEventFromMqtt` preencher a evidencia. Eventos sem evidencia permanecem auditaveis em `events`, mas nao entram automaticamente na fila critica.
 
 ## Realtime
 
@@ -227,12 +265,32 @@ Scripts principais:
 
 ```powershell
 npm test --prefix backend
+npm run test:smoke --prefix backend
+npm run test:integration --prefix backend
 npm run test:alerts --prefix backend
 npm run test:mqtt --prefix backend
-npm run stress:alerts --prefix backend
+npm run stress:dry --prefix backend
+npm run stress:real --prefix backend
 ```
 
-A suite `stress:alerts` roda em dry-run por padrao. Ela usa mocks do banco e do Socket.IO para pressionar:
+`stress:dry` usa mocks do banco, broker e Socket.IO. Ele e util para regressao rapida e smoke de carga em processo local, mas nao mede MySQL/broker/backend reais.
+
+`stress:real` valida prerequisitos e aborta se backend `/health`, broker MQTT ou MySQL local/dev nao estiverem disponiveis. Ele publica MQTT real, consulta o banco depois do teste e mede perda estimada entre mensagens publicadas, aceitas no broker e persistidas.
+
+Variaveis uteis:
+
+```text
+STRESS_MODE=real
+STRESS_DEVICE_COUNT=10
+STRESS_DURATION_SECONDS=30
+STRESS_TELEMETRY_RATE_HZ=10
+STRESS_FALL_EVENTS=50
+STRESS_REQUIRE_DEV_DB=true
+```
+
+O script bloqueia execucao em `NODE_ENV=production` e, por padrao, exige banco com nome de desenvolvimento/teste/local.
+
+As suites cobrem:
 
 - rajada de telemetria;
 - rajada de quedas/SOS;
@@ -245,9 +303,11 @@ Logs:
 ```text
 backend/logs/stress/stress-<runId>.jsonl
 backend/logs/stress/summary-<runId>.json
+backend/logs/stress/failures-<runId>.json
+backend/logs/stress/report-<runId>.md
 ```
 
-Esses arquivos sao artefatos locais e ficam ignorados pelo Git.
+O JSONL preserva detalhes por maquina. O Markdown `report-*.md` resume resultado geral, fluxo MQTT, telemetria, quedas/alertas, falhas, gargalos e recomendacoes para leitura humana. Esses arquivos sao artefatos locais e ficam ignorados pelo Git.
 
 ## Camada futura de notificacao externa
 

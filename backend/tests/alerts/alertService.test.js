@@ -90,8 +90,41 @@ test("createAlertForEvent cria alerta open idempotente por event_id", async () =
 
     assert.equal(alert.id, 10);
     assert.equal(alert.status, "open");
+    assert.equal(alert.event.evidenceStatus, "none");
     assert.equal(calls.length, 1);
     assert.deepEqual(calls[0].params, [1, 2, 7, 5]);
+  } finally {
+    restore();
+  }
+});
+
+test("getAlertById expoe resumo de evidencia do evento", async () => {
+  const fakePool = {
+    one: async () => alertRow({
+      evidenceStatus: "linked",
+      evidenceTelemetryId: 22,
+      evidenceSampleCount: 3,
+      evidenceWindowSeconds: 8,
+      evidenceSummaryJson: JSON.stringify({
+        maxAccelMagnitude: 3.9,
+        maxGyroMagnitude: 181,
+        immobilityConfirmed: true,
+        firstSampleAt: "2026-05-13T14:38:02.000Z",
+        lastSampleAt: "2026-05-13T14:38:10.000Z",
+      }),
+    }),
+    execute: async () => [],
+    transaction: async (work) => work({}),
+  };
+  const { module: alertService, restore } = loadAlertService(fakePool);
+
+  try {
+    const alert = await alertService.getAlertById(10, access);
+
+    assert.equal(alert.event.evidenceStatus, "linked");
+    assert.equal(alert.event.evidenceTelemetryId, 22);
+    assert.equal(alert.event.evidenceSampleCount, 3);
+    assert.equal(alert.event.evidenceSummary.maxAccelMagnitude, 3.9);
   } finally {
     restore();
   }

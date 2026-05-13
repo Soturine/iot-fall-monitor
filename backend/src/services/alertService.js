@@ -33,6 +33,10 @@ function mapAlertRow(row) {
         fullName: row.patientName || row.patient_name,
       }
     : null;
+  const evidenceTelemetryId = row.evidenceTelemetryId ?? row.evidence_telemetry_id;
+  const evidenceSampleCount = row.evidenceSampleCount ?? row.evidence_sample_count;
+  const evidenceWindowSeconds = row.evidenceWindowSeconds ?? row.evidence_window_seconds;
+  const evidenceSummaryJson = row.evidenceSummaryJson ?? row.evidence_summary_json;
 
   return {
     id: Number(row.id),
@@ -70,6 +74,11 @@ function mapAlertRow(row) {
       intensity: toNullableNumber(row.intensity),
       immobility: toBoolean(row.immobility),
       message: row.message,
+      evidenceStatus: row.evidenceStatus || row.evidence_status || "none",
+      evidenceTelemetryId: evidenceTelemetryId ? Number(evidenceTelemetryId) : null,
+      evidenceSampleCount: evidenceSampleCount == null ? 0 : Number(evidenceSampleCount),
+      evidenceWindowSeconds: toNullableNumber(evidenceWindowSeconds),
+      evidenceSummary: parseMaybeJson(evidenceSummaryJson),
       eventTime: toIso(row.eventTime),
       rawPayloadJson: parseMaybeJson(row.rawPayloadJson),
     },
@@ -107,6 +116,11 @@ async function fetchAlertRow(alertId, executor = null) {
         e.intensity,
         e.immobility,
         e.message,
+        e.evidence_status AS evidenceStatus,
+        e.evidence_telemetry_id AS evidenceTelemetryId,
+        e.evidence_sample_count AS evidenceSampleCount,
+        e.evidence_window_seconds AS evidenceWindowSeconds,
+        e.evidence_summary_json AS evidenceSummaryJson,
         e.event_time AS eventTime,
         e.raw_payload_json AS rawPayloadJson
       FROM alerts a
@@ -248,6 +262,11 @@ async function listAlerts(filters = {}, accessContext) {
         e.intensity,
         e.immobility,
         e.message,
+        e.evidence_status AS evidenceStatus,
+        e.evidence_telemetry_id AS evidenceTelemetryId,
+        e.evidence_sample_count AS evidenceSampleCount,
+        e.evidence_window_seconds AS evidenceWindowSeconds,
+        e.evidence_summary_json AS evidenceSummaryJson,
         e.event_time AS eventTime,
         e.raw_payload_json AS rawPayloadJson
       FROM alerts a

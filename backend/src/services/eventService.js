@@ -7,6 +7,11 @@ const { getPagination } = require("../utils/pagination");
 const { parseDateBoundary, toDateFromDeviceTimestamp } = require("../utils/time");
 const { buildScopeFilter, canAccessScope } = require("./scopeService");
 
+const FALL_EVIDENCE_WINDOW_BEFORE_MS = 10_000;
+const FALL_EVIDENCE_WINDOW_AFTER_MS = 3_000;
+const FALL_EVIDENCE_MAX_SAMPLES = 30;
+const FALL_EVIDENCE_LINKED_MIN_SAMPLES = 2;
+
 function toNullableNumber(value) {
   if (value == null || value === "") {
     return null;
@@ -14,6 +19,11 @@ function toNullableNumber(value) {
 
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function toFiniteNumber(value, fallback = 0) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
 }
 
 function toIso(value) {
@@ -63,6 +73,187 @@ function shouldCreateAlert(eventType) {
   return ["fall_detected", "sos_pressed"].includes(eventType);
 }
 
+function hasTelemetryEvidence(event) {
+  return ["linked", "partial"].includes(event?.evidenceStatus);
+}
+
+function shouldCreateAlertForEvent(event) {
+  if (!event || !shouldCreateAlert(event.eventType)) {
+    return false;
+  }
+
+  if (event.eventType === "fall_detected") {
+    return hasTelemetryEvidence(event);
+  }
+
+  return true;
+}
+
+function buildEmptyEvidence(immobilityConfirmed = false) {
+  return {
+    status: "none",
+    telemetryId: null,
+    sampleCount: 0,
+    windowSeconds: 0,
+    summary: {
+      maxAccelMagnitude: null,
+      maxGyroMagnitude: null,
+      immobilityConfirmed,
+      firstSampleAt: null,
+      lastSampleAt: null,
+    },
+    links: [],
+  };
+}
+
+function buildTelemetryEvidence(rows, eventTime, immobilityConfirmed = false) {
+  const eventAt = eventTime instanceof Date ? eventTime : new Date(eventTime);
+  const samples = (rows || [])
+    .map((row) => {
+      const createdAt = row.createdAt || row.created_at;
+      const createdDate = createdAt instanceof Date ? createdAt : new Date(createdAt);
+
+      return {
+        id: Number(row.id),
+        createdAt: createdDate,
+        accelMagnitude: toNullableNumber(row.accelMagnitude ?? row.accel_magnitude),
+        gyroMagnitude: toNullableNumber(row.gyroMagnitude ?? row.gyro_magnitude),
+      };
+    })
+    .filter((sample) => sample.id && !Number.isNaN(sample.createdAt.getTime()))
+    .sort((left, right) => left.createdAt.getTime() - right.createdAt.getTime());
+
+  if (!samples.length || Number.isNaN(eventAt.getTime())) {
+    return buildEmptyEvidence(immobilityConfirmed);
+  }
+
+  const nearest = samples.reduce((best, sample) => {
+    const bestDistance = Math.abs(best.createdAt.getTime() - eventAt.getTime());
+    const sampleDistance = Math.abs(sample.createdAt.getTime() - eventAt.getTime());
+    return sampleDistance < bestDistance ? sample : best;
+  }, samples[0]);
+
+  const peak = samples.reduce((best, sample) => {
+    const bestScore = toFiniteNumber(best.accelMagnitude) + toFiniteNumber(best.gyroMagnitude);
+    const sampleScore = toFiniteNumber(sample.accelMagnitude) + toFiniteNumber(sample.gyroMagnitude);
+    return sampleScore > bestScore ? sample : best;
+  }, samples[0]);
+
+  const firstSample = samples[0];
+  const lastSample = samples[samples.length - 1];
+  const maxAccelMagnitude = samples.reduce((maxValue, sample) => {
+    if (sample.accelMagnitude == null) {
+      return maxValue;
+    }
+
+    return maxValue == null ? sample.accelMagnitude : Math.max(maxValue, sample.accelMagnitude);
+  }, null);
+  const maxGyroMagnitude = samples.reduce((maxValue, sample) => {
+    if (sample.gyroMagnitude == null) {
+      return maxValue;
+    }
+
+    return maxValue == null ? sample.gyroMagnitude : Math.max(maxValue, sample.gyroMagnitude);
+  }, null);
+
+  return {
+    status: samples.length >= FALL_EVIDENCE_LINKED_MIN_SAMPLES ? "linked" : "partial",
+    telemetryId: nearest.id,
+    sampleCount: samples.length,
+    windowSeconds: Math.max(
+      0,
+      (lastSample.createdAt.getTime() - firstSample.createdAt.getTime()) / 1000,
+    ),
+    summary: {
+      maxAccelMagnitude,
+      maxGyroMagnitude,
+      immobilityConfirmed,
+      firstSampleAt: firstSample.createdAt.toISOString(),
+      lastSampleAt: lastSample.createdAt.toISOString(),
+    },
+    links: samples.map((sample) => {
+      let role = "before_peak";
+
+      if (sample.id === nearest.id) {
+        role = "nearest";
+      } else if (sample.id === peak.id) {
+        role = "peak";
+      } else if (sample.createdAt.getTime() > eventAt.getTime()) {
+        role = "after_peak";
+      }
+
+      return {
+        telemetryLogId: sample.id,
+        relativeMs: Math.round(sample.createdAt.getTime() - eventAt.getTime()),
+        role,
+      };
+    }),
+  };
+}
+
+async function resolveFallTelemetryEvidence({ device, eventTime, immobility }, executor = null) {
+  const eventAt = eventTime instanceof Date ? eventTime : new Date(eventTime);
+
+  if (Number.isNaN(eventAt.getTime())) {
+    return buildEmptyEvidence(immobility);
+  }
+
+  const windowStart = new Date(eventAt.getTime() - FALL_EVIDENCE_WINDOW_BEFORE_MS);
+  const windowEnd = new Date(eventAt.getTime() + FALL_EVIDENCE_WINDOW_AFTER_MS);
+  const rows = await execute(
+    executor,
+    `
+      SELECT
+        id,
+        accel_magnitude,
+        gyro_magnitude,
+        created_at
+      FROM telemetry_logs
+      WHERE device_id = ?
+        AND organization_id <=> ?
+        AND patient_id <=> ?
+        AND device_assignment_history_id <=> ?
+        AND created_at BETWEEN ? AND ?
+      ORDER BY ABS(TIMESTAMPDIFF(MICROSECOND, created_at, ?)), id
+      LIMIT ?
+    `,
+    [
+      device.id,
+      device.organization?.id || null,
+      device.currentPatient?.id || null,
+      device.currentAssignmentHistoryId || null,
+      windowStart,
+      windowEnd,
+      eventAt,
+      FALL_EVIDENCE_MAX_SAMPLES,
+    ],
+  );
+
+  return buildTelemetryEvidence(rows, eventAt, immobility);
+}
+
+async function insertEvidenceLinks(eventId, evidence, executor = null) {
+  if (!evidence?.links?.length) {
+    return;
+  }
+
+  for (const link of evidence.links) {
+    await execute(
+      executor,
+      `
+        INSERT IGNORE INTO event_telemetry_evidence (
+          event_id,
+          telemetry_log_id,
+          relative_ms,
+          role
+        )
+        VALUES (?, ?, ?, ?)
+      `,
+      [eventId, link.telemetryLogId, link.relativeMs, link.role],
+    );
+  }
+}
+
 function mapEventRow(row) {
   const patient = row.patientId || row.patient_id
     ? {
@@ -70,6 +261,10 @@ function mapEventRow(row) {
         fullName: row.patientName || row.patient_name,
       }
     : null;
+  const evidenceTelemetryId = row.evidenceTelemetryId ?? row.evidence_telemetry_id;
+  const evidenceSampleCount = row.evidenceSampleCount ?? row.evidence_sample_count;
+  const evidenceWindowSeconds = row.evidenceWindowSeconds ?? row.evidence_window_seconds;
+  const evidenceSummaryJson = row.evidenceSummaryJson ?? row.evidence_summary_json;
 
   return {
     id: Number(row.id),
@@ -85,6 +280,11 @@ function mapEventRow(row) {
     intensity: toNullableNumber(row.intensity),
     immobility: toBoolean(row.immobility),
     message: row.message,
+    evidenceStatus: row.evidenceStatus || row.evidence_status || "none",
+    evidenceTelemetryId: evidenceTelemetryId ? Number(evidenceTelemetryId) : null,
+    evidenceSampleCount: evidenceSampleCount == null ? 0 : Number(evidenceSampleCount),
+    evidenceWindowSeconds: toNullableNumber(evidenceWindowSeconds),
+    evidenceSummary: parseMaybeJson(evidenceSummaryJson),
     eventTime: toIso(row.event_time),
     rawPayloadJson: parseMaybeJson(row.raw_payload_json),
     createdAt: toIso(row.created_at),
@@ -139,6 +339,11 @@ async function getEventById(eventId, accessContext, executor = null) {
         e.intensity,
         e.immobility,
         e.message,
+        e.evidence_status AS evidenceStatus,
+        e.evidence_telemetry_id AS evidenceTelemetryId,
+        e.evidence_sample_count AS evidenceSampleCount,
+        e.evidence_window_seconds AS evidenceWindowSeconds,
+        e.evidence_summary_json AS evidenceSummaryJson,
         e.event_time,
         e.raw_payload_json,
         e.created_at,
@@ -168,13 +373,20 @@ async function getEventById(eventId, accessContext, executor = null) {
 async function recordEventFromMqtt({ device, payload, correlationId = null }, executor = null) {
   const startedAt = process.hrtime.bigint();
   const eventType = String(payload.event_type || "device_event");
-  const severity = deriveSeverity(eventType, payload);
   const message = deriveMessage(eventType, payload);
   const intensity = toNullableNumber(payload.intensity ?? payload.accel_magnitude);
   const immobility = toBoolean(payload.immobility ?? payload.immobility_confirmed);
   const eventTime = payload.timestamp
     ? toDateFromDeviceTimestamp(payload.timestamp)
     : new Date();
+  const evidence = eventType === "fall_detected"
+    ? await resolveFallTelemetryEvidence({ device, eventTime, immobility }, executor)
+    : buildEmptyEvidence(immobility);
+  let severity = deriveSeverity(eventType, payload);
+
+  if (eventType === "fall_detected" && evidence.status === "none") {
+    severity = "medium";
+  }
 
   const result = await execute(
     executor,
@@ -189,10 +401,15 @@ async function recordEventFromMqtt({ device, payload, correlationId = null }, ex
         intensity,
         immobility,
         message,
+        evidence_status,
+        evidence_telemetry_id,
+        evidence_sample_count,
+        evidence_window_seconds,
+        evidence_summary_json,
         event_time,
         raw_payload_json
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     [
       device.organization?.id || null,
@@ -204,10 +421,17 @@ async function recordEventFromMqtt({ device, payload, correlationId = null }, ex
       intensity,
       immobility ? 1 : 0,
       message,
+      evidence.status,
+      evidence.telemetryId,
+      evidence.sampleCount,
+      evidence.windowSeconds,
+      JSON.stringify(evidence.summary),
       eventTime,
       JSON.stringify(payload),
     ],
   );
+
+  await insertEvidenceLinks(result.insertId, evidence, executor);
 
   const event = await one(
     executor,
@@ -236,8 +460,23 @@ async function recordEventFromMqtt({ device, payload, correlationId = null }, ex
     deviceUid: device.deviceUid,
     organizationId: event.organizationId,
     patientId: event.patientId,
+    evidenceStatus: event.evidenceStatus,
+    evidenceSampleCount: event.evidenceSampleCount,
     durationMs: elapsedMsSince(startedAt),
   });
+
+  if (eventType === "fall_detected" && event.evidenceStatus === "none") {
+    logger.warn("Evento fall_detected sem evidencia de telemetria recente.", {
+      correlationId,
+      eventId: event.id,
+      deviceId: device.id,
+      deviceIdentifier: device.deviceIdentifier,
+      deviceUid: device.deviceUid,
+      organizationId: event.organizationId,
+      patientId: event.patientId,
+      evidenceStatus: event.evidenceStatus,
+    });
+  }
 
   return event;
 }
@@ -382,6 +621,11 @@ async function listEvents(filters = {}, accessContext) {
         e.intensity,
         e.immobility,
         e.message,
+        e.evidence_status AS evidenceStatus,
+        e.evidence_telemetry_id AS evidenceTelemetryId,
+        e.evidence_sample_count AS evidenceSampleCount,
+        e.evidence_window_seconds AS evidenceWindowSeconds,
+        e.evidence_summary_json AS evidenceSummaryJson,
         e.event_time,
         e.raw_payload_json,
         e.created_at,
@@ -422,13 +666,17 @@ async function listDeviceEvents(deviceId, filters = {}, accessContext) {
 }
 
 module.exports = {
+  buildTelemetryEvidence,
   deriveMessage,
   deriveSeverity,
   getEventById,
+  hasTelemetryEvidence,
   listDeviceEvents,
   listEvents,
   mapTelemetryRow,
   recordEventFromMqtt,
   recordTelemetryFromMqtt,
+  resolveFallTelemetryEvidence,
   shouldCreateAlert,
+  shouldCreateAlertForEvent,
 };

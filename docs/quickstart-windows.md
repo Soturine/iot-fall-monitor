@@ -231,12 +231,22 @@ Para validar a arquitetura de alertas e MQTT sem hardware fisico:
 ```powershell
 npm run check --prefix backend
 npm test --prefix backend
+npm run test:smoke --prefix backend
+npm run test:integration --prefix backend
 npm run test:alerts --prefix backend
 npm run test:mqtt --prefix backend
-npm run stress:alerts --prefix backend
+npm run stress:dry --prefix backend
 ```
 
-O stress roda em dry-run e gera relatorios em:
+O `stress:dry` roda com mocks locais. Para testar broker MQTT, backend e MySQL reais de desenvolvimento, deixe backend/broker/banco rodando e use:
+
+```powershell
+npm run stress:real --prefix backend
+```
+
+O script real aborta se o backend `/health`, o broker MQTT ou o banco nao estiverem disponiveis, e tambem bloqueia ambiente de producao.
+
+As suites geram relatorios em:
 
 ```text
 backend/logs/stress/
@@ -246,6 +256,8 @@ Arquivos esperados:
 
 - `stress-<runId>.jsonl`: eventos detalhados por fase, topico, device, latencia e erro
 - `summary-<runId>.json`: resumo com totais, p95/p99 e falhas
+- `failures-<runId>.json`: falhas completas para analise
+- `report-<runId>.md`: relatorio legivel com MQTT, telemetria, quedas/alertas e recomendacoes
 
 Para limpar apenas logs locais de stress:
 

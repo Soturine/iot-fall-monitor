@@ -145,6 +145,8 @@ function findRecentFallEvent(recentEvents, now) {
       eventType: event.eventType,
       severity: event.severity,
       immobility: Boolean(event.immobility),
+      evidenceStatus: event.evidenceStatus || "none",
+      evidenceSampleCount: Number(event.evidenceSampleCount || 0),
       eventTime: toDate(event.eventTime || event.createdAt),
     }))
     .filter((event) => event.eventType === "fall_detected" && event.eventTime)
@@ -163,18 +165,22 @@ function computeDeviceBehavior({
   const recentFallEvent = findRecentFallEvent(recentEvents, referenceNow);
 
   if (recentFallEvent) {
+    const hasEvidence = ["linked", "partial"].includes(recentFallEvent.evidenceStatus);
     const confirmed =
-      recentFallEvent.immobility || recentFallEvent.severity === "critical";
+      hasEvidence && (recentFallEvent.immobility || recentFallEvent.severity === "critical");
 
     return buildBehavior(
       confirmed ? "queda_confirmada" : "queda_suspeita",
       confirmed ? "alto" : "medio",
       confirmed
         ? "Evento recente de queda com imobilidade confirmada."
-        : "Evento recente de queda ainda em observacao.",
+        : hasEvidence
+          ? "Evento recente de queda ainda em observacao."
+          : "Evento recente de queda sem evidencia de telemetria suficiente.",
       {
         source: "recent_fall_event",
         updatedAt: recentFallEvent.eventTime,
+        telemetrySampleCount: recentFallEvent.evidenceSampleCount,
       },
     );
   }

@@ -146,6 +146,11 @@ function mapTelemetryRow(row) {
 }
 
 function mapDeviceEventRow(row) {
+  const evidenceTelemetryId = row.evidenceTelemetryId ?? row.evidence_telemetry_id;
+  const evidenceSampleCount = row.evidenceSampleCount ?? row.evidence_sample_count;
+  const evidenceWindowSeconds = row.evidenceWindowSeconds ?? row.evidence_window_seconds;
+  const evidenceSummaryJson = row.evidenceSummaryJson ?? row.evidence_summary_json;
+
   return {
     id: Number(row.id),
     deviceId: Number(row.device_id),
@@ -156,6 +161,11 @@ function mapDeviceEventRow(row) {
     intensity: toNullableNumber(row.intensity),
     immobility: toBoolean(row.immobility),
     message: row.message,
+    evidenceStatus: row.evidenceStatus || row.evidence_status || "none",
+    evidenceTelemetryId: evidenceTelemetryId ? Number(evidenceTelemetryId) : null,
+    evidenceSampleCount: evidenceSampleCount == null ? 0 : Number(evidenceSampleCount),
+    evidenceWindowSeconds: toNullableNumber(evidenceWindowSeconds),
+    evidenceSummary: parseMaybeJson(evidenceSummaryJson),
     eventTime: toIso(row.event_time),
     rawPayloadJson: parseMaybeJson(row.raw_payload_json),
     createdAt: toIso(row.created_at),
@@ -163,6 +173,11 @@ function mapDeviceEventRow(row) {
 }
 
 function mapDeviceAlertRow(row) {
+  const evidenceTelemetryId = row.evidenceTelemetryId ?? row.evidence_telemetry_id;
+  const evidenceSampleCount = row.evidenceSampleCount ?? row.evidence_sample_count;
+  const evidenceWindowSeconds = row.evidenceWindowSeconds ?? row.evidence_window_seconds;
+  const evidenceSummaryJson = row.evidenceSummaryJson ?? row.evidence_summary_json;
+
   return {
     id: Number(row.id),
     status: row.status,
@@ -177,6 +192,11 @@ function mapDeviceAlertRow(row) {
       intensity: toNullableNumber(row.intensity),
       immobility: toBoolean(row.immobility),
       message: row.message,
+      evidenceStatus: row.evidenceStatus || row.evidence_status || "none",
+      evidenceTelemetryId: evidenceTelemetryId ? Number(evidenceTelemetryId) : null,
+      evidenceSampleCount: evidenceSampleCount == null ? 0 : Number(evidenceSampleCount),
+      evidenceWindowSeconds: toNullableNumber(evidenceWindowSeconds),
+      evidenceSummary: parseMaybeJson(evidenceSummaryJson),
       eventTime: toIso(row.event_time),
       rawPayloadJson: parseMaybeJson(row.raw_payload_json),
     },
@@ -248,6 +268,8 @@ async function fetchRecentFallEventsByDeviceIds(deviceIds, executor = null) {
           e.event_type,
           e.severity,
           e.immobility,
+          e.evidence_status,
+          e.evidence_sample_count,
           e.event_time,
           e.created_at,
           ROW_NUMBER() OVER (
@@ -268,6 +290,8 @@ async function fetchRecentFallEventsByDeviceIds(deviceIds, executor = null) {
     eventType: row.event_type,
     severity: row.severity,
     immobility: toBoolean(row.immobility),
+    evidenceStatus: row.evidence_status || "none",
+    evidenceSampleCount: row.evidence_sample_count == null ? 0 : Number(row.evidence_sample_count),
     eventTime: toIso(row.event_time),
     createdAt: toIso(row.created_at),
   }));
@@ -298,6 +322,8 @@ async function fetchRecentFallEventByDeviceId(deviceId, executor = null) {
         e.event_type,
         e.severity,
         e.immobility,
+        e.evidence_status,
+        e.evidence_sample_count,
         e.event_time,
         e.created_at
       FROM events e
@@ -319,6 +345,8 @@ async function fetchRecentFallEventByDeviceId(deviceId, executor = null) {
       eventType: row.event_type,
       severity: row.severity,
       immobility: toBoolean(row.immobility),
+      evidenceStatus: row.evidence_status || "none",
+      evidenceSampleCount: row.evidence_sample_count == null ? 0 : Number(row.evidence_sample_count),
       eventTime: toIso(row.event_time),
       createdAt: toIso(row.created_at),
     },
@@ -1299,6 +1327,11 @@ async function getDeviceById(deviceId, accessContext) {
         e.intensity,
         e.immobility,
         e.message,
+        e.evidence_status,
+        e.evidence_telemetry_id,
+        e.evidence_sample_count,
+        e.evidence_window_seconds,
+        e.evidence_summary_json,
         e.event_time,
         e.raw_payload_json
       FROM alerts a

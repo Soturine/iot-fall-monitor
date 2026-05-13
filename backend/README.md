@@ -260,6 +260,8 @@ Na ingestao:
 - alertas abertos herdam `organization_id` e `patient_id`
 - `Socket.IO` tambem emite em escopo filtrado
 - timestamps MQTT so sao usados quando parecem Unix time plausivel; se o ESP32 ainda estiver sem NTP e enviar `millis()/1000`, o backend persiste a hora de recebimento para evitar device falsamente stale/offline
+- `fall_detected` busca telemetria recente do mesmo device em uma janela de `-10s/+3s`; sem evidencia, o evento fica auditavel, mas nao cria alerta automatico de queda
+- `sos_pressed` segue criando alerta sem telemetria, porque e acionamento manual
 
 ## Rotas REST principais
 
@@ -349,9 +351,13 @@ Importante:
 - `npm start`: inicia o backend em modo normal
 - `npm run check`: valida sintaxe dos arquivos JS
 - `npm test`: roda toda a suite `node:test`
+- `npm run test:smoke`: roda checks rapidos e sem dependencias externas
+- `npm run test:integration`: roda testes de alertas e MQTT com mocks controlados
 - `npm run test:alerts`: valida regras de eventos, criacao/transicao/escopo de alertas
 - `npm run test:mqtt`: valida ingestao MQTT, lock por device e realtime escopado
-- `npm run stress:alerts`: roda stress dry-run para telemetria, queda/SOS, payloads ruins e concorrencia
+- `npm run stress:dry`: roda stress dry-run para telemetria, queda/SOS, payloads ruins e concorrencia
+- `npm run stress:real`: valida backend, broker e MySQL reais antes de publicar MQTT real e consultar persistencia
+- `npm run stress:alerts`: alias compatível para `stress:dry`
 - `npm run stress:cleanup`: lista/remover logs locais de stress quando chamado com `-- --yes`
 - `npm run mock:publisher`: publica dados simulados no broker MQTT configurado
 - `npm run dev:broker`: sobe um broker MQTT local leve com `Aedes`
@@ -364,9 +370,11 @@ Os relatorios de stress ficam em:
 ```text
 backend/logs/stress/stress-<runId>.jsonl
 backend/logs/stress/summary-<runId>.json
+backend/logs/stress/failures-<runId>.json
+backend/logs/stress/report-<runId>.md
 ```
 
-Eles sao artefatos locais e ficam ignorados pelo Git. O fluxo detalhado de alertas esta em [docs/alerting-architecture.md](../docs/alerting-architecture.md).
+O JSONL e voltado a maquina; o Markdown `report-*.md` resume resultado, MQTT, telemetria, quedas/alertas, falhas e recomendacoes para leitura humana. Eles sao artefatos locais e ficam ignorados pelo Git. O fluxo detalhado de alertas esta em [docs/alerting-architecture.md](../docs/alerting-architecture.md).
 
 ## Tempo real
 

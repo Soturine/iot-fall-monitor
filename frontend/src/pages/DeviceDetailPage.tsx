@@ -27,8 +27,72 @@ import { api } from "../services/api";
 import type {
   AlertRecord,
   DeviceDetailResponse,
+  EventRecord,
   TelemetryRealtimeEvent,
 } from "../types/api";
+
+type EvidenceCarrier = Pick<
+  EventRecord,
+  | "evidenceStatus"
+  | "evidenceSampleCount"
+  | "evidenceWindowSeconds"
+  | "evidenceSummary"
+>;
+
+function humanizeEvidenceStatus(status?: string) {
+  switch (status) {
+    case "linked":
+      return "vinculada";
+    case "partial":
+      return "parcial";
+    default:
+      return "insuficiente";
+  }
+}
+
+function evidenceTone(status?: string) {
+  if (status === "linked") {
+    return "success";
+  }
+
+  if (status === "partial") {
+    return "warning";
+  }
+
+  return "danger";
+}
+
+function formatEvidenceNumber(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value)
+    ? value.toFixed(2)
+    : "--";
+}
+
+function EvidenceSummary({ event }: { event: EvidenceCarrier }) {
+  return (
+    <div className="mt-3 border-t border-surface-100 pt-3 text-xs text-surface-600">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-semibold text-surface-700">Evidencia do sensor</span>
+        <Badge tone={evidenceTone(event.evidenceStatus) as never}>
+          {humanizeEvidenceStatus(event.evidenceStatus)}
+        </Badge>
+      </div>
+      {event.evidenceStatus === "none" ? (
+        <p className="mt-2">
+          O evento foi recebido, mas nao havia telemetria recente suficiente para
+          comprovar a queda.
+        </p>
+      ) : (
+        <p className="mt-2">
+          Amostras {event.evidenceSampleCount} - janela{" "}
+          {formatEvidenceNumber(event.evidenceWindowSeconds)}s - pico aceleracao{" "}
+          {formatEvidenceNumber(event.evidenceSummary?.maxAccelMagnitude)} - pico giro{" "}
+          {formatEvidenceNumber(event.evidenceSummary?.maxGyroMagnitude)}
+        </p>
+      )}
+    </div>
+  );
+}
 
 export function DeviceDetailPage() {
   const { id } = useParams();
@@ -335,6 +399,9 @@ export function DeviceDetailPage() {
                   <p className="mt-1 text-sm text-surface-600">
                     {formatDateTime(alert.event.eventTime)}
                   </p>
+                  {alert.event.eventType === "fall_detected" ? (
+                    <EvidenceSummary event={alert.event} />
+                  ) : null}
                 </div>
               ))
             ) : (
@@ -427,6 +494,9 @@ export function DeviceDetailPage() {
                     <TriangleAlert className="h-3.5 w-3.5" />
                     Imobilidade confirmada
                   </div>
+                ) : null}
+                {event.eventType === "fall_detected" ? (
+                  <EvidenceSummary event={event} />
                 ) : null}
               </div>
             ))

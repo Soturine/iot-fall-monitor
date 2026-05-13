@@ -144,6 +144,9 @@ function buildHarness({ stressLogger, totals, failures, latencies }) {
       if (["invalid_json", "missing_device_id", "unsupported_channel"].includes(metadata?.reason)) {
         totals.discarded += 1;
       }
+      if (metadata?.reason === "missing_device_id") {
+        totals.missingDevice += 1;
+      }
       stressLogger.write({
         level: "warn",
         phase: "mqtt_ingestion",
@@ -210,6 +213,23 @@ function buildHarness({ stressLogger, totals, failures, latencies }) {
     recordEventFromMqtt: async ({ device, payload }) => {
       nextEventId += 1;
       totals.persisted += 1;
+      totals.eventsPersisted += 1;
+      if (payload.event_type === "fall_detected") {
+        totals.fallEvents += 1;
+      }
+      const evidenceStatus = payload.event_type === "fall_detected"
+        ? payload.no_evidence
+          ? "none"
+          : payload.immobility_confirmed
+            ? "linked"
+            : "partial"
+        : "none";
+      if (payload.event_type === "fall_detected" && evidenceStatus === "none") {
+        totals.fallEventsWithoutEvidence += 1;
+      }
+      if (payload.event_type === "fall_detected" && evidenceStatus !== "none") {
+        totals.fallEventsWithEvidence += 1;
+      }
       stressLogger.write({
         phase: "db_insert",
         scenario: payload.__scenario,
@@ -225,6 +245,19 @@ function buildHarness({ stressLogger, totals, failures, latencies }) {
         patientId: device.currentPatient?.id || null,
         eventType: payload.event_type || "device_event",
         severity: payload.immobility_confirmed ? "critical" : "high",
+        evidenceStatus,
+        evidenceTelemetryId: evidenceStatus === "none" ? null : nextTelemetryId,
+        evidenceSampleCount: evidenceStatus === "linked" ? 2 : evidenceStatus === "partial" ? 1 : 0,
+        evidenceWindowSeconds: evidenceStatus === "none" ? 0 : 5,
+        evidenceSummary: evidenceStatus === "none"
+          ? null
+          : {
+              maxAccelMagnitude: Number(payload.accel_magnitude || 0),
+              maxGyroMagnitude: Number(payload.gyro_magnitude || 0),
+              immobilityConfirmed: Boolean(payload.immobility_confirmed),
+              firstSampleAt: new Date().toISOString(),
+              lastSampleAt: new Date().toISOString(),
+            },
         device: {
           id: device.id,
           deviceUid: device.deviceUid,
@@ -236,6 +269,7 @@ function buildHarness({ stressLogger, totals, failures, latencies }) {
     recordTelemetryFromMqtt: async ({ device, payload }) => {
       nextTelemetryId += 1;
       totals.persisted += 1;
+      totals.telemetryPersisted += 1;
       stressLogger.write({
         phase: "db_insert",
         scenario: payload.__scenario,
@@ -264,11 +298,26 @@ function buildHarness({ stressLogger, totals, failures, latencies }) {
       };
     },
     shouldCreateAlert: (eventType) => ["fall_detected", "sos_pressed"].includes(eventType),
+    shouldCreateAlertForEvent: (event) => {
+      const allowed = event.eventType === "sos_pressed" ||
+        (event.eventType === "fall_detected" && ["linked", "partial"].includes(event.evidenceStatus));
+
+      if (!allowed && event.eventType === "fall_detected") {
+        totals.alertsBlocked += 1;
+      }
+
+      return allowed;
+    },
   };
   const fakeAlertService = {
     createAlertForEvent: async (event) => {
       nextAlertId += 1;
       totals.alertsCreated += 1;
+      if (event.evidenceStatus && event.evidenceStatus !== "none") {
+        totals.alertsWithEvidence += 1;
+      } else {
+        totals.alertsWithoutEvidence += 1;
+      }
       stressLogger.write({
         phase: "alert_create",
         scenario: "fall_burst",
@@ -322,6 +371,7 @@ function buildHarness({ stressLogger, totals, failures, latencies }) {
         payloadText: payloadText || JSON.stringify({ ...payload, __scenario: scenario }),
         io: {},
       });
+      totals.processed += 1;
       const durationMs = performance.now() - start;
       latencies.push(durationMs);
       stressLogger.write({
@@ -446,6 +496,7 @@ async function runFallBurst(harness, config, scenarioResults) {
         accel_magnitude: message.immobility ? 3.7 : 2.4,
         gyro_magnitude: message.immobility ? 180 : 130,
         immobility_confirmed: message.immobility,
+        no_evidence: message.eventType === "fall_detected" && message.offsetSeconds % 11 === 0,
       },
     }),
   );
@@ -520,11 +571,22 @@ async function main() {
   const totals = {
     published: 0,
     received: 0,
+    processed: 0,
     persisted: 0,
+    telemetryPersisted: 0,
+    eventsPersisted: 0,
     alertsCreated: 0,
+    alertsWithEvidence: 0,
+    alertsWithoutEvidence: 0,
+    alertsBlocked: 0,
+    fallEvents: 0,
+    fallEventsWithEvidence: 0,
+    fallEventsWithoutEvidence: 0,
     socketEvents: 0,
     failed: 0,
     discarded: 0,
+    missingDevice: 0,
+    invalidTelemetry: 0,
   };
   const failures = [];
   const latencies = [];
@@ -559,6 +621,8 @@ async function main() {
   }
 
   const finishedAt = new Date();
+  const memoryUsage = process.memoryUsage();
+  totals.memoryRssMb = Number((memoryUsage.rss / 1024 / 1024).toFixed(2));
   const summary = {
     runId,
     startedAt: startedAt.toISOString(),
@@ -566,28 +630,48 @@ async function main() {
     durationMs: finishedAt.getTime() - startedAt.getTime(),
     mode: "dry-run",
     logFile: stressLogger.jsonlPath,
+    environment: {
+      backend: "mockado em processo local",
+      broker: "mockado em processo local",
+      database: "mockado em processo local",
+    },
     scenarios,
     totals,
     latency: summarizeLatencies(latencies),
     failures,
+    recommendations: [
+      "Use stress:real para medir broker, backend e MySQL reais.",
+      "Compare alertas bloqueados com fall_detected sem evidencia antes de validar o prototipo fisico.",
+    ],
   };
-  const summaryPath = stressLogger.writeSummary(summary);
+  const artifactPaths = stressLogger.writeArtifacts(summary);
 
   stressLogger.write({
     phase: "summary",
     message: "Suite de stress concluida.",
     success: failures.length === 0,
     metadata: {
-      summaryPath,
+      ...artifactPaths,
       totals,
       latency: summary.latency,
     },
   });
 
+  console.table({
+    modo: summary.mode,
+    publicadas: totals.published,
+    processadas: totals.processed,
+    persistidas: totals.persisted,
+    alertas: totals.alertsCreated,
+    bloqueados: totals.alertsBlocked,
+    falhas: failures.length,
+    p95Ms: summary.latency.p95Ms,
+  });
   console.log(`[stress] runId=${runId}`);
-  console.log(`[stress] log=${stressLogger.jsonlPath}`);
-  console.log(`[stress] summary=${summaryPath}`);
-  console.log(`[stress] failures=${failures.length}`);
+  console.log(`[stress] jsonl=${stressLogger.jsonlPath}`);
+  console.log(`[stress] summary=${artifactPaths.summaryPath}`);
+  console.log(`[stress] failures=${artifactPaths.failuresPath}`);
+  console.log(`[stress] report=${artifactPaths.reportPath}`);
 
   if (failures.length) {
     process.exitCode = 1;

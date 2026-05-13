@@ -7,6 +7,7 @@ USE queda_monitor;
 SET FOREIGN_KEY_CHECKS = 0;
 DROP TABLE IF EXISTS alert_actions;
 DROP TABLE IF EXISTS alerts;
+DROP TABLE IF EXISTS event_telemetry_evidence;
 DROP TABLE IF EXISTS events;
 DROP TABLE IF EXISTS telemetry_logs;
 DROP TABLE IF EXISTS device_status;
@@ -270,6 +271,11 @@ CREATE TABLE IF NOT EXISTS events (
   intensity DOUBLE NULL,
   immobility TINYINT(1) NOT NULL DEFAULT 0,
   message VARCHAR(255) NULL,
+  evidence_status ENUM('none', 'partial', 'linked') NOT NULL DEFAULT 'none',
+  evidence_telemetry_id BIGINT UNSIGNED NULL,
+  evidence_sample_count INT UNSIGNED NOT NULL DEFAULT 0,
+  evidence_window_seconds DECIMAL(8, 3) NULL,
+  evidence_summary_json JSON NULL,
   event_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   raw_payload_json JSON NULL,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -280,6 +286,8 @@ CREATE TABLE IF NOT EXISTS events (
   KEY idx_events_device_type_time (device_id, event_type, event_time),
   KEY idx_events_type (event_type),
   KEY idx_events_severity (severity),
+  KEY idx_events_evidence_status (evidence_status),
+  KEY idx_events_evidence_telemetry (evidence_telemetry_id),
   CONSTRAINT fk_events_device
     FOREIGN KEY (device_id) REFERENCES devices (id)
     ON DELETE CASCADE,
@@ -291,7 +299,29 @@ CREATE TABLE IF NOT EXISTS events (
     ON DELETE SET NULL,
   CONSTRAINT fk_events_assignment
     FOREIGN KEY (device_assignment_history_id) REFERENCES device_assignment_history (id)
+    ON DELETE SET NULL,
+  CONSTRAINT fk_events_evidence_telemetry
+    FOREIGN KEY (evidence_telemetry_id) REFERENCES telemetry_logs (id)
     ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS event_telemetry_evidence (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  event_id BIGINT UNSIGNED NOT NULL,
+  telemetry_log_id BIGINT UNSIGNED NOT NULL,
+  relative_ms INT NOT NULL,
+  role ENUM('before_peak', 'peak', 'after_peak', 'nearest') NOT NULL DEFAULT 'nearest',
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_event_telemetry_evidence (event_id, telemetry_log_id),
+  KEY idx_event_evidence_event_role (event_id, role),
+  KEY idx_event_evidence_telemetry (telemetry_log_id),
+  CONSTRAINT fk_event_evidence_event
+    FOREIGN KEY (event_id) REFERENCES events (id)
+    ON DELETE CASCADE,
+  CONSTRAINT fk_event_evidence_telemetry
+    FOREIGN KEY (telemetry_log_id) REFERENCES telemetry_logs (id)
+    ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS alerts (

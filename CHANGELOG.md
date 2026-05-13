@@ -1,5 +1,41 @@
 # Changelog
 
+## [v0.8.16] - 2026-05-13
+### Adicionado
+- campos de evidencia em `events` (`evidence_status`, `evidence_telemetry_id`, `evidence_sample_count`, `evidence_window_seconds`, `evidence_summary_json`)
+- tabela relacional `event_telemetry_evidence` para vincular eventos de queda a amostras de `telemetry_logs`
+- testes `node:test` para queda com evidencia, queda sem evidencia, telemetria stale/outro device e exposicao de resumo de evidencia no alerta
+- scripts explicitos `test:smoke`, `test:integration`, `stress:dry` e `stress:real` no backend
+- stress real com validacao de backend `/health`, broker MQTT, MySQL local/dev e bloqueio de execucao em producao
+- relatorios de stress legiveis em `backend/logs/stress/report-<runId>.md` e falhas completas em `failures-<runId>.json`
+
+### Alterado
+- versao alinhada para `0.8.16` em `CHANGELOG.md`, `README.md`, `package.json` da raiz, `backend/package.json`, `backend/package-lock.json`, `frontend/package.json` e `frontend/package-lock.json`
+- `fall_detected` agora busca telemetria do mesmo device na janela `event_time - 10s` ate `event_time + 3s` antes de criar alerta automatico
+- `fall_detected` sem evidencia recente passa a ser evento tecnico com `evidenceStatus=none`, severidade `medium`, warning diagnostico e sem alerta automatico
+- `sos_pressed` continua criando alerta sem depender de telemetria, por ser acionamento manual
+- comportamento do device evita marcar `queda_confirmada` para queda recente sem evidencia de telemetria
+- grafico de telemetria usa escala visual minima quando timestamps chegam iguais ou muito proximos, mantendo o horario real no tooltip
+
+### Corrigido
+- o fluxo de queda deixou de tratar `fall_detected` como alerta critico confiavel sem amostras relacionadas do MPU6050 persistidas no backend
+- o stress dry-run deixou de ser apresentado como stress real e passou a gerar resumo humano com MQTT, telemetria, quedas/alertas, falhas e recomendacoes
+
+### Documentado
+- diferenca entre `stress:dry` e `stress:real`
+- como interpretar JSONL, summary, failures e report Markdown de stress
+- como a queda e amarrada a telemetria e o que acontece quando a evidencia e insuficiente
+- limitacao atual de alerta interno sem SMS/WhatsApp/e-mail/push externo
+
+### Pendente / Faltando
+- validar com ESP32 fisico se a frequencia real de telemetria gera evidencia `linked` antes/depois de quedas controladas
+- calibrar thresholds do MPU6050 no prototipo fisico antes de qualquer interpretacao clinica
+- avaliar uma chave futura de idempotencia no payload MQTT para deduplicar eventos semanticamente iguais
+
+### Limitacoes conhecidas
+- `stress:real` depende de backend, broker e MySQL locais ja rodando; sem esses prerequisitos ele falha cedo e gera relatorio de falha
+- a janela de evidencia e rastreabilidade tecnica, nao validacao clinica
+
 ## [v0.8.15] - 2026-05-12
 ### Adicionado
 - documentacao tecnica `docs/alerting-architecture.md` com fluxo real ESP32 -> MQTT -> backend -> banco -> Socket.IO -> frontend para quedas e SOS

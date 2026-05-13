@@ -82,6 +82,8 @@ Exemplo de `fall_detected`:
 
 O campo `timestamp` deve ser Unix time em segundos quando o NTP ja sincronizou. Se o firmware ainda estiver no fallback monotônico de boot (`millis()/1000`), o backend considera o valor implausivel e usa a hora de recebimento para `lastSeenAt`, `event_time` e `created_at`.
 
+Para `fall_detected`, o evento nao e mais tratado como alerta confiavel isolado. O backend procura telemetria do mesmo device entre `event_time - 10s` e `event_time + 3s`. Se encontrar amostras, grava `evidenceStatus` (`partial` ou `linked`), `evidenceTelemetryId`, contagem, janela e resumo tecnico. Se nao encontrar, grava o evento com `evidenceStatus=none`, loga warning e nao cria alerta automatico de queda. `sos_pressed` continua podendo criar alerta sem telemetria por ser acionamento manual.
+
 ### `status`
 
 ```json
@@ -177,6 +179,7 @@ Heuristica atual, em alto nivel:
 - baixa movimentacao + orientacao inclinada estavel: `sentado`
 - variacao acima do repouso: `em_movimento`
 - `fall_detected` recente: `queda_suspeita` ou `queda_confirmada`
+- `fall_detected` recente sem evidencia de telemetria: no maximo `queda_suspeita`
 
 O frontend usa esse bloco para mostrar o estado atual no dashboard, na lista de devices e na pagina de detalhe, sempre como heuristica experimental.
 
@@ -495,13 +498,16 @@ Isso ajuda a pegar regressao real de escopo, em vez de apenas confirmar que o ba
 
 ## Testes de alertas, MQTT e stress
 
-A rodada `v0.8.15` adicionou testes `node:test` focados no backend:
+A rodada atual mantem testes `node:test` focados no backend e separa claramente smoke, integracao leve, stress dry-run e stress real:
 
 ```powershell
 npm test --prefix backend
+npm run test:smoke --prefix backend
+npm run test:integration --prefix backend
 npm run test:alerts --prefix backend
 npm run test:mqtt --prefix backend
-npm run stress:alerts --prefix backend
+npm run stress:dry --prefix backend
+npm run stress:real --prefix backend
 ```
 
 Os testes cobrem:
@@ -511,16 +517,24 @@ Os testes cobrem:
 - descartes e persistencia simulada em `mqttIngestionService`
 - lock por `device_id` em mensagens simultaneas
 - emissao Socket.IO escopada para organizacao/paciente/plataforma
+- vinculo entre `fall_detected` e telemetria recente
+- bloqueio de alerta automatico de queda sem evidencia
 - grafico frontend com eixo temporal numerico para reduzir aparencia de telemetria travada
 
-A suite `stress:alerts` roda em dry-run local e gera:
+`stress:dry` substitui o antigo nome ambiguo de stress local mockado. Ele pressiona o fluxo em processo local, mas nao mede broker, backend e MySQL reais.
+
+`stress:real` valida backend `/health`, broker MQTT e banco MySQL de desenvolvimento antes de publicar mensagens MQTT reais e consultar persistencia depois do teste. Ele aborta em producao e falha claramente quando algum prerequisito nao estiver disponivel.
+
+As suites geram:
 
 ```text
 backend/logs/stress/stress-<runId>.jsonl
 backend/logs/stress/summary-<runId>.json
+backend/logs/stress/failures-<runId>.json
+backend/logs/stress/report-<runId>.md
 ```
 
-Ela nao dispara notificacao externa. No estado atual do projeto, alerta significa registro interno em banco e realtime no painel; SMS, WhatsApp, e-mail, push e webhook ficam como camada futura documentada em [alerting-architecture.md](alerting-architecture.md).
+Elas nao disparam notificacao externa. No estado atual do projeto, alerta significa registro interno em banco e realtime no painel; SMS, WhatsApp, e-mail, push e webhook ficam como camada futura documentada em [alerting-architecture.md](alerting-architecture.md).
 
 ## Observacoes operacionais importantes
 

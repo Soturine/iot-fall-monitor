@@ -18,6 +18,7 @@ const {
   recordEventFromMqtt,
   recordTelemetryFromMqtt,
   shouldCreateAlert,
+  shouldCreateAlertForEvent,
 } = require("./eventService");
 const { createAlertForEvent } = require("./alertService");
 const { emitScopedEvent } = require("../socket/scopedEmitter");
@@ -217,7 +218,7 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
         connection,
       );
 
-      if (shouldCreateAlert(event.eventType)) {
+      if (shouldCreateAlertForEvent(event)) {
         const alert = await createAlertForEvent(event, connection, { correlationId });
 
         return {
@@ -226,6 +227,18 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
           event,
           alert,
         };
+      }
+
+      if (shouldCreateAlert(event.eventType) && event.eventType === "fall_detected") {
+        logger.warn("Alerta de queda bloqueado por evidencia insuficiente.", {
+          topic: topicInfo.topic,
+          correlationId,
+          device: deviceLog,
+          eventId: event.id,
+          eventType: event.eventType,
+          evidenceStatus: event.evidenceStatus,
+          evidenceSampleCount: event.evidenceSampleCount,
+        });
       }
 
       return {
@@ -293,6 +306,8 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
       device: result.deviceLog,
       eventId: result.event.id,
       eventType: result.event.eventType,
+      evidenceStatus: result.event.evidenceStatus,
+      evidenceSampleCount: result.event.evidenceSampleCount,
       alertId: result.alert?.id || null,
       durationMs: elapsedMsSince(messageStartedAt),
     });

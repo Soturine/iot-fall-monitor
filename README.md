@@ -6,9 +6,9 @@ O objetivo do repositório é integrar hardware embarcado, ingestão de eventos,
 
 ## Baseline Atual
 
-Baseline atual do repositório: `v0.8.15`.
+Baseline atual do repositório: `v0.8.16`.
 
-A baseline `v0.8.15` documenta o fluxo real de alertas, adiciona testes `node:test` para eventos, alertas, MQTT e Socket.IO, inclui uma suite de stress dry-run com logs JSONL e reforca a visualizacao do grafico de telemetria com eixo temporal numerico.
+A baseline `v0.8.16` vincula `fall_detected` a evidencia de telemetria recente, separa `stress:dry` de `stress:real`, adiciona relatorios Markdown de stress e reforca o grafico de telemetria para timestamps muito proximos.
 
 Para a experiência local prevista nesta fase, o projeto está estabilizado para `Node.js 20+`.
 
@@ -38,6 +38,7 @@ O modelo atual deixou de ser um painel global único e passou a trabalhar com or
 - reconciliação segura entre `device_uid` real do ESP32 e cadastros legados `legacy:{device_id}` já pareados
 - lock leve por device na ingestão MQTT para reduzir corrida entre status/eventos/telemetria simultâneos
 - alertas idempotentes por evento MQTT persistido
+- vínculo técnico entre queda detectada e janela de telemetria relacionada
 - logs de ingestão MQTT com `correlationId`, escopo, duração e motivo de descarte
 - testes unitários e de integração leve para alertas, ingestão MQTT e realtime escopado
 - suite de stress dry-run para rajadas de telemetria, quedas, payloads ruins e concorrência
@@ -159,12 +160,15 @@ Testes tecnicos do backend:
 ```powershell
 npm run check --prefix backend
 npm test --prefix backend
+npm run test:smoke --prefix backend
+npm run test:integration --prefix backend
 npm run test:alerts --prefix backend
 npm run test:mqtt --prefix backend
-npm run stress:alerts --prefix backend
+npm run stress:dry --prefix backend
+npm run stress:real --prefix backend
 ```
 
-Os logs da suite de stress ficam em `backend/logs/stress/` e sao ignorados pelo Git.
+`stress:dry` usa mocks locais para regressão rápida. `stress:real` valida backend `/health`, broker MQTT e MySQL de desenvolvimento antes de publicar MQTT real. Os logs ficam em `backend/logs/stress/` (`*.jsonl`, `summary-*.json`, `failures-*.json`, `report-*.md`) e sao ignorados pelo Git.
 
 O fluxo local esperado usa:
 

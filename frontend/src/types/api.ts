@@ -146,6 +146,16 @@ export interface DeviceRef {
   patientName?: string;
 }
 
+export type EvidenceStatus = "none" | "partial" | "linked";
+
+export interface EvidenceSummary {
+  maxAccelMagnitude: number | null;
+  maxGyroMagnitude: number | null;
+  immobilityConfirmed: boolean;
+  firstSampleAt: string | null;
+  lastSampleAt: string | null;
+}
+
 export interface EventRecord {
   id: number;
   organizationId: number | null;
@@ -156,6 +166,11 @@ export interface EventRecord {
   intensity: number | null;
   immobility: boolean;
   message: string;
+  evidenceStatus: EvidenceStatus;
+  evidenceTelemetryId: number | null;
+  evidenceSampleCount: number;
+  evidenceWindowSeconds: number | null;
+  evidenceSummary: EvidenceSummary | null;
   eventTime: string | null;
   rawPayloadJson: unknown;
   createdAt: string | null;
@@ -201,6 +216,11 @@ export interface AlertRecord {
     intensity: number | null;
     immobility: boolean;
     message: string;
+    evidenceStatus: EvidenceStatus;
+    evidenceTelemetryId: number | null;
+    evidenceSampleCount: number;
+    evidenceWindowSeconds: number | null;
+    evidenceSummary: EvidenceSummary | null;
     eventTime: string | null;
     rawPayloadJson: unknown;
   };
