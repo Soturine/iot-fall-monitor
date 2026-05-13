@@ -1,6 +1,6 @@
 {
   "name": "backend",
-  "version": "0.8.16",
+  "version": "0.8.17",
   "description": "Backend MQTT + API REST do sistema de monitoramento de quedas com ESP32",
   "main": "src/server.js",
   "engines": {
@@ -18,12 +18,15 @@
     "test:stress": "npm run stress:dry",
     "mock:publisher": "node scripts/mockPublisher.js",
     "dev:broker": "node scripts/devBroker.js",
+    "mqtt:watch": "node scripts/mqttWatch.js",
+    "mqtt:publish:test": "node scripts/mqttPublishTest.js",
     "mqtt:test": "node scripts/testMqttConnection.js",
     "stress:dry": "node scripts/stress/runStressSuite.js --mode=dry",
     "stress:real": "node scripts/stress/runRealStressSuite.js",
     "stress:alerts": "npm run stress:dry",
     "stress:cleanup": "node scripts/stress/cleanupStressData.js",
-    "db:init": "node scripts/initDb.js"
+    "db:init": "node scripts/initDb.js",
+    "db:migrate:evidence": "node scripts/migrateEvidenceSchema.js"
   },
   "keywords": [
     "esp32",

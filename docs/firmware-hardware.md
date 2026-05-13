@@ -217,7 +217,19 @@ Nesta baseline, a telemetria continua sendo publicada em alta frequencia, mas ag
 
 Com isso, o backend consegue manter bateria, RSSI e `lastSeenAt` mais coerentes nas telas sem depender apenas do `status` periodico.
 
-Se o ESP32 ainda nao sincronizou NTP e mandar `timestamp = millis()/1000`, o backend passa a descartar esse timestamp implausivel e usa a hora de recebimento. Isso evita telemetria recem-chegada com data antiga e status falsamente offline.
+Para online/offline, o backend usa a hora em que recebeu MQTT como `lastSeenAt`. Se o ESP32 ainda nao sincronizou NTP e mandar `timestamp = millis()/1000`, ou se mandar um Unix time plausivel mas stale demais, o backend usa a hora de recebimento para telemetria/eventos. Isso evita telemetria recem-chegada com data antiga, evidencia de queda sem vinculo e status falsamente offline.
+
+Para confirmar publicacao real em bancada, rode no notebook:
+
+```powershell
+npm run mqtt:watch --prefix backend
+```
+
+Para gerar telemetria valida sem ESP32 fisico:
+
+```powershell
+npm run mqtt:publish:test --prefix backend -- --device esp32_01 --count 10
+```
 
 ## Buzzer e motion test
 

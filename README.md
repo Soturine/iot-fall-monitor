@@ -6,9 +6,9 @@ O objetivo do repositório é integrar hardware embarcado, ingestão de eventos,
 
 ## Baseline Atual
 
-Baseline atual do repositório: `v0.8.16`.
+Baseline atual do repositório: `v0.8.17`.
 
-A baseline `v0.8.16` vincula `fall_detected` a evidencia de telemetria recente, separa `stress:dry` de `stress:real`, adiciona relatorios Markdown de stress e reforca o grafico de telemetria para timestamps muito proximos.
+A baseline `v0.8.17` reforca o diagnostico MQTT ponta a ponta, adiciona scripts para observar/publicar mensagens reais no broker local e evita falso offline quando o ESP32 envia timestamp stale apesar de estar publicando.
 
 Para a experiência local prevista nesta fase, o projeto está estabilizado para `Node.js 20+`.
 
@@ -166,9 +166,14 @@ npm run test:alerts --prefix backend
 npm run test:mqtt --prefix backend
 npm run stress:dry --prefix backend
 npm run stress:real --prefix backend
+npm run db:migrate:evidence --prefix backend
+npm run mqtt:watch --prefix backend
+npm run mqtt:publish:test --prefix backend
 ```
 
 `stress:dry` usa mocks locais para regressão rápida. `stress:real` valida backend `/health`, broker MQTT e MySQL de desenvolvimento antes de publicar MQTT real. Os logs ficam em `backend/logs/stress/` (`*.jsonl`, `summary-*.json`, `failures-*.json`, `report-*.md`) e sao ignorados pelo Git.
+
+`db:migrate:evidence` aplica apenas a migração idempotente das colunas/tabela de evidência sem resetar dados. `mqtt:watch` assina os tópicos reais `queda/devices/+/status`, `telemetry` e `events` para confirmar se o ESP32 está publicando. `mqtt:publish:test` publica status e telemetria válidos no mesmo contrato do firmware, útil para testar backend/dashboard sem hardware.
 
 O fluxo local esperado usa:
 
@@ -272,7 +277,7 @@ Eventos `Socket.IO` atuais:
 
 O diagnóstico de realtime no frontend separa o socket do navegador da saúde MQTT/device. Portanto, uma mensagem de socket indisponível no navegador não significa necessariamente que o ESP32, o broker MQTT ou a ingestão MQTT tenham caído.
 
-No firmware, os tópicos continuam seguindo `queda/devices/{deviceId}/status`, `queda/devices/{deviceId}/telemetry` e `queda/devices/{deviceId}/events`. Se o NTP do ESP32 ainda não sincronizou e o payload trouxer um timestamp monotônico de boot, o backend usa a hora de recebimento para evitar `lastSeenAt` antigo e falso offline.
+No firmware, os tópicos continuam seguindo `queda/devices/{deviceId}/status`, `queda/devices/{deviceId}/telemetry` e `queda/devices/{deviceId}/events`. Para status online/offline, o backend usa a hora em que recebeu MQTT como `lastSeenAt`. Para telemetria/eventos, timestamps do device só são usados quando estão plausíveis e próximos do recebimento; se o NTP estiver ausente ou stale, a hora do backend entra como fallback para evitar gráfico antigo e falso offline.
 
 Após F5 em rota protegida, o frontend preserva o token, reidrata o usuário via `GET /api/me`, descarta apenas uma organização salva inválida e só cria o Socket.IO depois que a sessão mínima está hidratada.
 

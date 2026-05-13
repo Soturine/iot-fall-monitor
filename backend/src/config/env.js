@@ -1,6 +1,6 @@
 const path = require("path");
 
-require("dotenv").config({ path: path.resolve(process.cwd(), ".env") });
+require("dotenv").config({ path: path.resolve(process.cwd(), ".env"), quiet: true });
 
 function toNumber(value, fallback) {
   const parsed = Number(value);

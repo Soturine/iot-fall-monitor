@@ -366,6 +366,27 @@ npm run mqtt:test -- IP_DO_NOTEBOOK 1883
 
 O esperado e `MQTT handshake OK`.
 
+Para confirmar mensagens reais do ESP32 no broker que o backend usa:
+
+```powershell
+npm run mqtt:watch --prefix backend
+```
+
+O watcher deve mostrar linhas JSON com `topic`, `bytes`, `json: "ok"` e um resumo com `device_id`, `device_uid`, `timestamp`, RSSI/bateria ou amostras do sensor.
+
+Para testar backend e dashboard sem ESP32 fisico:
+
+```powershell
+npm run mqtt:publish:test --prefix backend
+npm run mqtt:publish:test --prefix backend -- --device esp32_01 --count 10 --interval-ms 1000
+```
+
+Se o backend iniciar avisando schema desatualizado para evidencia, rode a migracao sem reset:
+
+```powershell
+npm run db:migrate:evidence --prefix backend
+```
+
 Observacoes:
 
 - `localhost:1883` funcionando nao garante que o ESP32 consiga acessar

@@ -3,6 +3,7 @@ const http = require("http");
 const { createApp } = require("./app");
 const { env } = require("./config/env");
 const { testConnection, pool } = require("./db/pool");
+const { checkRuntimeSchema } = require("./db/schemaHealth");
 const { startDeviceStatusJob } = require("./jobs/deviceStatusJob");
 const { createMqttBridge } = require("./mqtt/client");
 const { createSocketServer } = require("./socket");
@@ -10,6 +11,14 @@ const { logger } = require("./utils/logger");
 
 async function startServer() {
   await testConnection();
+  const schemaHealth = await checkRuntimeSchema();
+
+  if (!schemaHealth.ok) {
+    logger.error("Schema do banco parece desatualizado para o fluxo atual.", {
+      missing: schemaHealth.missing,
+      recommendation: "Execute npm run db:migrate:evidence --prefix backend e reinicie o backend.",
+    });
+  }
 
   const app = createApp();
   const httpServer = http.createServer(app);

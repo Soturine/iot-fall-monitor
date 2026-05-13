@@ -52,6 +52,7 @@ function createMqttBridge({ io }) {
     const topics = getSubscriptionTopics();
     logger.info("Conectado ao broker MQTT.", {
       brokerUrl: env.mqtt.brokerUrl,
+      clientId: env.mqtt.clientId,
       topics,
     });
 
@@ -63,17 +64,31 @@ function createMqttBridge({ io }) {
         return;
       }
 
-      logger.info("Tópicos MQTT assinados com sucesso.");
+      logger.info("Topicos MQTT assinados com sucesso.", {
+        topicCount: topics.length,
+        topics,
+      });
     });
   });
 
   client.on("message", (topic, payloadBuffer) => {
+    const payloadBytes = payloadBuffer?.length || 0;
     const topicInfo = parseDeviceTopic(topic);
 
     if (!topicInfo) {
-      logger.warn("Tópico MQTT ignorado fora do padrão configurado.", { topic });
+      logger.warn("Topico MQTT ignorado fora do padrao configurado.", {
+        topic,
+        payloadBytes,
+      });
       return;
     }
+
+    logger.debug("Pacote MQTT recebido pelo backend.", {
+      topic,
+      channel: topicInfo.channel,
+      topicDeviceIdentifier: topicInfo.deviceIdentifier,
+      payloadBytes,
+    });
 
     handleMqttMessage({
       topicInfo,

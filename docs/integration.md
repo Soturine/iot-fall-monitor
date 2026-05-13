@@ -80,7 +80,7 @@ Exemplo de `fall_detected`:
 }
 ```
 
-O campo `timestamp` deve ser Unix time em segundos quando o NTP ja sincronizou. Se o firmware ainda estiver no fallback monotônico de boot (`millis()/1000`), o backend considera o valor implausivel e usa a hora de recebimento para `lastSeenAt`, `event_time` e `created_at`.
+O campo `timestamp` deve ser Unix time em segundos quando o NTP ja sincronizou. Para `device_status.last_seen_at`, o backend usa a hora real de recebimento MQTT, porque a chegada de `status`/`telemetry` ja prova presenca recente do ESP32. Para `telemetry.created_at` e `events.event_time`, o timestamp do device so e usado quando e plausivel e esta proximo do recebimento; se o firmware estiver no fallback monotônico de boot (`millis()/1000`) ou com clock/NTP stale, o backend usa a hora de recebimento para evitar grafico antigo, evidencia quebrada e falso offline.
 
 Para `fall_detected`, o evento nao e mais tratado como alerta confiavel isolado. O backend procura telemetria do mesmo device entre `event_time - 10s` e `event_time + 3s`. Se encontrar amostras, grava `evidenceStatus` (`partial` ou `linked`), `evidenceTelemetryId`, contagem, janela e resumo tecnico. Se nao encontrar, grava o evento com `evidenceStatus=none`, loga warning e nao cria alerta automatico de queda. `sos_pressed` continua podendo criar alerta sem telemetria por ser acionamento manual.
 
@@ -278,6 +278,25 @@ npm run mqtt:test -- IP_DO_NOTEBOOK 1883
 O esperado e `MQTT handshake OK`. Para o backend local, prefira `MQTT_BROKER_URL=mqtt://127.0.0.1:1883`; para o ESP32, use o IPv4 real do notebook.
 
 `localhost`, `127.0.0.1` e `::1` apontam para o proprio computador e nao servem como `MQTT_HOST` no ESP32. Mesmo com o broker em `0.0.0.0:1883`, firewall local ou isolamento de clientes em rede institucional ainda podem impedir a conexao.
+
+### Diagnostico de mensagens MQTT reais
+
+Para ver se o ESP32 esta publicando de fato no broker usado pelo backend:
+
+```powershell
+npm run mqtt:watch --prefix backend
+```
+
+O watcher assina os topicos reais `queda/devices/+/status`, `queda/devices/+/telemetry` e `queda/devices/+/events`, e imprime uma linha JSON por mensagem com timestamp local, topico, tamanho, resumo do payload e status de parse JSON.
+
+Para testar backend, banco, Socket.IO e dashboard sem ESP32 fisico:
+
+```powershell
+npm run mqtt:publish:test --prefix backend
+npm run mqtt:publish:test --prefix backend -- --device esp32_01 --count 10 --interval-ms 1000
+```
+
+Esse publisher usa o mesmo contrato MQTT esperado pelo backend e publica `status` + telemetria em `queda/devices/{deviceId}/status` e `queda/devices/{deviceId}/telemetry`.
 
 ### Endpoint usado pelo ESP32
 

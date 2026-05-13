@@ -111,8 +111,8 @@ function buildHarness(options = {}) {
     },
   };
   const fakeEventService = {
-    recordEventFromMqtt: async ({ payload }) => {
-      calls.events.push(payload);
+    recordEventFromMqtt: async ({ payload, eventTime, receivedAt }) => {
+      calls.events.push({ payload, eventTime, receivedAt });
       const eventType = payload.event_type || "device_event";
       const evidenceStatus = eventType === "fall_detected"
         ? options.fallEvidenceStatus || "linked"
@@ -136,8 +136,8 @@ function buildHarness(options = {}) {
         },
       };
     },
-    recordTelemetryFromMqtt: async ({ payload }) => {
-      calls.telemetry.push(payload);
+    recordTelemetryFromMqtt: async ({ payload, createdAt, receivedAt }) => {
+      calls.telemetry.push({ payload, createdAt, receivedAt });
       return {
         id: telemetryId += 1,
         deviceId: device.id,
@@ -350,6 +350,35 @@ test("timestamp absurdo usa fallback do backend e loga diagnostico", async () =>
     assert.ok(
       calls.logs.some(
         (entry) => entry.metadata?.reason === "implausible_device_timestamp",
+      ),
+    );
+  });
+});
+
+test("timestamp plausivel mas stale nao derruba status realtime para offline", async () => {
+  await withHarness({}, async ({ calls, handleMqttMessage }) => {
+    await handleMqttMessage({
+      topicInfo: topicInfo("telemetry"),
+      payloadText: JSON.stringify({
+        device_id: "esp32_01",
+        timestamp: Math.floor(new Date("2026-01-01T00:00:00.000Z").getTime() / 1000),
+        ax: 0,
+        ay: 0,
+        az: 1,
+      }),
+      io: {},
+    });
+
+    const lastSeenAt = calls.status[0].fields.lastSeenAt;
+    const createdAt = calls.telemetry[0].createdAt;
+
+    assert.ok(lastSeenAt instanceof Date);
+    assert.ok(Date.now() - lastSeenAt.getTime() < 10_000);
+    assert.ok(createdAt instanceof Date);
+    assert.ok(Date.now() - createdAt.getTime() < 10_000);
+    assert.ok(
+      calls.logs.some(
+        (entry) => entry.metadata?.reason === "device_clock_skew_exceeded",
       ),
     );
   });

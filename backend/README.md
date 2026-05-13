@@ -25,7 +25,10 @@ backend/
     check.js
     devBroker.js
     initDb.js
+    migrateEvidenceSchema.js
     mockPublisher.js
+    mqttPublishTest.js
+    mqttWatch.js
   src/
     config/
     controllers/
@@ -96,6 +99,15 @@ npm run mqtt:test -- IP_DO_NOTEBOOK 1883
 ```
 
 O esperado e `MQTT handshake OK`.
+
+Para separar broker, ESP32 e backend durante bancada:
+
+```powershell
+npm run mqtt:watch --prefix backend
+npm run mqtt:publish:test --prefix backend
+```
+
+`mqtt:watch` assina os topicos reais `queda/devices/+/status`, `queda/devices/+/telemetry` e `queda/devices/+/events`, mostrando timestamp, topico, tamanho, resumo do payload e erro de JSON quando houver. `mqtt:publish:test` publica um status e uma sequencia curta de telemetria valida; use `-- --device esp32_01 --count 10 --interval-ms 1000` para testar o dashboard sem ESP32 real.
 
 ### Identidade MQTT e devices legados
 
@@ -259,7 +271,8 @@ Na ingestao:
 - `status`, `telemetry` e `events` recebem snapshot do escopo atual do device
 - alertas abertos herdam `organization_id` e `patient_id`
 - `Socket.IO` tambem emite em escopo filtrado
-- timestamps MQTT so sao usados quando parecem Unix time plausivel; se o ESP32 ainda estiver sem NTP e enviar `millis()/1000`, o backend persiste a hora de recebimento para evitar device falsamente stale/offline
+- `device_status.last_seen_at` agora usa a hora de recebimento do MQTT no backend, porque receber status/telemetria ja prova presenca recente do ESP32
+- timestamps MQTT em telemetria/eventos so sao usados quando parecem Unix time plausivel e proximos do recebimento; se o ESP32 estiver sem NTP ou com clock stale, o backend persiste a hora de recebimento para evitar device falsamente stale/offline
 - `fall_detected` busca telemetria recente do mesmo device em uma janela de `-10s/+3s`; sem evidencia, o evento fica auditavel, mas nao cria alerta automatico de queda
 - `sos_pressed` segue criando alerta sem telemetria, porque e acionamento manual
 
@@ -344,6 +357,7 @@ Importante:
 
 - a versao atual do schema recria as tabelas do projeto
 - `npm run db:init` e `.\scripts\init-db.ps1` devem ser tratados como reset de ambiente nesta migracao
+- se o backend logar schema desatualizado para evidencia, rode `npm run db:migrate:evidence --prefix backend`; esse script e idempotente e nao apaga dados
 
 ## Scripts do backend
 
@@ -361,7 +375,10 @@ Importante:
 - `npm run stress:cleanup`: lista/remover logs locais de stress quando chamado com `-- --yes`
 - `npm run mock:publisher`: publica dados simulados no broker MQTT configurado
 - `npm run dev:broker`: sobe um broker MQTT local leve com `Aedes`
+- `npm run mqtt:watch`: assina os topicos reais e imprime mensagens MQTT recebidas no broker
+- `npm run mqtt:publish:test`: publica status/telemetria de teste no contrato esperado pelo backend
 - `npm run db:init`: aplica schema e seed usando `mysql2` e o `backend/.env`
+- `npm run db:migrate:evidence`: aplica colunas/tabela de evidencia sem resetar dados existentes
 
 O smoke test da raiz passou a validar tambem `GET /api/organization` e `GET /api/patients`, usando o `activeOrganizationId` retornado no login para montar o header `X-Organization-Id`.
 

@@ -1,5 +1,26 @@
 # Changelog
 
+## [v0.8.17] - 2026-05-13
+### Adicionado
+- scripts `npm run mqtt:watch --prefix backend` e `npm run mqtt:publish:test --prefix backend` para observar mensagens reais no broker e publicar telemetria valida sem ESP32 fisico
+- migracao idempotente `npm run db:migrate:evidence --prefix backend` para aplicar o schema de evidencia sem resetar dados locais
+- verificacao de schema no startup do backend com recomendacao clara quando colunas/tabela de evidencia estiverem ausentes
+- logs de diagnostico mais claros no broker dev e na bridge MQTT, incluindo topico, tamanho do payload, `clientId`, `correlationId`, canal, device resolvido e resultado do processamento
+
+### Alterado
+- versao alinhada para `0.8.17` em `CHANGELOG.md`, `README.md`, `package.json` da raiz, `backend/package.json`, `backend/package-lock.json`, `frontend/package.json` e `frontend/package-lock.json`
+- `device_status.last_seen_at` passou a usar a hora de recebimento MQTT no backend, evitando falso offline quando o ESP32 publica com timestamp stale
+- persistencia de telemetria/eventos normaliza timestamps do device quando o clock/NTP esta ausente ou distante demais do recebimento
+- documentacao de diagnostico MQTT passou a separar broker ativo, publish real do ESP32, ingestao do backend, persistencia e emissao Socket.IO
+
+### Corrigido
+- dashboard e detalhe de device deixam de depender de timestamp antigo do payload para decidir se a telemetria MQTT recente esta viva
+- bancos locais atualizados de versoes anteriores agora podem receber a migracao de evidencia sem `db:init` destrutivo
+
+### Pendente / Faltando
+- validar por varios minutos com ESP32 fisico se `mqtt:watch`, logs do backend e dashboard mostram fluxo continuo de `telemetry` a cada intervalo esperado
+- se houver multiplas instancias do backend no futuro, manter a recomendacao de lock/fila distribuida por device
+
 ## [v0.8.16] - 2026-05-13
 ### Adicionado
 - campos de evidencia em `events` (`evidence_status`, `evidence_telemetry_id`, `evidence_sample_count`, `evidence_window_seconds`, `evidence_summary_json`)

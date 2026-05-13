@@ -4,7 +4,11 @@ const { parseMaybeJson, toBoolean } = require("../utils/formatters");
 const { HttpError } = require("../utils/httpError");
 const { logger } = require("../utils/logger");
 const { getPagination } = require("../utils/pagination");
-const { parseDateBoundary, toDateFromDeviceTimestamp } = require("../utils/time");
+const {
+  parseDateBoundary,
+  resolveRealtimeMqttTimestamp,
+  toDateFromDeviceTimestamp,
+} = require("../utils/time");
 const { buildScopeFilter, canAccessScope } = require("./scopeService");
 
 const FALL_EVIDENCE_WINDOW_BEFORE_MS = 10_000;
@@ -33,6 +37,18 @@ function toIso(value) {
 
   const date = value instanceof Date ? value : new Date(value);
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function resolveMqttPersistenceTime(payload, receivedAt, override = null) {
+  if (override) {
+    return override;
+  }
+
+  if (receivedAt) {
+    return resolveRealtimeMqttTimestamp(payload.timestamp, receivedAt).date;
+  }
+
+  return payload.timestamp ? toDateFromDeviceTimestamp(payload.timestamp) : new Date();
 }
 
 function deriveSeverity(eventType, payload) {
@@ -370,15 +386,19 @@ async function getEventById(eventId, accessContext, executor = null) {
   return mapEventRow(row);
 }
 
-async function recordEventFromMqtt({ device, payload, correlationId = null }, executor = null) {
+async function recordEventFromMqtt({
+  device,
+  payload,
+  correlationId = null,
+  eventTime: eventTimeOverride = null,
+  receivedAt = null,
+}, executor = null) {
   const startedAt = process.hrtime.bigint();
   const eventType = String(payload.event_type || "device_event");
   const message = deriveMessage(eventType, payload);
   const intensity = toNullableNumber(payload.intensity ?? payload.accel_magnitude);
   const immobility = toBoolean(payload.immobility ?? payload.immobility_confirmed);
-  const eventTime = payload.timestamp
-    ? toDateFromDeviceTimestamp(payload.timestamp)
-    : new Date();
+  const eventTime = resolveMqttPersistenceTime(payload, receivedAt, eventTimeOverride);
   const evidence = eventType === "fall_detected"
     ? await resolveFallTelemetryEvidence({ device, eventTime, immobility }, executor)
     : buildEmptyEvidence(immobility);
@@ -481,11 +501,15 @@ async function recordEventFromMqtt({ device, payload, correlationId = null }, ex
   return event;
 }
 
-async function recordTelemetryFromMqtt({ device, payload, correlationId = null }, executor = null) {
+async function recordTelemetryFromMqtt({
+  device,
+  payload,
+  correlationId = null,
+  createdAt: createdAtOverride = null,
+  receivedAt = null,
+}, executor = null) {
   const startedAt = process.hrtime.bigint();
-  const createdAt = payload.timestamp
-    ? toDateFromDeviceTimestamp(payload.timestamp)
-    : new Date();
+  const createdAt = resolveMqttPersistenceTime(payload, receivedAt, createdAtOverride);
 
   const result = await execute(
     executor,

@@ -33,6 +33,18 @@ function clientId(client) {
   return client?.id || "sem-id";
 }
 
+function payloadSize(packet) {
+  if (!packet || packet.payload == null) {
+    return 0;
+  }
+
+  if (Buffer.isBuffer(packet.payload)) {
+    return packet.payload.length;
+  }
+
+  return Buffer.byteLength(String(packet.payload), "utf8");
+}
+
 function registerAedesLogs(broker) {
   broker.on("client", (client) => {
     console.log(`[devBroker] MQTT client created: ${clientId(client)}`);
@@ -71,7 +83,9 @@ function registerAedesLogs(broker) {
       return;
     }
 
-    console.log(`[devBroker] ${client.id} -> ${packet.topic}`);
+    console.log(
+      `[devBroker] publish client=${client.id} topic=${packet.topic} bytes=${payloadSize(packet)} qos=${packet.qos ?? 0} retain=${Boolean(packet.retain)}`,
+    );
   });
 }
 

@@ -5,10 +5,7 @@ const {
 } = require("../utils/correlation");
 const { logger } = require("../utils/logger");
 const { toBoolean } = require("../utils/formatters");
-const {
-  isPlausibleDeviceUnixSeconds,
-  toDateFromDeviceTimestamp,
-} = require("../utils/time");
+const { resolveRealtimeMqttTimestamp } = require("../utils/time");
 const {
   getDeviceBehaviorSnapshot,
   getOrCreateDeviceByIdentity,
@@ -33,27 +30,21 @@ function toNullableNumber(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function normalizeTimestamp(value) {
-  if (value == null) {
-    return new Date();
-  }
-
-  return toDateFromDeviceTimestamp(value);
-}
-
-function buildStatusUpdateFromPayload(payload) {
+function buildStatusUpdateFromPayload(payload, receivedAt) {
   return {
     online: payload.online === undefined ? true : toBoolean(payload.online),
     wifiRssi: toNullableNumber(payload.wifi_rssi),
     batteryPercent: toNullableNumber(payload.battery_percent ?? payload.battery_level),
     firmwareVersion: payload.firmware_version ? String(payload.firmware_version) : null,
-    lastSeenAt: normalizeTimestamp(payload.timestamp),
+    lastSeenAt: receivedAt,
   };
 }
 
 async function handleMqttMessage({ topicInfo, payloadText, io }) {
   const correlationId = createCorrelationId("mqtt");
   const messageStartedAt = process.hrtime.bigint();
+  const receivedAt = new Date();
+  const payloadBytes = Buffer.byteLength(payloadText || "", "utf8");
   let payload;
 
   try {
@@ -63,7 +54,7 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
       topic: topicInfo.topic,
       channel: topicInfo.channel,
       correlationId,
-      payloadBytes: Buffer.byteLength(payloadText || "", "utf8"),
+      payloadBytes,
       reason: "invalid_json",
       durationMs: elapsedMsSince(messageStartedAt),
     });
@@ -81,6 +72,7 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
       channel: topicInfo.channel,
       correlationId,
       payloadKeys: Object.keys(payload || {}),
+      payloadBytes,
       reason: "missing_device_id",
       durationMs: elapsedMsSince(messageStartedAt),
     });
@@ -92,35 +84,57 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
       topic: topicInfo.topic,
       channel: topicInfo.channel,
       correlationId,
+      payloadBytes,
       reason: "unsupported_channel",
       durationMs: elapsedMsSince(messageStartedAt),
     });
     return;
   }
 
-  if (topicInfo.channel === "status" || topicInfo.channel === "telemetry") {
-    logger.info(`MQTT ${topicInfo.channel} recebido.`, {
+  if (
+    topicInfo.deviceIdentifier &&
+    payload.device_id &&
+    String(topicInfo.deviceIdentifier) !== String(payload.device_id)
+  ) {
+    logger.warn("MQTT device_id do payload diverge do device no topico.", {
       topic: topicInfo.topic,
+      channel: topicInfo.channel,
       topicDeviceIdentifier: topicInfo.deviceIdentifier,
       payloadDeviceId: deviceIdentifier,
       deviceUid: deviceUid || null,
       correlationId,
+      payloadBytes,
+      reason: "topic_payload_device_mismatch",
     });
   }
 
-  if (
-    payload.timestamp != null &&
-    !isPlausibleDeviceUnixSeconds(payload.timestamp)
-  ) {
-    logger.debug("Timestamp MQTT do device ignorado; usando hora do backend.", {
+  const timestampResolution = resolveRealtimeMqttTimestamp(payload.timestamp, receivedAt);
+
+  if (timestampResolution.reason) {
+    logger.info("Timestamp MQTT normalizado para hora de recebimento do backend.", {
       topic: topicInfo.topic,
       channel: topicInfo.channel,
       payloadDeviceId: deviceIdentifier,
       timestamp: payload.timestamp,
       correlationId,
-      reason: "implausible_device_timestamp",
+      reason: timestampResolution.reason,
+      skewSeconds: timestampResolution.skewSeconds,
+      receivedAt: receivedAt.toISOString(),
     });
   }
+
+  logger.info(`MQTT ${topicInfo.channel} recebido.`, {
+    topic: topicInfo.topic,
+    channel: topicInfo.channel,
+    topicDeviceIdentifier: topicInfo.deviceIdentifier,
+    payloadDeviceId: deviceIdentifier,
+    deviceUid: deviceUid || null,
+    eventType: topicInfo.channel === "events" ? payload.event_type || "device_event" : null,
+    correlationId,
+    payloadBytes,
+    receivedAt: receivedAt.toISOString(),
+    timestampSource: timestampResolution.source,
+  });
 
   return runWithKeyedLock(`mqtt:${deviceIdentifier}`, async () => {
     const result = await transaction(async (connection) => {
@@ -150,7 +164,7 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
       if (topicInfo.channel === "status") {
         const status = await upsertDeviceStatus(
           device.id,
-          buildStatusUpdateFromPayload(payload),
+          buildStatusUpdateFromPayload(payload, receivedAt),
           currentScope,
           connection,
         );
@@ -165,7 +179,7 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
       if (topicInfo.channel === "telemetry") {
         const statusUpdate = await upsertDeviceStatus(
           device.id,
-          buildStatusUpdateFromPayload(payload),
+          buildStatusUpdateFromPayload(payload, receivedAt),
           currentScope,
           connection,
           { returnSnapshot: false },
@@ -176,6 +190,8 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
             device,
             payload,
             correlationId,
+            createdAt: timestampResolution.date,
+            receivedAt,
           },
           connection,
         );
@@ -202,7 +218,7 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
         device.id,
         {
           online: true,
-          lastSeenAt: normalizeTimestamp(payload.timestamp),
+          lastSeenAt: receivedAt,
         },
         currentScope,
         connection,
@@ -214,6 +230,8 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
           device,
           payload,
           correlationId,
+          eventTime: timestampResolution.date,
+          receivedAt,
         },
         connection,
       );
@@ -256,6 +274,7 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
         device: result.deviceLog,
         online: result.status.status?.online ?? null,
         lastSeenAt: result.status.status?.lastSeenAt || null,
+        realtimeEvent: "device:status",
         durationMs: elapsedMsSince(messageStartedAt),
       });
       if (!result.status.organization?.id) {
@@ -281,6 +300,7 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
         device: result.deviceLog,
         telemetryId: result.telemetry.id,
         createdAt: result.telemetry.createdAt,
+        realtimeEvent: "telemetry:new",
         durationMs: elapsedMsSince(messageStartedAt),
       });
       if (!result.telemetry.organizationId) {
@@ -300,7 +320,7 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
       return;
     }
 
-    logger.debug("MQTT event processado.", {
+    logger.info("MQTT event processado.", {
       topic: topicInfo.topic,
       correlationId,
       device: result.deviceLog,
@@ -309,6 +329,7 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
       evidenceStatus: result.event.evidenceStatus,
       evidenceSampleCount: result.event.evidenceSampleCount,
       alertId: result.alert?.id || null,
+      realtimeEvent: result.alert ? "alert:new" : null,
       durationMs: elapsedMsSince(messageStartedAt),
     });
 

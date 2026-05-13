@@ -1,0 +1,178 @@
+const mqtt = require("mqtt");
+
+const { env } = require("../src/config/env");
+
+function parseArgs(argv) {
+  const options = {
+    deviceId: "esp32_01",
+    deviceUid: "legacy:esp32_01",
+    count: 5,
+    intervalMs: 1000,
+    eventType: "",
+  };
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    const next = argv[index + 1];
+
+    if (arg === "--device" && next) {
+      options.deviceId = next;
+      index += 1;
+    } else if (arg === "--uid" && next) {
+      options.deviceUid = next;
+      index += 1;
+    } else if (arg === "--count" && next) {
+      options.count = Math.max(1, Number(next) || options.count);
+      index += 1;
+    } else if (arg === "--interval-ms" && next) {
+      options.intervalMs = Math.max(100, Number(next) || options.intervalMs);
+      index += 1;
+    } else if (arg === "--event" && next) {
+      options.eventType = next;
+      index += 1;
+    }
+  }
+
+  return options;
+}
+
+function topicFor(deviceId, channel) {
+  return `${env.mqtt.topicBase.replace(/\/+$/, "")}/${deviceId}/${channel}`;
+}
+
+function nowSeconds() {
+  return Math.floor(Date.now() / 1000);
+}
+
+function buildStatus(options) {
+  return {
+    device_id: options.deviceId,
+    device_uid: options.deviceUid,
+    online: true,
+    wifi_rssi: -58,
+    battery_percent: 86,
+    firmware_version: "mqtt-publish-test",
+    timestamp: nowSeconds(),
+  };
+}
+
+function buildTelemetry(options, index) {
+  const angle = index / 4;
+  const ax = Number((Math.sin(angle) * 0.04).toFixed(3));
+  const ay = Number((Math.cos(angle) * 0.04).toFixed(3));
+  const az = Number((0.98 + Math.sin(angle) * 0.02).toFixed(3));
+
+  return {
+    device_id: options.deviceId,
+    device_uid: options.deviceUid,
+    ax,
+    ay,
+    az,
+    gx: Number((Math.sin(angle) * 1.5).toFixed(3)),
+    gy: Number((Math.cos(angle) * 1.5).toFixed(3)),
+    gz: 0.12,
+    accel_magnitude: Number(Math.sqrt(ax ** 2 + ay ** 2 + az ** 2).toFixed(3)),
+    gyro_magnitude: 1.5,
+    pitch_deg: 1.1,
+    roll_deg: -0.8,
+    wifi_rssi: -58,
+    battery_percent: 86,
+    timestamp: nowSeconds(),
+  };
+}
+
+function buildEvent(options) {
+  return {
+    device_id: options.deviceId,
+    device_uid: options.deviceUid,
+    event_type: options.eventType,
+    severity: options.eventType === "fall_detected" ? "high" : "medium",
+    immobility_confirmed: false,
+    accel_magnitude: 2.8,
+    gyro_magnitude: 180,
+    message: "Evento MQTT de teste local.",
+    timestamp: nowSeconds(),
+  };
+}
+
+function publishJson(client, topic, payload) {
+  const text = JSON.stringify(payload);
+
+  return new Promise((resolve, reject) => {
+    client.publish(topic, text, { qos: 0, retain: false }, (error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      console.log(JSON.stringify({
+        timestamp: new Date().toISOString(),
+        event: "published",
+        topic,
+        bytes: Buffer.byteLength(text, "utf8"),
+        device_id: payload.device_id,
+        event_type: payload.event_type || null,
+      }));
+      resolve();
+    });
+  });
+}
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function run() {
+  const options = parseArgs(process.argv.slice(2));
+  const clientId = `${env.mqtt.clientId}-publish-test-${Date.now()}`;
+  const client = mqtt.connect(env.mqtt.brokerUrl, {
+    username: env.mqtt.username || undefined,
+    password: env.mqtt.password || undefined,
+    clientId,
+    reconnectPeriod: 0,
+    connectTimeout: env.mqtt.connectTimeoutMs,
+    keepalive: env.mqtt.keepaliveSeconds,
+    clean: true,
+  });
+
+  await new Promise((resolve, reject) => {
+    client.once("connect", resolve);
+    client.once("error", reject);
+  });
+
+  console.log(JSON.stringify({
+    timestamp: new Date().toISOString(),
+    event: "connected",
+    brokerUrl: env.mqtt.brokerUrl,
+    clientId,
+    deviceId: options.deviceId,
+  }));
+
+  await publishJson(client, topicFor(options.deviceId, "status"), buildStatus(options));
+
+  for (let index = 0; index < options.count; index += 1) {
+    await publishJson(
+      client,
+      topicFor(options.deviceId, "telemetry"),
+      buildTelemetry(options, index),
+    );
+    if (index < options.count - 1) {
+      await wait(options.intervalMs);
+    }
+  }
+
+  if (options.eventType) {
+    await publishJson(client, topicFor(options.deviceId, "events"), buildEvent(options));
+  }
+
+  client.end();
+}
+
+run().catch((error) => {
+  console.error(JSON.stringify({
+    timestamp: new Date().toISOString(),
+    event: "publish_test_error",
+    error: error.message,
+  }));
+  process.exit(1);
+});
