@@ -6,9 +6,9 @@ O objetivo do repositório é integrar hardware embarcado, ingestão de eventos,
 
 ## Baseline Atual
 
-Baseline atual do repositório: `v0.8.18`.
+Baseline atual do repositório: `v0.8.19`.
 
-A baseline `v0.8.18` reforca o runtime do firmware para telemetria MQTT continua: o portal de manutencao nao dispara scan Wi-Fi automatico em paralelo, o Serial Monitor mostra publish/skip de telemetria e o payload inclui saude do sensor para diferenciar falha de leitura de falha MQTT.
+A baseline `v0.8.19` mantem a telemetria MQTT real estabilizada e melhora a visualizacao do grafico do device: a serie principal agora mostra aceleracao resultante em `g`, com eixo Y formatado, unidades explicitas e filtro visual defensivo para outliers sem alterar os dados persistidos.
 
 Para a experiência local prevista nesta fase, o projeto está estabilizado para `Node.js 20+`.
 
@@ -44,6 +44,7 @@ O modelo atual deixou de ser um painel global único e passou a trabalhar com or
 - suite de stress dry-run para rajadas de telemetria, quedas, payloads ruins e concorrência
 - alertas de queda e imobilidade
 - telemetria em tempo real no dashboard
+- grafico de telemetria com eixo Y normalizado, unidades e tooltip tecnico para aceleracao, giroscopio e eixos do sensor
 - atualização do navegador via `Socket.IO`
 - portal local do ESP32 para Wi-Fi, MQTT, backend e pareamento
 - opção de AP/portal de manutenção sempre ativo em bancada, sem bloquear telemetria MQTT
@@ -176,6 +177,8 @@ npm run mqtt:publish:test --prefix backend
 `db:migrate:evidence` aplica apenas a migração idempotente das colunas/tabela de evidência sem resetar dados. `mqtt:watch` assina os tópicos reais `queda/devices/+/status`, `telemetry` e `events` para confirmar se o ESP32 está publicando. `mqtt:publish:test` publica status e telemetria válidos no mesmo contrato do firmware, útil para testar backend/dashboard sem hardware.
 
 Para validar telemetria real do ESP32, deixe `mqtt:watch` aberto, reinicie a placa e acompanhe o Serial Monitor. O funcionamento esperado mostra `[mqtt] connected`, `[sensor] read ok`, `[telemetry] publish ok` repetindo no intervalo configurado e linhas novas em `queda/devices/esp32_01/telemetry`. Telemetria simulada vem do `clientId` de teste e serve para validar backend/frontend; telemetria real deve vir do `clientId` configurado no ESP32, como `esp32_01_client`.
+
+No frontend, o grafico principal de `Sinais recentes do sensor` mostra `Aceleracao resultante (g)`. Valores invalidos, `NaN`, infinitos ou fora de escala operacional visual sao filtrados apenas no grafico; MQTT, backend, banco e payloads continuam preservados.
 
 O fluxo local esperado usa:
 

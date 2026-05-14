@@ -123,6 +123,12 @@ Para `fall_detected`, o evento nao e mais tratado como alerta confiavel isolado.
 }
 ```
 
+### Visualizacao da telemetria no frontend
+
+O contrato MQTT e a persistencia nao mudam. Na pagina de detalhe do device, o grafico principal usa a serie `accel_magnitude` como `Aceleracao resultante (g)`, com fallback visual calculado a partir de AX/AY/AZ quando a magnitude vier ausente ou fora da escala. O eixo Y e formatado em 2 casas decimais e o tooltip tecnico mostra tambem `gyro_magnitude` em `deg/s` e AX/AY/AZ em `g`.
+
+Para manter a demonstracao legivel, o frontend filtra apenas na visualizacao amostras invalidas (`null`, `NaN`, `Infinity`) e valores fora de escala operacional visual: `0-20 g` para aceleracao e `0-2000 deg/s` para giroscopio no tooltip. Os dados brutos continuam chegando por MQTT e permanecem no banco.
+
 ## Status interpretado experimental
 
 O backend agora deriva um status comportamental/postural inicial a partir da telemetria mais recente do device, sem alterar o contrato MQTT original.

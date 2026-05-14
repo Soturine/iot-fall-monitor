@@ -12,42 +12,110 @@ import { formatDateTime } from "../../lib/format";
 import type { TelemetryLog } from "../../types/api";
 
 type ChartSample = TelemetryLog & {
+  ax: number | null;
+  ay: number | null;
+  az: number | null;
+  accelMagnitude: number | null;
+  gyroMagnitude: number | null;
   createdAtMs: number;
   displayAtMs: number;
 };
 
-function toFiniteNumber(value: number | null) {
+const MAX_ACCEL_G = 20;
+const MAX_GYRO_DEG_S = 2000;
+const ACCEL_UNIT = "g";
+const GYRO_UNIT = "\u00b0/s";
+
+function toFiniteNumber(value: number | null | undefined) {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-function buildChartSamples(data: TelemetryLog[]) {
+function toVisualRange(value: number | null | undefined, min: number, max: number) {
+  const numericValue = toFiniteNumber(value);
+
+  if (numericValue == null || numericValue < min || numericValue > max) {
+    return null;
+  }
+
+  return numericValue;
+}
+
+function toSignedVisualRange(value: number | null | undefined, maxAbs: number) {
+  const numericValue = toFiniteNumber(value);
+
+  if (numericValue == null || Math.abs(numericValue) > maxAbs) {
+    return null;
+  }
+
+  return numericValue;
+}
+
+function formatFixed(value: number | null | undefined, unit?: string) {
+  const numericValue = toFiniteNumber(value);
+
+  if (numericValue == null) {
+    return "--";
+  }
+
+  return `${numericValue.toFixed(2)}${unit ? ` ${unit}` : ""}`;
+}
+
+function resolveVisualAccelMagnitude(
+  sample: TelemetryLog,
+  ax: number | null,
+  ay: number | null,
+  az: number | null,
+) {
+  const directMagnitude = toVisualRange(sample.accelMagnitude, 0, MAX_ACCEL_G);
+
+  if (directMagnitude != null) {
+    return directMagnitude;
+  }
+
+  if (ax == null || ay == null || az == null) {
+    return null;
+  }
+
+  return toVisualRange(Math.hypot(ax, ay, az), 0, MAX_ACCEL_G);
+}
+
+function buildChartSamples(data: TelemetryLog[]): ChartSample[] {
   const duplicateOffsets = new Map<number, number>();
+  const samples: ChartSample[] = [];
 
-  return data
-    .map((sample) => {
-      const timestamp = sample.createdAt
-        ? new Date(sample.createdAt).getTime()
-        : Number.NaN;
-      const accelMagnitude = toFiniteNumber(sample.accelMagnitude);
-      const gyroMagnitude = toFiniteNumber(sample.gyroMagnitude);
+  data.forEach((sample) => {
+    const timestamp = sample.createdAt
+      ? new Date(sample.createdAt).getTime()
+      : Number.NaN;
+    const ax = toSignedVisualRange(sample.ax, MAX_ACCEL_G);
+    const ay = toSignedVisualRange(sample.ay, MAX_ACCEL_G);
+    const az = toSignedVisualRange(sample.az, MAX_ACCEL_G);
+    // Filtro apenas de visualizacao: backend/banco continuam preservando a amostra bruta.
+    const accelMagnitude = resolveVisualAccelMagnitude(sample, ax, ay, az);
+    const gyroMagnitude = toVisualRange(sample.gyroMagnitude, 0, MAX_GYRO_DEG_S);
 
-      if (!Number.isFinite(timestamp) || (accelMagnitude == null && gyroMagnitude == null)) {
-        return null;
-      }
+    if (!Number.isFinite(timestamp) || accelMagnitude == null) {
+      return;
+    }
 
-      const offset = duplicateOffsets.get(timestamp) || 0;
-      duplicateOffsets.set(timestamp, offset + 1);
+    const offset = duplicateOffsets.get(timestamp) || 0;
+    duplicateOffsets.set(timestamp, offset + 1);
 
-      return {
-        ...sample,
-        accelMagnitude,
-        gyroMagnitude,
-        createdAtMs: timestamp + offset,
-        displayAtMs: timestamp + offset,
-      };
-    })
-    .filter((sample): sample is ChartSample => Boolean(sample))
-    .sort((left, right) => left.createdAtMs - right.createdAtMs || left.id - right.id);
+    samples.push({
+      ...sample,
+      ax,
+      ay,
+      az,
+      accelMagnitude,
+      gyroMagnitude,
+      createdAtMs: timestamp + offset,
+      displayAtMs: timestamp + offset,
+    });
+  });
+
+  return samples.sort(
+    (left, right) => left.createdAtMs - right.createdAtMs || left.id - right.id,
+  );
 }
 
 function buildDisplaySamples(samples: ChartSample[]) {
@@ -84,8 +152,74 @@ function buildTimeDomain(samples: ChartSample[]) {
   return [min - padding, max + padding] as [number, number];
 }
 
+function buildValueDomain(samples: ChartSample[]) {
+  const values = samples
+    .map((sample) => sample.accelMagnitude)
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
+
+  if (!values.length) {
+    return [0, 2] as [number, number];
+  }
+
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = max - min;
+  const padding = Math.max(span * 0.16, 0.25);
+
+  return [
+    Math.max(0, min - padding),
+    Math.min(MAX_ACCEL_G, max + padding),
+  ] as [number, number];
+}
+
+type TooltipPayload = Array<{
+  payload?: ChartSample;
+}>;
+
+function TelemetryTooltip({
+  active,
+  payload,
+}: {
+  active?: boolean;
+  payload?: TooltipPayload;
+}) {
+  if (!active || !payload?.length) {
+    return null;
+  }
+
+  const sample = payload[0]?.payload;
+
+  if (!sample) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-2xl border border-surface-200 bg-white/95 p-3 text-xs shadow-soft">
+      <p className="font-semibold text-surface-800">
+        {formatDateTime(sample.createdAt)}
+      </p>
+      <div className="mt-2 grid gap-1 text-surface-600">
+        <p>
+          <span className="font-semibold text-danger-700">Aceleracao:</span>{" "}
+          {formatFixed(sample.accelMagnitude, ACCEL_UNIT)}
+        </p>
+        <p>
+          <span className="font-semibold text-surface-700">Giroscopio:</span>{" "}
+          {formatFixed(sample.gyroMagnitude, GYRO_UNIT)}
+        </p>
+        <p>
+          AX {formatFixed(sample.ax, ACCEL_UNIT)} - AY{" "}
+          {formatFixed(sample.ay, ACCEL_UNIT)} - AZ{" "}
+          {formatFixed(sample.az, ACCEL_UNIT)}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export function TelemetryChart({ data }: { data: TelemetryLog[] }) {
   const chartData = buildDisplaySamples(buildChartSamples(data));
+  const filteredCount = Math.max(0, data.length - chartData.length);
 
   if (!chartData.length) {
     return (
@@ -109,6 +243,7 @@ export function TelemetryChart({ data }: { data: TelemetryLog[] }) {
   }
 
   const domain = buildTimeDomain(chartData);
+  const valueDomain = buildValueDomain(chartData);
   const tickFormatter = new Intl.DateTimeFormat("pt-BR", tickFormatterOptions);
   const sampleByDisplayTime = new Map(
     chartData.map((sample) => [sample.displayAtMs, sample]),
@@ -118,7 +253,7 @@ export function TelemetryChart({ data }: { data: TelemetryLog[] }) {
     <div className="panel-soft p-4">
       <div className="h-72">
         <ResponsiveContainer height="100%" width="100%">
-          <LineChart data={chartData} margin={{ bottom: 0, left: 0, right: 12, top: 8 }}>
+          <LineChart data={chartData} margin={{ bottom: 0, left: 6, right: 12, top: 8 }}>
             <CartesianGrid stroke="rgba(79,115,103,0.12)" strokeDasharray="4 4" />
             <XAxis
               allowDataOverflow={false}
@@ -135,43 +270,22 @@ export function TelemetryChart({ data }: { data: TelemetryLog[] }) {
               ticks={chartData.length <= 6 ? chartData.map((sample) => sample.displayAtMs) : undefined}
               type="number"
             />
-            <YAxis domain={["dataMin - 0.1", "dataMax + 0.1"]} stroke="#4f7367" />
-            <Tooltip
-              contentStyle={{
-                border: "1px solid rgba(79, 115, 103, 0.18)",
-                background: "rgba(255,255,255,0.96)",
-                borderRadius: 18,
-              }}
-              formatter={(value) =>
-                typeof value === "number" ? value.toFixed(2) : String(value ?? "--")
-              }
-              labelFormatter={(value) =>
-                formatDateTime(
-                  new Date(
-                    sampleByDisplayTime.get(Number(value))?.createdAtMs ?? Number(value),
-                  ).toISOString(),
-                )
-              }
+            <YAxis
+              allowDataOverflow={false}
+              domain={valueDomain}
+              stroke="#4f7367"
+              tickFormatter={(value) => formatFixed(Number(value))}
+              width={50}
             />
+            <Tooltip content={<TelemetryTooltip />} />
             <Line
               activeDot={{ r: 5 }}
               connectNulls
               dataKey="accelMagnitude"
               dot={{ r: 2 }}
               isAnimationActive={false}
-              name="Aceleracao"
+              name={`Aceleracao resultante (${ACCEL_UNIT})`}
               stroke="#b4382d"
-              strokeWidth={3}
-              type="monotone"
-            />
-            <Line
-              activeDot={{ r: 5 }}
-              connectNulls
-              dataKey="gyroMagnitude"
-              dot={{ r: 2 }}
-              isAnimationActive={false}
-              name="Giroscopio"
-              stroke="#36584d"
               strokeWidth={3}
               type="monotone"
             />
@@ -179,11 +293,16 @@ export function TelemetryChart({ data }: { data: TelemetryLog[] }) {
         </ResponsiveContainer>
       </div>
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-surface-500">
-        <span>{chartData.length} amostras validas</span>
+        <span>{chartData.length} amostras validas - Aceleracao resultante ({ACCEL_UNIT})</span>
         <span>
           Janela: {formatDateTime(firstSample.createdAt)} -{" "}
           {formatDateTime(latestSample.createdAt)}
         </span>
+        {filteredCount > 0 ? (
+          <span className="basis-full text-warning-700">
+            {filteredCount} amostras fora da escala foram filtradas somente no grafico.
+          </span>
+        ) : null}
       </div>
     </div>
   );

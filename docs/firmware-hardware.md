@@ -219,6 +219,8 @@ Com isso, o backend consegue manter bateria, RSSI e `lastSeenAt` mais coerentes 
 
 Para online/offline, o backend usa a hora em que recebeu MQTT como `lastSeenAt`. Se o ESP32 ainda nao sincronizou NTP e mandar `timestamp = millis()/1000`, ou se mandar um Unix time plausivel mas stale demais, o backend usa a hora de recebimento para telemetria/eventos. Isso evita telemetria recem-chegada com data antiga, evidencia de queda sem vinculo e status falsamente offline.
 
+No dashboard, essa telemetria continua chegando no mesmo contrato MQTT. A visualizacao do grafico do device normaliza apenas a camada visual: `accel_magnitude` aparece como `Aceleracao resultante (g)`, o tooltip mostra giroscopio e eixos AX/AY/AZ com unidades, e outliers fora da escala visual sao escondidos sem apagar ou alterar os dados persistidos.
+
 No firmware atual, a telemetria periodica continua rodando mesmo com o portal de manutencao ativo e mesmo se houver candidato/alerta de queda. O portal em modo manutencao nao inicia scan Wi-Fi automatico (`SETUP_PORTAL_SCAN_IN_MAINTENANCE_MODE = false`), porque scan em `WIFI_AP_STA` pode interferir no link station/MQTT em alguns ESP32. Em `SETUP_MODE` o scan continua disponivel para ajudar a cadastrar redes.
 
 O payload real tambem carrega campos tecnicos extras ignorados por clientes antigos:

@@ -1,5 +1,20 @@
 # Changelog
 
+## [v0.8.19] - 2026-05-14
+### Alterado
+- versao alinhada para `0.8.19` em `CHANGELOG.md`, `README.md`, `package.json` da raiz, `backend/package.json`, `backend/package-lock.json`, `frontend/package.json` e `frontend/package-lock.json`
+- grafico de telemetria do detalhe do device passou a exibir como serie principal apenas `Aceleracao resultante (g)`, deixando giroscopio e eixos AX/AY/AZ no tooltip
+- eixo Y do grafico agora usa dominio calculado para aceleracao, largura fixa e formatter com 2 casas decimais para evitar ticks crus pouco legiveis
+- quando `accel_magnitude` vier ausente/fora da escala visual, o grafico tenta derivar a magnitude a partir de AX/AY/AZ antes de descartar a amostra na visualizacao
+
+### Corrigido
+- valores de telemetria reais que chegavam corretamente ao frontend deixaram de aparecer como labels estranhos no eixo Y, como numeros longos sem unidade/contexto
+- mistura visual entre aceleracao e giroscopio no mesmo eixo deixou de distorcer a escala do grafico principal
+
+### Documentado
+- a normalizacao visual do grafico nao altera MQTT, backend, schema nem dados persistidos
+- outliers sao filtrados apenas na visualizacao (`0-20 g` para aceleracao e `0-2000 deg/s` para giroscopio no tooltip)
+
 ## [v0.8.18] - 2026-05-13
 ### Adicionado
 - logs seriais de diagnostico no firmware para MQTT, sensor, loop principal, publish/skip de telemetria, status e eventos
