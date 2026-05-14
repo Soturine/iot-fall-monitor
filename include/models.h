@@ -4,6 +4,12 @@
 
 struct SensorReading {
   bool valid = false;
+  int16_t rawAccelX = 0;
+  int16_t rawAccelY = 0;
+  int16_t rawAccelZ = 0;
+  int16_t rawGyroX = 0;
+  int16_t rawGyroY = 0;
+  int16_t rawGyroZ = 0;
   float accelXG = 0.0f;
   float accelYG = 0.0f;
   float accelZG = 0.0f;

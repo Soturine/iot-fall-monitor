@@ -6,9 +6,9 @@ O objetivo do repositório é integrar hardware embarcado, ingestão de eventos,
 
 ## Baseline Atual
 
-Baseline atual do repositório: `v0.8.19`.
+Baseline atual do repositório: `v0.8.20`.
 
-A baseline `v0.8.19` mantem a telemetria MQTT real estabilizada e melhora a visualizacao do grafico do device: a serie principal agora mostra aceleracao resultante em `g`, com eixo Y formatado, unidades explicitas e filtro visual defensivo para outliers sem alterar os dados persistidos.
+A baseline `v0.8.20` corrige a conversao do MPU6050 na origem: o firmware passa a usar a faixa efetiva lida nos registradores para converter raw em `g`/`deg/s`, aplica uma calibracao leve e registra logs seriais para confirmar repouso perto de `1 g`.
 
 Para a experiência local prevista nesta fase, o projeto está estabilizado para `Node.js 20+`.
 
@@ -179,6 +179,8 @@ npm run mqtt:publish:test --prefix backend
 Para validar telemetria real do ESP32, deixe `mqtt:watch` aberto, reinicie a placa e acompanhe o Serial Monitor. O funcionamento esperado mostra `[mqtt] connected`, `[sensor] read ok`, `[telemetry] publish ok` repetindo no intervalo configurado e linhas novas em `queda/devices/esp32_01/telemetry`. Telemetria simulada vem do `clientId` de teste e serve para validar backend/frontend; telemetria real deve vir do `clientId` configurado no ESP32, como `esp32_01_client`.
 
 No frontend, o grafico principal de `Sinais recentes do sensor` mostra `Aceleracao resultante (g)`. Valores invalidos, `NaN`, infinitos ou fora de escala operacional visual sao filtrados apenas no grafico; MQTT, backend, banco e payloads continuam preservados.
+
+Para validar a escala fisica do MPU6050, deixe o ESP32 parado sobre a mesa ao reiniciar. O Serial Monitor deve mostrar a faixa efetiva (`accel=+-2g`, `+-4g`, `+-8g` ou `+-16g`), o divisor `lsb_per_g` usado e leituras convertidas com `accel_magnitude` perto de `1.00 g` em repouso. Se aparecer algo perto de `4 g`, ha erro de escala ou movimento durante a calibracao.
 
 O fluxo local esperado usa:
 

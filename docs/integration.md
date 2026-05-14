@@ -123,6 +123,15 @@ Para `fall_detected`, o evento nao e mais tratado como alerta confiavel isolado.
 }
 ```
 
+Unidades do contrato:
+
+- `ax`, `ay`, `az`: aceleracao em `g`
+- `gx`, `gy`, `gz`: giro em `deg/s`
+- `accel_magnitude`: aceleracao resultante em `g`
+- `gyro_magnitude`: giro resultante em `deg/s`
+
+O firmware converte raw do MPU6050 usando a faixa efetiva lida em `ACCEL_CONFIG`/`GYRO_CONFIG`. Em repouso, `accel_magnitude` deve ficar perto de `1.00 g`; valores estaveis perto de `4 g` indicam divisor de escala incorreto ou sensor ainda publicando firmware antigo.
+
 ### Visualizacao da telemetria no frontend
 
 O contrato MQTT e a persistencia nao mudam. Na pagina de detalhe do device, o grafico principal usa a serie `accel_magnitude` como `Aceleracao resultante (g)`, com fallback visual calculado a partir de AX/AY/AZ quando a magnitude vier ausente ou fora da escala. O eixo Y e formatado em 2 casas decimais e o tooltip tecnico mostra tambem `gyro_magnitude` em `deg/s` e AX/AY/AZ em `g`.

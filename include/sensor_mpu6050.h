@@ -21,6 +21,8 @@ class SensorMPU6050 {
                     float rawGyroY,
                     float rawGyroZ);
   void computeDerivedValues();
+  void calibrateAccelerometer();
+  bool refreshScaleFromRegisters();
 
   bool configureSensor();
   bool readRawSample(int16_t& accelX,
@@ -36,6 +38,16 @@ class SensorMPU6050 {
   TwoWire* wire_ = nullptr;
   uint8_t address_ = 0x68;
   uint8_t whoAmI_ = 0;
+  uint8_t accelFsBits_ = 0x10;
+  uint8_t gyroFsBits_ = 0x08;
+  uint8_t accelRangeG_ = 8;
+  uint16_t gyroRangeDegPerSec_ = 500;
+  float accelLsbPerG_ = 4096.0f;
+  float gyroLsbPerDegPerSec_ = 65.5f;
+  bool accelCalibrationApplied_ = false;
+  float accelOffsetXG_ = 0.0f;
+  float accelOffsetYG_ = 0.0f;
+  float accelOffsetZG_ = 0.0f;
 
   float filteredAccelXG_ = 0.0f;
   float filteredAccelYG_ = 0.0f;

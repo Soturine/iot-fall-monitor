@@ -1,5 +1,25 @@
 # Changelog
 
+## [v0.8.20] - 2026-05-14
+### Alterado
+- versao alinhada para `0.8.20` em `CHANGELOG.md`, `README.md`, `package.json` da raiz, `backend/package.json`, `backend/package-lock.json`, `frontend/package.json` e `frontend/package-lock.json`
+- driver do MPU6050 agora le `ACCEL_CONFIG` e `GYRO_CONFIG` apos configurar o sensor e deriva os divisores reais de conversao a partir da faixa efetiva
+- AX/AY/AZ continuam sendo enviados em `g`, GX/GY/GZ em `deg/s`, `accel_magnitude` em `g` e `gyro_magnitude` em `deg/s`, sem mudar nomes de campos MQTT
+- logs seriais do sensor passaram a mostrar faixa efetiva, `lsb_per_g`, raw do acelerometro/giroscopio, valores convertidos em `g` e magnitudes publicadas
+
+### Corrigido
+- leituras em repouso perto de `4 g` quando o sensor permanecia na escala efetiva `+-2g` mas o firmware dividia como `+-8g`
+- conversao deixou de depender de constantes fixas (`4096 LSB/g`, `65.5 LSB/dps`) quando o registrador real diverge do desejado
+
+### Adicionado
+- calibracao leve de acelerometro no boot, com 80 amostras, validacao de estabilidade e offsets conservadores que preservam a direcao da gravidade
+- fallback de sanidade por magnitude raw em repouso para escolher o divisor fisico mais proximo quando o readback ou clone do sensor ainda indicar escala incoerente
+- procedimento documentado para validar repouso proximo de `1 g` com Serial Monitor, `mqtt:watch` e dashboard
+
+### Pendente / Faltando
+- validar na placa fisica se o Serial Monitor mostra `accel scale lsb_per_g=16384` quando o chip permanecer em `+-2g`, ou `4096` quando `+-8g` for realmente aplicado
+- compilar com PlatformIO localmente na maquina com `pio` instalado; nesta sessao `pio` nao estava no PATH
+
 ## [v0.8.19] - 2026-05-14
 ### Alterado
 - versao alinhada para `0.8.19` em `CHANGELOG.md`, `README.md`, `package.json` da raiz, `backend/package.json`, `backend/package-lock.json`, `frontend/package.json` e `frontend/package-lock.json`

@@ -373,11 +373,13 @@ void publishPeriodicTelemetry(unsigned long nowMs) {
     const unsigned long sampleAgeMs =
         nowMs >= latestReading.timestampMs ? nowMs - latestReading.timestampMs : 0U;
     if (published) {
-      AppLog::infof("[telemetry] publish ok topic=%s bytes=%u sample_age_ms=%lu sensor_read_ok=%u\n",
+      AppLog::infof("[telemetry] publish ok topic=%s bytes=%u sample_age_ms=%lu sensor_read_ok=%u accel_magnitude=%.2f gyro_magnitude=%.2f\n",
                     topic.c_str(),
                     static_cast<unsigned>(payload.length()),
                     sampleAgeMs,
-                    lastSensorReadSucceeded ? 1U : 0U);
+                    lastSensorReadSucceeded ? 1U : 0U,
+                    latestReading.accelMagnitudeG,
+                    latestReading.gyroMagnitudeDegPerSec);
     } else {
       AppLog::warnf("[telemetry] publish failed topic=%s bytes=%u mqtt_state=%d sample_age_ms=%lu\n",
                     topic.c_str(),
@@ -518,7 +520,13 @@ void logSensorReadOkIfDue(const SensorReading& reading, unsigned long nowMs) {
   }
 
   lastSensorHealthLogAtMs = nowMs;
-  AppLog::infof("[sensor] read ok ax=%.2f ay=%.2f az=%.2f accel=%.2f gyro=%.1f\n",
+  AppLog::infof("[sensor] read ok raw ax=%d ay=%d az=%d gx=%d gy=%d gz=%d | g ax=%.2f ay=%.2f az=%.2f magnitude=%.2f gyro=%.2f\n",
+                reading.rawAccelX,
+                reading.rawAccelY,
+                reading.rawAccelZ,
+                reading.rawGyroX,
+                reading.rawGyroY,
+                reading.rawGyroZ,
                 reading.accelXG,
                 reading.accelYG,
                 reading.accelZG,
@@ -572,6 +580,13 @@ void logLoopHealthIfDue(unsigned long nowMs) {
 }
 
 void printSensorReading(const SensorReading& reading) {
+  Serial.printf("RAW ax=%d ay=%d az=%d gx=%d gy=%d gz=%d | ",
+                reading.rawAccelX,
+                reading.rawAccelY,
+                reading.rawAccelZ,
+                reading.rawGyroX,
+                reading.rawGyroY,
+                reading.rawGyroZ);
   Serial.printf("ACC[g] x=%+.2f y=%+.2f z=%+.2f | ",
                 reading.accelXG,
                 reading.accelYG,
