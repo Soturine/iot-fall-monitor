@@ -35,7 +35,7 @@ String DeviceMqttClient::describeStateCode(int stateCode) {
 void DeviceMqttClient::begin() {
   // Buffer suficiente para os payloads JSON atuais sem gastar RAM em excesso.
   configureTransport();
-  client_.setBufferSize(512);
+  client_.setBufferSize(AppConfig::MQTT_PACKET_BUFFER_SIZE);
 }
 
 void DeviceMqttClient::configure(const DeviceSettings::DeviceConfig& config) {
@@ -48,7 +48,7 @@ void DeviceMqttClient::configure(const DeviceSettings::DeviceConfig& config) {
   tlsInsecure_ = config.mqtt.tlsInsecure;
   tlsCaCertificate_ = config.mqtt.tlsCaCertificate;
   configureTransport();
-  client_.setBufferSize(512);
+  client_.setBufferSize(AppConfig::MQTT_PACKET_BUFFER_SIZE);
   client_.setServer(host_.c_str(), port_);
   resetFailureTracking();
 

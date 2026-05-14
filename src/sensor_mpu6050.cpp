@@ -37,6 +37,9 @@ constexpr uint8_t kRegisterIoAttempts = 3;
 
 constexpr float kDefaultAccelLsbPerG = 4096.0f;
 constexpr float kDefaultGyroLsbPerDegPerSec = 65.5f;
+constexpr const char* kI2cErrorNone = "none";
+constexpr const char* kI2cErrorReadFailed = "i2c_read_failed";
+constexpr const char* kI2cErrorRecoveryFailed = "i2c_recovery_failed";
 
 void scanI2CBus(TwoWire& wire) {
   if (!AppConfig::FIRMWARE_I2C_DEBUG_ENABLED) {
@@ -103,11 +106,11 @@ bool writeRegisterWithRetry(TwoWire& wire,
   return false;
 }
 
-bool readRegisters(TwoWire& wire,
-                   uint8_t address,
-                   uint8_t startRegister,
-                   uint8_t* buffer,
-                   size_t length) {
+bool readRegistersRepeatedStart(TwoWire& wire,
+                                uint8_t address,
+                                uint8_t startRegister,
+                                uint8_t* buffer,
+                                size_t length) {
   wire.beginTransmission(address);
   wire.write(startRegister);
   const uint8_t txError = wire.endTransmission(false);
@@ -130,6 +133,57 @@ bool readRegisters(TwoWire& wire,
   }
 
   return true;
+}
+
+bool readRegistersWithStop(TwoWire& wire,
+                           uint8_t address,
+                           uint8_t startRegister,
+                           uint8_t* buffer,
+                           size_t length) {
+  wire.beginTransmission(address);
+  wire.write(startRegister);
+  const uint8_t txError = wire.endTransmission(true);
+  if (txError != 0) {
+    return false;
+  }
+
+  delayMicroseconds(AppConfig::I2C_STOP_READ_SETTLE_US);
+
+  const uint8_t bytesRead = wire.requestFrom(static_cast<int>(address),
+                                             static_cast<int>(length),
+                                             static_cast<int>(true));
+  if (bytesRead != length) {
+    while (wire.available()) {
+      wire.read();
+    }
+    return false;
+  }
+
+  for (size_t i = 0; i < length; ++i) {
+    if (!wire.available()) {
+      return false;
+    }
+    buffer[i] = wire.read();
+  }
+
+  return true;
+}
+
+bool readRegisters(TwoWire& wire,
+                   uint8_t address,
+                   uint8_t startRegister,
+                   uint8_t* buffer,
+                   size_t length) {
+  if (!AppConfig::I2C_USE_REPEATED_START) {
+    return readRegistersWithStop(wire, address, startRegister, buffer, length);
+  }
+
+  if (readRegistersRepeatedStart(wire, address, startRegister, buffer, length)) {
+    return true;
+  }
+
+  delayMicroseconds(AppConfig::I2C_STOP_READ_SETTLE_US);
+  return readRegistersWithStop(wire, address, startRegister, buffer, length);
 }
 
 bool readRegister(TwoWire& wire, uint8_t address, uint8_t reg, uint8_t& value) {
@@ -297,18 +351,27 @@ bool SensorMPU6050::begin(TwoWire& wire, uint8_t address) {
   ready_ = false;
   reading_ = SensorReading();
   filterInitialized_ = false;
+  lastReadSucceeded_ = false;
   accelCalibrationApplied_ = false;
   calibrationStatus_ = "not_started";
+  lastI2cError_ = kI2cErrorNone;
+  consecutiveReadFailures_ = 0;
+  totalI2cErrors_ = 0;
+  i2cErrorsSinceSummary_ = 0;
+  i2cRecoveryCount_ = 0;
+  lastI2cSummaryAtMs_ = 0;
+  lastRecoveryAttemptAtMs_ = 0;
 
   wire_->begin(AppConfig::I2C_SDA_PIN, AppConfig::I2C_SCL_PIN);
-  wire_->setClock(100000);
-  wire_->setTimeOut(50);
+  wire_->setClock(AppConfig::I2C_CLOCK_HZ);
+  wire_->setTimeOut(AppConfig::I2C_TIMEOUT_MS);
   delay(50);
 
   if (AppConfig::FIRMWARE_I2C_DEBUG_ENABLED) {
-    AppLog::debugf("I2C iniciado em SDA=%u, SCL=%u, clock=100000 Hz\n",
+    AppLog::debugf("I2C iniciado em SDA=%u, SCL=%u, clock=%lu Hz\n",
                    AppConfig::I2C_SDA_PIN,
-                   AppConfig::I2C_SCL_PIN);
+                   AppConfig::I2C_SCL_PIN,
+                   static_cast<unsigned long>(AppConfig::I2C_CLOCK_HZ));
   }
   scanI2CBus(*wire_);
   printAddressProbe(*wire_, kPrimaryAddress);
@@ -346,7 +409,7 @@ bool SensorMPU6050::begin(TwoWire& wire, uint8_t address) {
                 whoAmI_,
                 sensorNameFromWhoAmI(whoAmI_));
 
-  const bool configured = configureSensor();
+  const bool configured = configureSensor(true);
   if (!configured) {
     AppLog::warn("[sensor] configuration incomplete; continuing if raw read works.");
   }
@@ -370,6 +433,7 @@ bool SensorMPU6050::begin(TwoWire& wire, uint8_t address) {
                 sensorNameFromWhoAmI(whoAmI_));
 
   ready_ = true;
+  lastReadSucceeded_ = true;
   AppLog::infof("[sensor] ready=1 calibrated=%u reason=%s configured=%u\n",
                 accelCalibrationApplied_ ? 1U : 0U,
                 calibrationStatus_,
@@ -377,7 +441,7 @@ bool SensorMPU6050::begin(TwoWire& wire, uint8_t address) {
   return true;
 }
 
-bool SensorMPU6050::configureSensor() {
+bool SensorMPU6050::configureSensor(bool runCalibration) {
   if (wire_ == nullptr) {
     return false;
   }
@@ -424,7 +488,9 @@ bool SensorMPU6050::configureSensor() {
     configured = refreshScaleFromRegisters() && configured;
   }
 
-  calibrateAccelerometer();
+  if (runCalibration) {
+    calibrateAccelerometer();
+  }
 
   return configured;
 }
@@ -676,7 +742,18 @@ bool SensorMPU6050::readRawSample(int16_t& accelX,
   }
 
   uint8_t rawData[14] = {};
-  if (!readRegisters(*wire_, address_, kRegisterAccelXoutH, rawData, sizeof(rawData))) {
+
+  bool readOk = false;
+  for (uint8_t attempt = 1; attempt <= AppConfig::I2C_READ_RETRY_COUNT; ++attempt) {
+    if (readRegisters(*wire_, address_, kRegisterAccelXoutH, rawData, sizeof(rawData))) {
+      readOk = true;
+      break;
+    }
+
+    delay(AppConfig::I2C_READ_RETRY_DELAY_MS);
+  }
+
+  if (!readOk) {
     return false;
   }
 
@@ -703,8 +780,23 @@ bool SensorMPU6050::update() {
   int16_t rawGyroZ = 0;
 
   if (!readRawSample(rawAccelX, rawAccelY, rawAccelZ, rawGyroX, rawGyroY, rawGyroZ)) {
+    lastReadSucceeded_ = false;
+    lastI2cError_ = kI2cErrorReadFailed;
+    ++totalI2cErrors_;
+    ++i2cErrorsSinceSummary_;
+    ++consecutiveReadFailures_;
+    logI2cErrorSummaryIfDue(millis());
+
+    if (consecutiveReadFailures_ >= AppConfig::SENSOR_I2C_RECOVERY_FAILURE_THRESHOLD) {
+      recoverI2CBus();
+    }
+
     return false;
   }
+
+  lastReadSucceeded_ = true;
+  lastI2cError_ = kI2cErrorNone;
+  consecutiveReadFailures_ = 0;
 
   reading_.rawAccelX = rawAccelX;
   reading_.rawAccelY = rawAccelY;
@@ -739,6 +831,99 @@ const SensorReading& SensorMPU6050::getReading() const {
 
 bool SensorMPU6050::isReady() const {
   return ready_;
+}
+
+bool SensorMPU6050::lastReadSucceeded() const {
+  return lastReadSucceeded_;
+}
+
+unsigned long SensorMPU6050::consecutiveFailureCount() const {
+  return consecutiveReadFailures_;
+}
+
+unsigned long SensorMPU6050::totalI2cErrorCount() const {
+  return totalI2cErrors_;
+}
+
+unsigned long SensorMPU6050::i2cRecoveryCount() const {
+  return i2cRecoveryCount_;
+}
+
+const char* SensorMPU6050::lastI2cError() const {
+  return lastI2cError_;
+}
+
+void SensorMPU6050::logI2cErrorSummaryIfDue(unsigned long nowMs) {
+  if (!AppConfig::FIRMWARE_SENSOR_HEALTH_LOG_ENABLED) {
+    return;
+  }
+
+  if (lastI2cSummaryAtMs_ > 0U &&
+      (nowMs - lastI2cSummaryAtMs_) <
+          AppConfig::SENSOR_I2C_ERROR_SUMMARY_INTERVAL_MS) {
+    return;
+  }
+
+  lastI2cSummaryAtMs_ = nowMs;
+  AppLog::warnf("[sensor] i2c errors summary last_window=%lu total=%lu consecutive=%lu recoveries=%lu last_error=%s\n",
+                i2cErrorsSinceSummary_,
+                totalI2cErrors_,
+                consecutiveReadFailures_,
+                i2cRecoveryCount_,
+                lastI2cError_);
+  i2cErrorsSinceSummary_ = 0;
+}
+
+bool SensorMPU6050::recoverI2CBus() {
+  if (wire_ == nullptr) {
+    return false;
+  }
+
+  const unsigned long nowMs = millis();
+  if (lastRecoveryAttemptAtMs_ > 0U &&
+      (nowMs - lastRecoveryAttemptAtMs_) <
+          AppConfig::SENSOR_I2C_RECOVERY_COOLDOWN_MS) {
+    return false;
+  }
+
+  lastRecoveryAttemptAtMs_ = nowMs;
+  ++i2cRecoveryCount_;
+
+  AppLog::warnf("[sensor] i2c recovery start reason=consecutive_failures count=%lu total=%lu\n",
+                consecutiveReadFailures_,
+                totalI2cErrors_);
+
+  wire_->end();
+  delay(20);
+  pinMode(AppConfig::I2C_SDA_PIN, INPUT_PULLUP);
+  pinMode(AppConfig::I2C_SCL_PIN, INPUT_PULLUP);
+  wire_->begin(AppConfig::I2C_SDA_PIN, AppConfig::I2C_SCL_PIN);
+  wire_->setClock(AppConfig::I2C_CLOCK_HZ);
+  wire_->setTimeOut(AppConfig::I2C_TIMEOUT_MS);
+  delay(20);
+  AppLog::warn("[sensor] i2c bus restarted");
+
+  const bool configured = configureSensor(false);
+
+  int16_t rawAccelX = 0;
+  int16_t rawAccelY = 0;
+  int16_t rawAccelZ = 0;
+  int16_t rawGyroX = 0;
+  int16_t rawGyroY = 0;
+  int16_t rawGyroZ = 0;
+
+  if (readRawSample(rawAccelX, rawAccelY, rawAccelZ, rawGyroX, rawGyroY, rawGyroZ)) {
+    consecutiveReadFailures_ = 0;
+    lastI2cError_ = kI2cErrorNone;
+    AppLog::infof("[sensor] recovery ok configured=%u recoveries=%lu\n",
+                  configured ? 1U : 0U,
+                  i2cRecoveryCount_);
+    return true;
+  }
+
+  lastI2cError_ = kI2cErrorRecoveryFailed;
+  AppLog::warn("[sensor] recovery failed, keeping last valid sample");
+  return false;
 }
 
 void SensorMPU6050::applyLowPass(float rawAccelX,

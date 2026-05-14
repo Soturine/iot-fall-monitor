@@ -6,9 +6,9 @@ O objetivo do repositório é integrar hardware embarcado, ingestão de eventos,
 
 ## Baseline Atual
 
-Baseline atual do repositório: `v0.8.21`.
+Baseline atual do repositório: `v0.8.22`.
 
-A baseline `v0.8.21` recupera a leitura continua do MPU6050 apos a calibracao da `v0.8.20`: `sensor_ready` agora depende de `WHO_AM_I` compativel e leitura raw basica, enquanto readback/calibracao usam fallback e nao bloqueiam a telemetria.
+A baseline `v0.8.22` estabiliza a leitura I2C do MPU6050 em bancada: o firmware prefere leituras com STOP condition a `100 kHz`, adiciona retry/recovery controlado e continua publicando diagnostico MQTT quando a ultima amostra do sensor fica stale.
 
 Para a experiência local prevista nesta fase, o projeto está estabilizado para `Node.js 20+`.
 
@@ -183,6 +183,8 @@ No frontend, o grafico principal de `Sinais recentes do sensor` mostra `Acelerac
 Para validar a escala fisica do MPU6050, deixe o ESP32 parado sobre a mesa ao reiniciar. O Serial Monitor deve mostrar a faixa efetiva (`accel=+-2g`, `+-4g`, `+-8g` ou `+-16g`), o divisor `lsb_per_g` usado e leituras convertidas com `accel_magnitude` perto de `1.00 g` em repouso. Se aparecer algo perto de `4 g`, ha erro de escala ou movimento durante a calibracao.
 
 Se a calibracao ou o readback de escala falhar, o firmware deve continuar publicando telemetria com fallback: procure `ready=1`, `calibrated=0` e `continuing_without_offsets` no Serial Monitor. `sensor_no_valid_sample` com `sensor_ready=0` deve ocorrer apenas se o MPU6050 nao for encontrado ou se a leitura raw I2C falhar.
+
+Se aparecer erro repetido do Wire como `i2cWriteReadNonStop returned Error -1`, valide primeiro o hardware do barramento: GND comum, VCC correto no modulo, SDA/SCL nos pinos configurados, fios curtos, contato da protoboard e alimentacao estavel. A build atual usa `I2C_CLOCK_HZ = 100000`, `I2C_USE_REPEATED_START = false`, retry curto e recovery do barramento para reduzir falhas transitórias sem travar Wi-Fi/MQTT.
 
 O fluxo local esperado usa:
 

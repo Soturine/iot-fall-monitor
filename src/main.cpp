@@ -63,6 +63,19 @@ int batteryLevelPercent() {
   return 100;
 }
 
+unsigned long latestSensorSampleAgeMs(unsigned long nowMs) {
+  if (!latestReading.valid || nowMs < latestReading.timestampMs) {
+    return 0U;
+  }
+
+  return nowMs - latestReading.timestampMs;
+}
+
+bool hasFreshSensorSample(unsigned long nowMs) {
+  return latestReading.valid &&
+         latestSensorSampleAgeMs(nowMs) <= AppConfig::SENSOR_LAST_SAMPLE_MAX_AGE_MS;
+}
+
 size_t buildCriticalEventSnapshot(BufferedEvent* snapshot, size_t snapshotCapacity) {
   if (snapshot == nullptr || snapshotCapacity == 0U) {
     return 0U;
@@ -117,13 +130,16 @@ String buildEventPayload(const char* eventType,
 String buildStatusPayload() {
   // O status periodico carrega telemetria minima para observabilidade do dispositivo.
   const unsigned long nowMs = millis();
-  StaticJsonDocument<512> doc;
+  const bool sensorSampleFresh = hasFreshSensorSample(nowMs);
+  StaticJsonDocument<768> doc;
   doc["device_uid"] = DeviceSettings::technicalDeviceUid();
   doc["device_id"] = DeviceSettings::effectiveDeviceId(runtimeConfig());
   doc["event_type"] = "device_status";
   doc["timestamp"] = currentTimestampSeconds();
-  doc["accel_magnitude"] = latestReading.accelMagnitudeG;
-  doc["gyro_magnitude"] = latestReading.gyroMagnitudeDegPerSec;
+  if (sensorSampleFresh) {
+    doc["accel_magnitude"] = latestReading.accelMagnitudeG;
+    doc["gyro_magnitude"] = latestReading.gyroMagnitudeDegPerSec;
+  }
   doc["immobility_confirmed"] = false;
   doc["battery_level"] = batteryLevelPercent();
   doc["battery_percent"] = batteryLevelPercent();
@@ -131,13 +147,13 @@ String buildStatusPayload() {
   doc["rssi"] = connectivityManager.wifiRssi();
   doc["buffered_events"] = eventBuffer.size();
   doc["sensor_ready"] = sensorReady;
-  doc["sensor_valid"] = latestReading.valid;
+  doc["sensor_valid"] = sensorSampleFresh;
   doc["sensor_read_ok"] = lastSensorReadSucceeded;
-  doc["sensor_sample_age_ms"] =
-      latestReading.valid && nowMs >= latestReading.timestampMs
-          ? nowMs - latestReading.timestampMs
-          : 0U;
-  doc["sensor_failures"] = consecutiveSensorReadFailures;
+  doc["sensor_sample_age_ms"] = latestSensorSampleAgeMs(nowMs);
+  doc["sensor_failures"] = sensor.consecutiveFailureCount();
+  doc["i2c_error_count"] = sensor.totalI2cErrorCount();
+  doc["i2c_recovery_count"] = sensor.i2cRecoveryCount();
+  doc["i2c_last_error"] = sensor.lastI2cError();
 
   if (doc.overflowed()) {
     AppLog::warn("[status] payload JSON overflowed before serialization.");
@@ -150,32 +166,35 @@ String buildStatusPayload() {
 
 String buildTelemetryPayload() {
   const unsigned long nowMs = millis();
-  StaticJsonDocument<640> doc;
+  const bool sensorSampleFresh = hasFreshSensorSample(nowMs);
+  StaticJsonDocument<896> doc;
   doc["device_uid"] = DeviceSettings::technicalDeviceUid();
   doc["device_id"] = DeviceSettings::effectiveDeviceId(runtimeConfig());
   doc["timestamp"] = currentTimestampSeconds();
-  doc["ax"] = latestReading.accelXG;
-  doc["ay"] = latestReading.accelYG;
-  doc["az"] = latestReading.accelZG;
-  doc["gx"] = latestReading.gyroXDegPerSec;
-  doc["gy"] = latestReading.gyroYDegPerSec;
-  doc["gz"] = latestReading.gyroZDegPerSec;
-  doc["accel_magnitude"] = latestReading.accelMagnitudeG;
-  doc["gyro_magnitude"] = latestReading.gyroMagnitudeDegPerSec;
-  doc["pitch_deg"] = latestReading.pitchDeg;
-  doc["roll_deg"] = latestReading.rollDeg;
+  if (sensorSampleFresh) {
+    doc["ax"] = latestReading.accelXG;
+    doc["ay"] = latestReading.accelYG;
+    doc["az"] = latestReading.accelZG;
+    doc["gx"] = latestReading.gyroXDegPerSec;
+    doc["gy"] = latestReading.gyroYDegPerSec;
+    doc["gz"] = latestReading.gyroZDegPerSec;
+    doc["accel_magnitude"] = latestReading.accelMagnitudeG;
+    doc["gyro_magnitude"] = latestReading.gyroMagnitudeDegPerSec;
+    doc["pitch_deg"] = latestReading.pitchDeg;
+    doc["roll_deg"] = latestReading.rollDeg;
+  }
   doc["battery_level"] = batteryLevelPercent();
   doc["battery_percent"] = batteryLevelPercent();
   doc["wifi_rssi"] = connectivityManager.wifiRssi();
   doc["rssi"] = connectivityManager.wifiRssi();
   doc["sensor_ready"] = sensorReady;
-  doc["sensor_valid"] = latestReading.valid;
+  doc["sensor_valid"] = sensorSampleFresh;
   doc["sensor_read_ok"] = lastSensorReadSucceeded;
-  doc["sensor_sample_age_ms"] =
-      latestReading.valid && nowMs >= latestReading.timestampMs
-          ? nowMs - latestReading.timestampMs
-          : 0U;
-  doc["sensor_failures"] = consecutiveSensorReadFailures;
+  doc["sensor_sample_age_ms"] = latestSensorSampleAgeMs(nowMs);
+  doc["sensor_failures"] = sensor.consecutiveFailureCount();
+  doc["i2c_error_count"] = sensor.totalI2cErrorCount();
+  doc["i2c_recovery_count"] = sensor.i2cRecoveryCount();
+  doc["i2c_last_error"] = sensor.lastI2cError();
 
   if (doc.overflowed()) {
     AppLog::warn("[telemetry] payload JSON overflowed before serialization.");
@@ -324,12 +343,13 @@ void publishPeriodicStatus() {
   }
   const bool published = queueOrPublish(topic, payload);
   if (AppConfig::FIRMWARE_MQTT_DIAGNOSTIC_ENABLED) {
+    const bool sensorSampleFresh = hasFreshSensorSample(millis());
     AppLog::infof("[status] publish %s topic=%s bytes=%u mqtt_connected=%u sensor_valid=%u\n",
                   published ? "ok" : "queued",
                   topic.c_str(),
                   static_cast<unsigned>(payload.length()),
                   mqttClient.isConnected() ? 1U : 0U,
-                  latestReading.valid ? 1U : 0U);
+                  sensorSampleFresh ? 1U : 0U);
   }
 }
 
@@ -345,12 +365,15 @@ void logTelemetrySkipped(const char* reason, unsigned long nowMs) {
   }
 
   lastTelemetrySkipLogAtMs = nowMs;
-  AppLog::warnf("[telemetry] skipped reason=%s mqtt_connected=%u sensor_ready=%u sensor_valid=%u failures=%lu\n",
+  AppLog::warnf("[telemetry] skipped reason=%s mqtt_connected=%u sensor_ready=%u sensor_valid=%u failures=%lu i2c_errors=%lu recoveries=%lu last_error=%s\n",
                 reason,
                 mqttClient.isConnected() ? 1U : 0U,
                 sensorReady ? 1U : 0U,
-                latestReading.valid ? 1U : 0U,
-                consecutiveSensorReadFailures);
+                hasFreshSensorSample(nowMs) ? 1U : 0U,
+                sensor.consecutiveFailureCount(),
+                sensor.totalI2cErrorCount(),
+                sensor.i2cRecoveryCount(),
+                sensor.lastI2cError());
 }
 
 void publishPeriodicTelemetry(unsigned long nowMs) {
@@ -359,7 +382,7 @@ void publishPeriodicTelemetry(unsigned long nowMs) {
     return;
   }
 
-  if (!latestReading.valid) {
+  if (!latestReading.valid && !sensorReady) {
     logTelemetrySkipped("sensor_no_valid_sample", nowMs);
     return;
   }
@@ -370,22 +393,36 @@ void publishPeriodicTelemetry(unsigned long nowMs) {
   const bool published = mqttClient.publish(topic, payload, false);
 
   if (AppConfig::FIRMWARE_MQTT_DIAGNOSTIC_ENABLED) {
-    const unsigned long sampleAgeMs =
-        nowMs >= latestReading.timestampMs ? nowMs - latestReading.timestampMs : 0U;
+    const unsigned long sampleAgeMs = latestSensorSampleAgeMs(nowMs);
+    const bool sensorSampleFresh = hasFreshSensorSample(nowMs);
     if (published) {
-      AppLog::infof("[telemetry] publish ok topic=%s bytes=%u sample_age_ms=%lu sensor_read_ok=%u accel_magnitude=%.2f gyro_magnitude=%.2f\n",
-                    topic.c_str(),
-                    static_cast<unsigned>(payload.length()),
-                    sampleAgeMs,
-                    lastSensorReadSucceeded ? 1U : 0U,
-                    latestReading.accelMagnitudeG,
-                    latestReading.gyroMagnitudeDegPerSec);
+      if (sensorSampleFresh) {
+        AppLog::infof("[telemetry] publish ok topic=%s bytes=%u sample_age_ms=%lu sensor_valid=1 sensor_read_ok=%u i2c_errors=%lu recoveries=%lu accel_magnitude=%.2f gyro_magnitude=%.2f\n",
+                      topic.c_str(),
+                      static_cast<unsigned>(payload.length()),
+                      sampleAgeMs,
+                      lastSensorReadSucceeded ? 1U : 0U,
+                      sensor.totalI2cErrorCount(),
+                      sensor.i2cRecoveryCount(),
+                      latestReading.accelMagnitudeG,
+                      latestReading.gyroMagnitudeDegPerSec);
+      } else {
+        AppLog::infof("[telemetry] publish ok topic=%s bytes=%u sample_age_ms=%lu sensor_valid=0 sensor_read_ok=%u i2c_errors=%lu recoveries=%lu last_error=%s\n",
+                      topic.c_str(),
+                      static_cast<unsigned>(payload.length()),
+                      sampleAgeMs,
+                      lastSensorReadSucceeded ? 1U : 0U,
+                      sensor.totalI2cErrorCount(),
+                      sensor.i2cRecoveryCount(),
+                      sensor.lastI2cError());
+      }
     } else {
-      AppLog::warnf("[telemetry] publish failed topic=%s bytes=%u mqtt_state=%d sample_age_ms=%lu\n",
+      AppLog::warnf("[telemetry] publish failed topic=%s bytes=%u mqtt_state=%d sample_age_ms=%lu sensor_valid=%u\n",
                     topic.c_str(),
                     static_cast<unsigned>(payload.length()),
                     mqttClient.currentStateCode(),
-                    sampleAgeMs);
+                    sampleAgeMs,
+                    sensorSampleFresh ? 1U : 0U);
     }
   }
 }
@@ -546,8 +583,11 @@ void logSensorReadFailedIfDue(unsigned long nowMs) {
   }
 
   lastSensorHealthLogAtMs = nowMs;
-  AppLog::warnf("[sensor] read failed reason=i2c_read_failed consecutive_failures=%lu last_valid=%u\n",
+  AppLog::warnf("[sensor] read failed reason=%s consecutive_failures=%lu total_i2c_errors=%lu recoveries=%lu last_valid=%u\n",
+                sensor.lastI2cError(),
                 consecutiveSensorReadFailures,
+                sensor.totalI2cErrorCount(),
+                sensor.i2cRecoveryCount(),
                 latestReading.valid ? 1U : 0U);
 }
 
@@ -565,18 +605,18 @@ void logLoopHealthIfDue(unsigned long nowMs) {
   lastLoopHealthLogAtMs = nowMs;
   const bool telemetryDue =
       (nowMs - lastTelemetrySentAtMs) >= AppConfig::TELEMETRY_REPORT_INTERVAL_MS;
-  const unsigned long sampleAgeMs =
-      latestReading.valid && nowMs >= latestReading.timestampMs
-          ? nowMs - latestReading.timestampMs
-          : 0U;
-  AppLog::infof("[loop] maintenance_portal_active=%u state=%s wifi_connected=%u mqtt_connected=%u telemetry_due=%u sensor_valid=%u sample_age_ms=%lu\n",
+  const unsigned long sampleAgeMs = latestSensorSampleAgeMs(nowMs);
+  const bool sensorSampleFresh = hasFreshSensorSample(nowMs);
+  AppLog::infof("[loop] maintenance_portal_active=%u state=%s wifi_connected=%u mqtt_connected=%u telemetry_due=%u sensor_valid=%u sample_age_ms=%lu i2c_errors=%lu recoveries=%lu\n",
                 setupPortal.isRunning() && !connectivityManager.isSetupMode() ? 1U : 0U,
                 connectivityManager.stateLabel().c_str(),
                 connectivityManager.isWifiConnected() ? 1U : 0U,
                 mqttClient.isConnected() ? 1U : 0U,
                 telemetryDue ? 1U : 0U,
-                latestReading.valid ? 1U : 0U,
-                sampleAgeMs);
+                sensorSampleFresh ? 1U : 0U,
+                sampleAgeMs,
+                sensor.totalI2cErrorCount(),
+                sensor.i2cRecoveryCount());
 }
 
 void printSensorReading(const SensorReading& reading) {
@@ -728,8 +768,8 @@ void loop() {
     lastSensorSampleAtMs = nowMs;
 
     if (sensor.update()) {
-      lastSensorReadSucceeded = true;
-      consecutiveSensorReadFailures = 0;
+      lastSensorReadSucceeded = sensor.lastReadSucceeded();
+      consecutiveSensorReadFailures = sensor.consecutiveFailureCount();
       latestReading = sensor.getReading();
       logSensorReadOkIfDue(latestReading, nowMs);
 
@@ -748,8 +788,8 @@ void loop() {
         publishFallAlert(alert);
       }
     } else {
-      lastSensorReadSucceeded = false;
-      ++consecutiveSensorReadFailures;
+      lastSensorReadSucceeded = sensor.lastReadSucceeded();
+      consecutiveSensorReadFailures = sensor.consecutiveFailureCount();
       logSensorReadFailedIfDue(nowMs);
     }
   }

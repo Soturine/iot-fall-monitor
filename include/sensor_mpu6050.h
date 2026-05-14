@@ -12,6 +12,11 @@ class SensorMPU6050 {
 
   const SensorReading& getReading() const;
   bool isReady() const;
+  bool lastReadSucceeded() const;
+  unsigned long consecutiveFailureCount() const;
+  unsigned long totalI2cErrorCount() const;
+  unsigned long i2cRecoveryCount() const;
+  const char* lastI2cError() const;
 
  private:
   void applyLowPass(float rawAccelX,
@@ -23,8 +28,10 @@ class SensorMPU6050 {
   void computeDerivedValues();
   void calibrateAccelerometer();
   bool refreshScaleFromRegisters();
+  void logI2cErrorSummaryIfDue(unsigned long nowMs);
+  bool recoverI2CBus();
 
-  bool configureSensor();
+  bool configureSensor(bool runCalibration = true);
   bool readRawSample(int16_t& accelX,
                      int16_t& accelY,
                      int16_t& accelZ,
@@ -35,6 +42,7 @@ class SensorMPU6050 {
   SensorReading reading_;
   bool ready_ = false;
   bool filterInitialized_ = false;
+  bool lastReadSucceeded_ = false;
   TwoWire* wire_ = nullptr;
   uint8_t address_ = 0x68;
   uint8_t whoAmI_ = 0;
@@ -46,6 +54,13 @@ class SensorMPU6050 {
   float gyroLsbPerDegPerSec_ = 65.5f;
   bool accelCalibrationApplied_ = false;
   const char* calibrationStatus_ = "not_started";
+  const char* lastI2cError_ = "none";
+  unsigned long consecutiveReadFailures_ = 0;
+  unsigned long totalI2cErrors_ = 0;
+  unsigned long i2cErrorsSinceSummary_ = 0;
+  unsigned long i2cRecoveryCount_ = 0;
+  unsigned long lastI2cSummaryAtMs_ = 0;
+  unsigned long lastRecoveryAttemptAtMs_ = 0;
   float accelOffsetXG_ = 0.0f;
   float accelOffsetYG_ = 0.0f;
   float accelOffsetZG_ = 0.0f;

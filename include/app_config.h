@@ -119,6 +119,18 @@ constexpr unsigned long MOTION_TEST_COOLDOWN_MS = 1200;
 
 // Intervalos principais do firmware.
 constexpr unsigned long SENSOR_SAMPLE_INTERVAL_MS = 50;
+constexpr uint32_t I2C_CLOCK_HZ = 100000;
+constexpr uint16_t I2C_TIMEOUT_MS = 50;
+constexpr uint8_t I2C_READ_RETRY_COUNT = 3;
+constexpr unsigned long I2C_READ_RETRY_DELAY_MS = 2;
+constexpr unsigned int I2C_STOP_READ_SETTLE_US = 150;
+// Alguns clones de MPU6050/boards em protoboard falham no repeated-start do Wire.
+// Em bancada, preferimos STOP condition para reduzir erros i2cWriteReadNonStop.
+constexpr bool I2C_USE_REPEATED_START = false;
+constexpr uint8_t SENSOR_I2C_RECOVERY_FAILURE_THRESHOLD = 8;
+constexpr unsigned long SENSOR_I2C_RECOVERY_COOLDOWN_MS = 5000;
+constexpr unsigned long SENSOR_I2C_ERROR_SUMMARY_INTERVAL_MS = 10000;
+constexpr unsigned long SENSOR_LAST_SAMPLE_MAX_AGE_MS = 6000;
 constexpr bool SERIAL_SENSOR_DEBUG_ENABLED = false;
 constexpr unsigned long SERIAL_SENSOR_DEBUG_INTERVAL_MS = 250;
 constexpr bool SENSOR_ACCEL_CALIBRATION_ENABLED = true;
@@ -131,6 +143,7 @@ constexpr float SENSOR_ACCEL_CALIBRATION_MAX_GYRO_DPS = 20.0f;
 constexpr unsigned long STATUS_REPORT_INTERVAL_MS = 60000;
 constexpr unsigned long TELEMETRY_REPORT_INTERVAL_MS = 2000;
 constexpr unsigned long MQTT_RECONNECT_INTERVAL_MS = 5000;
+constexpr uint16_t MQTT_PACKET_BUFFER_SIZE = 1024;
 constexpr unsigned long SOS_HOLD_TIME_MS = 1500;
 
 // Buffer local para eventos criticos.

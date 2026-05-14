@@ -1,5 +1,19 @@
 # Changelog
 
+## [v0.8.22] - 2026-05-14
+### Corrigido
+- leitura I2C do MPU6050 ficou mais tolerante a falhas transitórias no ESP32 real, evitando que erros `i2cWriteReadNonStop returned Error -1` inundem o Serial Monitor ou interrompam telemetria MQTT
+- telemetria periodica continua sendo publicada com `sensor_valid=false` quando a ultima amostra fica velha demais, sem inventar valores de sensor
+
+### Alterado
+- versao alinhada para `0.8.22` em `CHANGELOG.md`, `README.md`, `package.json` da raiz, `backend/package.json`, `backend/package-lock.json`, `frontend/package.json` e `frontend/package-lock.json`
+- leituras de registradores do MPU6050 agora preferem STOP condition em bancada (`I2C_USE_REPEATED_START=false`) e mantem fallback com STOP se repeated-start for reativado
+- driver do sensor usa retry curto, contadores de falha, resumo throttled de erros I2C e recovery controlado que reinicia o barramento e reconfigura o MPU6050 sem recalibrar em loop
+- payloads de `status` e `telemetry` ganharam diagnosticos `i2c_error_count`, `i2c_recovery_count` e `i2c_last_error`; buffer MQTT do firmware subiu para `MQTT_PACKET_BUFFER_SIZE=1024`
+
+### Documentado
+- checklist fisico para instabilidade I2C: GND comum, VCC, SDA/SCL, fios curtos, contato na protoboard, modulo MPU6050 e clock de `100 kHz`
+
 ## [v0.8.21] - 2026-05-14
 ### Corrigido
 - regressao da `v0.8.20` em que falhas de configuracao/readback/calibracao do MPU6050 podiam deixar `sensor_ready=0` e bloquear telemetria real mesmo com Wi-Fi/MQTT online

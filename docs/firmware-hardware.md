@@ -86,6 +86,7 @@ No Windows, se a `COM` ficar ocupada por um monitor antigo do `PlatformIO`, use:
 Configuracao desejada do sensor no boot:
 
 - barramento `I2C` a `100 kHz`
+- leituras de registrador com STOP condition por padrao (`I2C_USE_REPEATED_START = false`)
 - `WHO_AM_I` compativel com `0x68` (`MPU6050`) e fallback para `0x69` quando necessario
 - acelerometro em faixa `+-8 g`
 - giroscopio em faixa `+-500 dps`
@@ -94,6 +95,27 @@ Configuracao desejada do sensor no boot:
 Depois de escrever os registradores, o firmware le `ACCEL_CONFIG` e `GYRO_CONFIG` de volta e usa a faixa efetiva para converter raw em unidade fisica. Se o acelerometro permanecer em `+-2 g`, o divisor usado sera `16384 LSB/g`; se `+-8 g` for realmente aplicado, sera `4096 LSB/g`. Isso evita repouso aparecendo como `4 g` por divisor incompatível.
 
 O sensor e considerado pronto quando o firmware encontra um `WHO_AM_I` compativel e consegue fazer uma leitura raw basica. Falhas de readback de escala ou calibracao nao deixam mais `sensor_ready=0`: o firmware registra o motivo, usa divisor fallback coerente e continua publicando telemetria sem offsets.
+
+### Estabilidade I2C do MPU6050
+
+O erro serial `requestFrom(): i2cWriteReadNonStop returned Error -1` costuma aparecer quando o caminho repeated-start do `Wire` falha no barramento. Em bancada, a configuracao atual evita depender desse modo:
+
+- `I2C_CLOCK_HZ = 100000`
+- `I2C_USE_REPEATED_START = false`
+- `I2C_READ_RETRY_COUNT = 3`
+- `SENSOR_I2C_RECOVERY_FAILURE_THRESHOLD = 8`
+
+Quando houver falhas consecutivas, o firmware registra um resumo throttled, reinicia o barramento I2C, reconfigura o MPU6050 e nao recalibra em loop. Se o recovery falhar, a ultima amostra valida fica preservada por uma janela curta e a telemetria continua saindo com `sensor_valid=false` quando a amostra estiver stale.
+
+Checklist fisico antes de investigar software:
+
+- confirme GND comum entre ESP32 e MPU6050
+- confirme VCC do modulo conforme a placa usada
+- confira SDA/SCL nos pinos definidos em `I2C_SDA_PIN` e `I2C_SCL_PIN`
+- use fios curtos e firmes
+- evite mau contato em protoboard
+- teste outro modulo MPU6050 se o erro persistir
+- mantenha alimentacao estavel e clock I2C em `100 kHz`
 
 ## Logs e diagnostico no firmware
 
@@ -113,6 +135,7 @@ Na pratica:
 - com `FIRMWARE_CONNECTIVITY_DEBUG_ENABLED = true`, o firmware registra host/porta/clientId MQTT efetivos, topicos de `status`, `telemetry` e `events`, e resultado de publish sem expor senha
 - os logs de saude do sensor mostram faixa efetiva, `lsb_per_g`, raw AX/AY/AZ/GX/GY/GZ, conversao em `g`/`deg/s`, calibracao e magnitude publicada
 - no boot, procure `ready=1 calibrated=0 reason=...` quando a calibracao for pulada; isso ainda e operacional e deve publicar telemetria
+- falhas I2C repetidas aparecem como resumo, por exemplo `[sensor] i2c errors summary ...`, e recovery aparece como `[sensor] i2c recovery start`, `[sensor] i2c bus restarted` e `[sensor] recovery ok`
 - o `MOTION TEST` continua com flags proprias para bancada, mas agora fica desabilitado por padrao para nao misturar teste de bancada com alarme real
 
 ## Identidade do device e pairing
@@ -245,6 +268,9 @@ O payload real tambem carrega campos tecnicos extras ignorados por clientes anti
 - `sensor_read_ok`
 - `sensor_sample_age_ms`
 - `sensor_failures`
+- `i2c_error_count`
+- `i2c_recovery_count`
+- `i2c_last_error`
 
 Esses campos ajudam a diferenciar "ESP32 vivo publicando com ultima amostra conhecida" de "sensor sem leitura valida".
 
@@ -283,14 +309,16 @@ npm run mqtt:watch --prefix backend
    - `[telemetry] publish ok ...` repetindo a cada `TELEMETRY_REPORT_INTERVAL_MS`
 6. Confirme que nao aparece repetidamente `[telemetry] skipped reason=sensor_no_valid_sample ... sensor_ready=0`.
 7. Deixe o ESP32 parado sobre a mesa e confirme `[sensor] read ok ... magnitude=...` perto de `1.00 g`.
-8. Confirme no `mqtt:watch` linhas novas em `queda/devices/esp32_01/telemetry`.
-9. Confirme no dashboard que AX/AY/AZ estao em `g`, `accel_magnitude` fica perto de `1 g` em repouso e o grafico estabiliza perto de `1 g`.
-10. Mexa o sensor rapidamente e confirme que a aceleracao sobe temporariamente.
-11. Deixe parado novamente e confirme retorno para perto de `1 g`.
-12. Se aparecer `[telemetry] skipped reason=mqtt_disconnected`, o problema esta no link MQTT/reconnect.
-13. Se aparecer `[telemetry] skipped reason=sensor_no_valid_sample` com `sensor_ready=1`, o problema esta em leitura raw temporaria/I2C apos o boot.
-14. Se aparecer `[telemetry] skipped reason=sensor_no_valid_sample` com `sensor_ready=0`, o firmware nao encontrou o MPU6050 ou nao conseguiu leitura raw basica no boot.
-15. Se o Serial mostrar `publish ok` mas o `mqtt:watch` nao receber, verifique host/porta, broker efetivo, clientId e rede.
+8. Confirme que o Serial nao fica inundado por erro I2C; falhas repetidas devem virar resumo e recovery.
+9. Se ocorrer recovery, procure `[sensor] recovery ok`; se aparecer `recovery failed`, revise o checklist fisico.
+10. Confirme no `mqtt:watch` linhas novas em `queda/devices/esp32_01/telemetry`.
+11. Confirme no dashboard que AX/AY/AZ estao em `g`, `accel_magnitude` fica perto de `1 g` em repouso e o grafico estabiliza perto de `1 g`.
+12. Mexa o sensor rapidamente e confirme que a aceleracao sobe temporariamente.
+13. Deixe parado novamente e confirme retorno para perto de `1 g`.
+14. Se aparecer `[telemetry] skipped reason=mqtt_disconnected`, o problema esta no link MQTT/reconnect.
+15. Se aparecer `[telemetry] skipped reason=sensor_no_valid_sample` com `sensor_ready=1`, o problema esta em leitura raw temporaria/I2C apos o boot.
+16. Se aparecer `[telemetry] skipped reason=sensor_no_valid_sample` com `sensor_ready=0`, o firmware nao encontrou o MPU6050 ou nao conseguiu leitura raw basica no boot.
+17. Se o Serial mostrar `publish ok` mas o `mqtt:watch` nao receber, verifique host/porta, broker efetivo, clientId e rede.
 
 ## Buzzer e motion test
 
