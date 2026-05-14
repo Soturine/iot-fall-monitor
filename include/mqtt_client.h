@@ -26,6 +26,7 @@ class DeviceMqttClient {
   unsigned long firstFailureAtMs() const;
   bool usingTls() const;
   int lastFailureCode() const;
+  int currentStateCode();
   String lastFailureReason() const;
   unsigned long lastSuccessfulConnectAtMs() const;
   MqttConnectionProbeResult probeConnection(const DeviceSettings::DeviceConfig& config) const;
@@ -55,4 +56,5 @@ class DeviceMqttClient {
   unsigned long lastSuccessfulConnectAtMs_ = 0;
   uint8_t consecutiveFailureCount_ = 0;
   int lastFailureCode_ = MQTT_DISCONNECTED;
+  bool wasConnected_ = false;
 };

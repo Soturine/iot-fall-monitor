@@ -138,6 +138,9 @@ void SetupPortal::begin(const DeviceSettings::DeviceConfig& config,
   dnsServer_.start(kDnsPort, "*", apIp_);
   server_.begin();
   running_ = true;
+  if (maintenanceMode_ && !AppConfig::SETUP_PORTAL_SCAN_IN_MAINTENANCE_MODE) {
+    AppLog::info("[portal] maintenance wifi scan disabled to protect station MQTT loop.");
+  }
   startWifiScanIfNeeded();
 }
 
@@ -235,6 +238,10 @@ void SetupPortal::scheduleRestart(const String& message) {
 }
 
 void SetupPortal::startWifiScanIfNeeded() {
+  if (maintenanceMode_ && !AppConfig::SETUP_PORTAL_SCAN_IN_MAINTENANCE_MODE) {
+    return;
+  }
+
   if (scanInProgress_) {
     return;
   }

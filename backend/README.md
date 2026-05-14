@@ -109,6 +109,8 @@ npm run mqtt:publish:test --prefix backend
 
 `mqtt:watch` assina os topicos reais `queda/devices/+/status`, `queda/devices/+/telemetry` e `queda/devices/+/events`, mostrando timestamp, topico, tamanho, resumo do payload e erro de JSON quando houver. `mqtt:publish:test` publica um status e uma sequencia curta de telemetria valida; use `-- --device esp32_01 --count 10 --interval-ms 1000` para testar o dashboard sem ESP32 real.
 
+Quando o teste simulado funcionar, mas o ESP32 real nao alimentar o grafico, use o Serial Monitor do firmware junto com `mqtt:watch`: o watcher precisa mostrar mensagens novas vindas do `clientId` real do ESP32. Se apenas o publisher de teste aparece, o problema esta antes do backend.
+
 ### Identidade MQTT e devices legados
 
 O backend aceita mensagens MQTT com `device_id` e, quando disponivel, `device_uid`. Em ambientes antigos ou seeds de demo, o device pode estar cadastrado como `device_uid = legacy:{device_id}` enquanto o firmware real ja publica um UID fisico do ESP32.

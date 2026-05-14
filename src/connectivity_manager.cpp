@@ -95,6 +95,7 @@ void ConnectivityManager::update() {
             ? "Portal de manutencao ativo. Wi-Fi station e MQTT seguem operando em paralelo."
             : setupReason_;
     updatePortalContext();
+    mqttClient_.update(wifiManager_.isConnected());
     return;
   }
 

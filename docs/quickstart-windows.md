@@ -374,6 +374,17 @@ npm run mqtt:watch --prefix backend
 
 O watcher deve mostrar linhas JSON com `topic`, `bytes`, `json: "ok"` e um resumo com `device_id`, `device_uid`, `timestamp`, RSSI/bateria ou amostras do sensor.
 
+Durante o teste real, deixe esse terminal aberto e reinicie o ESP32 com o Serial Monitor em `115200`. O firmware deve registrar:
+
+```text
+[mqtt] connected broker=IP_DO_NOTEBOOK:1883 tls=0 clientId=esp32_01_client
+[mqtt] topic telemetry=queda/devices/esp32_01/telemetry
+[sensor] read ok ax=... ay=... az=...
+[telemetry] publish ok topic=queda/devices/esp32_01/telemetry bytes=...
+```
+
+Se o Serial Monitor mostrar `publish ok` repetindo e o `mqtt:watch` nao mostrar linhas novas, o ESP32 provavelmente esta publicando em outro broker/rede. Se o `mqtt:watch` mostrar as linhas e o dashboard nao atualizar, volte a investigar backend, escopo do device, Socket.IO ou frontend.
+
 Para testar backend e dashboard sem ESP32 fisico:
 
 ```powershell

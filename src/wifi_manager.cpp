@@ -13,6 +13,7 @@ void WifiManager::begin(const DeviceSettings::DeviceConfig& config) {
   completedCycles_ = 0;
   attemptsExhausted_ = false;
   ntpConfigured_ = false;
+  wasConnected_ = false;
 
   // Em bancada, o portal de manutencao pode ficar ativo junto com o cliente Wi-Fi.
   WiFi.mode(AppConfig::SETUP_PORTAL_ALWAYS_ON ? WIFI_AP_STA : WIFI_STA);
@@ -29,8 +30,9 @@ void WifiManager::begin(const DeviceSettings::DeviceConfig& config) {
 void WifiManager::update() {
   if (isConnected()) {
     if (!ntpConfigured_) {
-      AppLog::infof("Wi-Fi conectado em %s (%ld dBm).\n",
+      AppLog::infof("[wifi] connected ssid=%s ip=%s rssi=%ld\n",
                     WiFi.SSID().c_str(),
+                    WiFi.localIP().toString().c_str(),
                     WiFi.RSSI());
       // O horario so precisa ser sincronizado quando a conectividade voltar.
       configTime(AppConfig::GMT_OFFSET_SECONDS,
@@ -39,7 +41,13 @@ void WifiManager::update() {
                  AppConfig::NTP_SERVER_SECONDARY);
       ntpConfigured_ = true;
     }
+    wasConnected_ = true;
     return;
+  }
+
+  if (wasConnected_) {
+    AppLog::warnf("[wifi] disconnected status=%d\n", static_cast<int>(WiFi.status()));
+    wasConnected_ = false;
   }
 
   ntpConfigured_ = false;
@@ -72,6 +80,7 @@ void WifiManager::stop(bool keepConnected) {
   currentAttemptStartedAtMs_ = 0;
   completedCycles_ = 0;
   ntpConfigured_ = false;
+  wasConnected_ = keepConnected && isConnected();
 
   if (!keepConnected) {
     WiFi.disconnect(false, false);

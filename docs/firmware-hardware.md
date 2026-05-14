@@ -219,6 +219,20 @@ Com isso, o backend consegue manter bateria, RSSI e `lastSeenAt` mais coerentes 
 
 Para online/offline, o backend usa a hora em que recebeu MQTT como `lastSeenAt`. Se o ESP32 ainda nao sincronizou NTP e mandar `timestamp = millis()/1000`, ou se mandar um Unix time plausivel mas stale demais, o backend usa a hora de recebimento para telemetria/eventos. Isso evita telemetria recem-chegada com data antiga, evidencia de queda sem vinculo e status falsamente offline.
 
+No firmware atual, a telemetria periodica continua rodando mesmo com o portal de manutencao ativo e mesmo se houver candidato/alerta de queda. O portal em modo manutencao nao inicia scan Wi-Fi automatico (`SETUP_PORTAL_SCAN_IN_MAINTENANCE_MODE = false`), porque scan em `WIFI_AP_STA` pode interferir no link station/MQTT em alguns ESP32. Em `SETUP_MODE` o scan continua disponivel para ajudar a cadastrar redes.
+
+O payload real tambem carrega campos tecnicos extras ignorados por clientes antigos:
+
+- `battery_percent` alem de `battery_level`
+- `rssi` alem de `wifi_rssi`
+- `sensor_ready`
+- `sensor_valid`
+- `sensor_read_ok`
+- `sensor_sample_age_ms`
+- `sensor_failures`
+
+Esses campos ajudam a diferenciar "ESP32 vivo publicando com ultima amostra conhecida" de "sensor sem leitura valida".
+
 Para confirmar publicacao real em bancada, rode no notebook:
 
 ```powershell
@@ -230,6 +244,29 @@ Para gerar telemetria valida sem ESP32 fisico:
 ```powershell
 npm run mqtt:publish:test --prefix backend -- --device esp32_01 --count 10
 ```
+
+### Procedimento de teste real de telemetria
+
+1. Suba broker, backend e frontend com o fluxo local do projeto.
+2. Abra um terminal fixo:
+
+```powershell
+npm run mqtt:watch --prefix backend
+```
+
+3. Abra o Serial Monitor do ESP32 em `115200`.
+4. Reinicie o ESP32.
+5. Confirme no Serial Monitor:
+   - `[wifi]`/`Wi-Fi conectado` com IP station
+   - `[mqtt] connected broker=... clientId=...`
+   - `[mqtt] topic telemetry=queda/devices/esp32_01/telemetry`
+   - `[sensor] read ok ...`
+   - `[telemetry] publish ok ...` repetindo a cada `TELEMETRY_REPORT_INTERVAL_MS`
+6. Confirme no `mqtt:watch` linhas novas em `queda/devices/esp32_01/telemetry`.
+7. Confirme no dashboard que o grafico passa de poucas amostras para varias amostras reais.
+8. Se aparecer `[telemetry] skipped reason=mqtt_disconnected`, o problema esta no link MQTT/reconnect.
+9. Se aparecer `[telemetry] skipped reason=sensor_no_valid_sample`, o problema esta no MPU6050/I2C antes de haver amostra valida.
+10. Se o Serial mostrar `publish ok` mas o `mqtt:watch` nao receber, verifique host/porta, broker efetivo, clientId e rede.
 
 ## Buzzer e motion test
 

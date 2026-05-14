@@ -13,6 +13,12 @@ constexpr uint8_t FIRMWARE_LOG_LEVEL = LOG_LEVEL_INFO;
 constexpr bool FIRMWARE_I2C_DEBUG_ENABLED = false;
 constexpr bool FIRMWARE_CONNECTIVITY_DEBUG_ENABLED = false;
 constexpr bool FIRMWARE_EVENT_BUFFER_DEBUG_ENABLED = false;
+constexpr bool FIRMWARE_MQTT_DIAGNOSTIC_ENABLED = true;
+constexpr bool FIRMWARE_SENSOR_HEALTH_LOG_ENABLED = true;
+constexpr bool FIRMWARE_LOOP_HEALTH_LOG_ENABLED = true;
+constexpr unsigned long FIRMWARE_SENSOR_HEALTH_LOG_INTERVAL_MS = 5000;
+constexpr unsigned long FIRMWARE_LOOP_HEALTH_LOG_INTERVAL_MS = 5000;
+constexpr unsigned long FIRMWARE_TELEMETRY_SKIP_LOG_INTERVAL_MS = 5000;
 
 // Defaults de conectividade e identidade.
 // Agora estes valores servem como fallback de fabrica e referencia inicial.
@@ -64,6 +70,9 @@ constexpr unsigned long MQTT_SETUP_FALLBACK_TIMEOUT_MS = 30000;
 constexpr uint8_t MQTT_SETUP_FALLBACK_ATTEMPTS = 6;
 constexpr unsigned long SETUP_RESTART_DELAY_MS = 1500;
 constexpr unsigned long WIFI_SCAN_REFRESH_INTERVAL_MS = 30000;
+// Em modo manutencao paralelo, scan Wi-Fi em AP_STA pode interferir no link station/MQTT.
+// Mantemos a lista automatica desligada enquanto o device opera; em SETUP_MODE o scan continua.
+constexpr bool SETUP_PORTAL_SCAN_IN_MAINTENANCE_MODE = false;
 constexpr unsigned long DEVICE_PROFILE_SYNC_INTERVAL_MS = 120000;
 constexpr unsigned long DEVICE_PROFILE_SYNC_RETRY_INTERVAL_MS = 30000;
 
@@ -110,7 +119,7 @@ constexpr unsigned long MOTION_TEST_COOLDOWN_MS = 1200;
 
 // Intervalos principais do firmware.
 constexpr unsigned long SENSOR_SAMPLE_INTERVAL_MS = 50;
-constexpr bool SERIAL_SENSOR_DEBUG_ENABLED = true;
+constexpr bool SERIAL_SENSOR_DEBUG_ENABLED = false;
 constexpr unsigned long SERIAL_SENSOR_DEBUG_INTERVAL_MS = 250;
 constexpr unsigned long STATUS_REPORT_INTERVAL_MS = 60000;
 constexpr unsigned long TELEMETRY_REPORT_INTERVAL_MS = 2000;

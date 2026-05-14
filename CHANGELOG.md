@@ -1,5 +1,25 @@
 # Changelog
 
+## [v0.8.18] - 2026-05-13
+### Adicionado
+- logs seriais de diagnostico no firmware para MQTT, sensor, loop principal, publish/skip de telemetria, status e eventos
+- campos tecnicos no payload real do ESP32 (`sensor_ready`, `sensor_valid`, `sensor_read_ok`, `sensor_sample_age_ms`, `sensor_failures`, `battery_percent`, `rssi`) sem remover os campos antigos
+- procedimento documentado para testar telemetria real com Serial Monitor + `npm run mqtt:watch --prefix backend`
+
+### Alterado
+- versao alinhada para `0.8.18` em `CHANGELOG.md`, `README.md`, `package.json` da raiz, `backend/package.json`, `backend/package-lock.json`, `frontend/package.json` e `frontend/package-lock.json`
+- portal de manutencao deixou de iniciar scan Wi-Fi automatico em `WIFI_AP_STA`, reduzindo risco de interferir no link station/MQTT enquanto o device opera
+- payloads JSON do firmware ganharam mais folga de buffer e aviso serial se houver overflow antes de publicar
+- telemetria periodica passou a registrar motivo de skip quando falta MQTT ou ainda nao ha amostra valida do sensor
+
+### Corrigido
+- o firmware ficou mais observavel para distinguir ESP32 conectado sem publish continuo de backend/frontend funcionando com telemetria simulada
+- falhas pontuais de leitura do MPU6050 nao impedem o loop MQTT; quando ja existe ultima amostra valida, o firmware continua publicando com idade da amostra e contador de falhas
+
+### Pendente / Faltando
+- validar na placa fisica com `mqtt:watch` aberto por varios minutos apos reinicio do ESP32
+- compilar com PlatformIO localmente na maquina com `pio` instalado; nesta sessao `pio`/`platformio` nao estava no PATH
+
 ## [v0.8.17] - 2026-05-13
 ### Adicionado
 - scripts `npm run mqtt:watch --prefix backend` e `npm run mqtt:publish:test --prefix backend` para observar mensagens reais no broker e publicar telemetria valida sem ESP32 fisico

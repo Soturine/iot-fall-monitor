@@ -298,6 +298,16 @@ npm run mqtt:publish:test --prefix backend -- --device esp32_01 --count 10 --int
 
 Esse publisher usa o mesmo contrato MQTT esperado pelo backend e publica `status` + telemetria em `queda/devices/{deviceId}/status` e `queda/devices/{deviceId}/telemetry`.
 
+Para diferenciar fonte real e simulada:
+
+- telemetria simulada usa `mqtt:publish:test` e aparece com `device_uid=legacy:esp32_01` por padrao
+- telemetria real do firmware deve aparecer no broker com o `clientId` configurado no portal, como `esp32_01_client`
+- no Serial Monitor do ESP32, o firmware registra `[telemetry] publish ok topic=queda/devices/esp32_01/telemetry bytes=...`
+- se o Serial Monitor mostra `publish ok`, mas o watcher nao recebe, investigue broker/host/rede
+- se o watcher recebe e o dashboard nao atualiza, volte para backend, escopo, assignment, Socket.IO ou frontend
+
+O portal de manutencao em paralelo continua ativo sem ser `SETUP_MODE`. Para proteger o loop normal, ele nao inicia scan Wi-Fi automatico durante manutencao operacional; Wi-Fi station, MQTT, sensor, status, eventos e telemetria continuam sendo processados no loop principal.
+
 ### Endpoint usado pelo ESP32
 
 - `POST /api/pairing/claim`

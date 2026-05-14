@@ -30,4 +30,5 @@ class WifiManager {
   unsigned long completedCycles_ = 0;
   bool attemptsExhausted_ = false;
   bool ntpConfigured_ = false;
+  bool wasConnected_ = false;
 };

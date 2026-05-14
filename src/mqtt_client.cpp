@@ -68,20 +68,36 @@ void DeviceMqttClient::configure(const DeviceSettings::DeviceConfig& config) {
 
 void DeviceMqttClient::disconnect() {
   client_.disconnect();
+  wasConnected_ = false;
   resetFailureTracking();
 }
 
 void DeviceMqttClient::update(bool wifiConnected) {
   if (!wifiConnected) {
+    if (client_.connected() && AppConfig::FIRMWARE_MQTT_DIAGNOSTIC_ENABLED) {
+      AppLog::warn("[mqtt] disconnected reason=wifi_disconnected");
+    }
     client_.disconnect();
+    wasConnected_ = false;
     resetFailureTracking();
     return;
   }
 
   if (client_.connected()) {
+    wasConnected_ = true;
     // O loop interno do cliente cuida de keepalive e ACKs MQTT.
     client_.loop();
     return;
+  }
+
+  if (wasConnected_) {
+    wasConnected_ = false;
+    lastFailureCode_ = client_.state();
+    if (AppConfig::FIRMWARE_MQTT_DIAGNOSTIC_ENABLED) {
+      AppLog::warnf("[mqtt] disconnected state=%d reason=%s\n",
+                    lastFailureCode_,
+                    describeStateCode(lastFailureCode_).c_str());
+    }
   }
 
   if ((millis() - lastReconnectAttemptMs_) >= AppConfig::MQTT_RECONNECT_INTERVAL_MS) {
@@ -115,6 +131,10 @@ unsigned long DeviceMqttClient::firstFailureAtMs() const {
 
 bool DeviceMqttClient::usingTls() const {
   return useTls_;
+}
+
+int DeviceMqttClient::currentStateCode() {
+  return client_.state();
 }
 
 int DeviceMqttClient::lastFailureCode() const {
@@ -220,14 +240,18 @@ bool DeviceMqttClient::reconnect() {
   lastReconnectAttemptMs_ = millis();
 
   if (!hasValidConfiguration()) {
+    if (AppConfig::FIRMWARE_MQTT_DIAGNOSTIC_ENABLED) {
+      AppLog::warn("[mqtt] reconnect skipped reason=invalid_config");
+    }
     return false;
   }
 
-  if (AppConfig::FIRMWARE_CONNECTIVITY_DEBUG_ENABLED) {
-    AppLog::debugf("Tentando MQTT | host=%s | porta=%u | clientId=%s\n",
-                   host_.c_str(),
-                   port_,
-                   clientId_.c_str());
+  if (AppConfig::FIRMWARE_CONNECTIVITY_DEBUG_ENABLED ||
+      AppConfig::FIRMWARE_MQTT_DIAGNOSTIC_ENABLED) {
+    AppLog::infof("[mqtt] reconnect attempt broker=%s:%u clientId=%s\n",
+                  host_.c_str(),
+                  port_,
+                  clientId_.c_str());
   }
 
   bool connected = false;
@@ -241,13 +265,15 @@ bool DeviceMqttClient::reconnect() {
   }
 
   if (connected) {
+    wasConnected_ = true;
     resetFailureTracking();
     lastSuccessfulConnectAtMs_ = millis();
     lastFailureCode_ = MQTT_CONNECTED;
-    AppLog::infof("MQTT conectado em %s:%u (%s).\n",
+    AppLog::infof("[mqtt] connected broker=%s:%u tls=%s clientId=%s\n",
                   host_.c_str(),
                   port_,
-                  useTls_ ? "TLS" : "sem TLS");
+                  useTls_ ? "1" : "0",
+                  clientId_.c_str());
     if (AppConfig::FIRMWARE_CONNECTIVITY_DEBUG_ENABLED) {
       AppLog::debugf("MQTT clientId efetivo conectado: %s\n", clientId_.c_str());
     }
@@ -265,6 +291,13 @@ bool DeviceMqttClient::reconnect() {
   }
 
   lastFailureCode_ = client_.state();
+  wasConnected_ = false;
+
+  if (AppConfig::FIRMWARE_MQTT_DIAGNOSTIC_ENABLED) {
+    AppLog::warnf("[mqtt] reconnect failed state=%d reason=%s\n",
+                  lastFailureCode_,
+                  describeStateCode(lastFailureCode_).c_str());
+  }
 
   if (AppConfig::FIRMWARE_CONNECTIVITY_DEBUG_ENABLED &&
       (consecutiveFailureCount_ == 1U || consecutiveFailureCount_ % 3U == 0U)) {

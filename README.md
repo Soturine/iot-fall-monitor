@@ -6,9 +6,9 @@ O objetivo do repositório é integrar hardware embarcado, ingestão de eventos,
 
 ## Baseline Atual
 
-Baseline atual do repositório: `v0.8.17`.
+Baseline atual do repositório: `v0.8.18`.
 
-A baseline `v0.8.17` reforca o diagnostico MQTT ponta a ponta, adiciona scripts para observar/publicar mensagens reais no broker local e evita falso offline quando o ESP32 envia timestamp stale apesar de estar publicando.
+A baseline `v0.8.18` reforca o runtime do firmware para telemetria MQTT continua: o portal de manutencao nao dispara scan Wi-Fi automatico em paralelo, o Serial Monitor mostra publish/skip de telemetria e o payload inclui saude do sensor para diferenciar falha de leitura de falha MQTT.
 
 Para a experiência local prevista nesta fase, o projeto está estabilizado para `Node.js 20+`.
 
@@ -174,6 +174,8 @@ npm run mqtt:publish:test --prefix backend
 `stress:dry` usa mocks locais para regressão rápida. `stress:real` valida backend `/health`, broker MQTT e MySQL de desenvolvimento antes de publicar MQTT real. Os logs ficam em `backend/logs/stress/` (`*.jsonl`, `summary-*.json`, `failures-*.json`, `report-*.md`) e sao ignorados pelo Git.
 
 `db:migrate:evidence` aplica apenas a migração idempotente das colunas/tabela de evidência sem resetar dados. `mqtt:watch` assina os tópicos reais `queda/devices/+/status`, `telemetry` e `events` para confirmar se o ESP32 está publicando. `mqtt:publish:test` publica status e telemetria válidos no mesmo contrato do firmware, útil para testar backend/dashboard sem hardware.
+
+Para validar telemetria real do ESP32, deixe `mqtt:watch` aberto, reinicie a placa e acompanhe o Serial Monitor. O funcionamento esperado mostra `[mqtt] connected`, `[sensor] read ok`, `[telemetry] publish ok` repetindo no intervalo configurado e linhas novas em `queda/devices/esp32_01/telemetry`. Telemetria simulada vem do `clientId` de teste e serve para validar backend/frontend; telemetria real deve vir do `clientId` configurado no ESP32, como `esp32_01_client`.
 
 O fluxo local esperado usa:
 

@@ -44,8 +44,13 @@ unsigned long lastPatientProfileSyncAttemptAtMs = 0;
 unsigned long lastMotionTestTriggerAtMs = 0;
 unsigned long motionTestStableSinceAtMs = 0;
 unsigned long lastEventBufferPersistAtMs = 0;
+unsigned long lastSensorHealthLogAtMs = 0;
+unsigned long lastTelemetrySkipLogAtMs = 0;
+unsigned long lastLoopHealthLogAtMs = 0;
+unsigned long consecutiveSensorReadFailures = 0;
 bool lastPatientProfileSyncSucceeded = false;
 bool mqttRuntimeContextLogged = false;
+bool lastSensorReadSucceeded = false;
 
 unsigned long currentTimestampSeconds() {
   const time_t now = time(nullptr);
@@ -89,7 +94,7 @@ String buildEventPayload(const char* eventType,
                          float gyroMagnitudeDegPerSec,
                          bool immobilityConfirmed) {
   // Mantem o formato do payload centralizado em um unico ponto.
-  StaticJsonDocument<256> doc;
+  StaticJsonDocument<384> doc;
   doc["device_uid"] = DeviceSettings::technicalDeviceUid();
   doc["device_id"] = DeviceSettings::effectiveDeviceId(runtimeConfig());
   doc["event_type"] = eventType;
@@ -98,6 +103,11 @@ String buildEventPayload(const char* eventType,
   doc["gyro_magnitude"] = gyroMagnitudeDegPerSec;
   doc["immobility_confirmed"] = immobilityConfirmed;
   doc["battery_level"] = batteryLevelPercent();
+  doc["battery_percent"] = batteryLevelPercent();
+
+  if (doc.overflowed()) {
+    AppLog::warn("[event] payload JSON overflowed before serialization.");
+  }
 
   String payload;
   serializeJson(doc, payload);
@@ -106,7 +116,8 @@ String buildEventPayload(const char* eventType,
 
 String buildStatusPayload() {
   // O status periodico carrega telemetria minima para observabilidade do dispositivo.
-  StaticJsonDocument<320> doc;
+  const unsigned long nowMs = millis();
+  StaticJsonDocument<512> doc;
   doc["device_uid"] = DeviceSettings::technicalDeviceUid();
   doc["device_id"] = DeviceSettings::effectiveDeviceId(runtimeConfig());
   doc["event_type"] = "device_status";
@@ -115,8 +126,22 @@ String buildStatusPayload() {
   doc["gyro_magnitude"] = latestReading.gyroMagnitudeDegPerSec;
   doc["immobility_confirmed"] = false;
   doc["battery_level"] = batteryLevelPercent();
+  doc["battery_percent"] = batteryLevelPercent();
   doc["wifi_rssi"] = connectivityManager.wifiRssi();
+  doc["rssi"] = connectivityManager.wifiRssi();
   doc["buffered_events"] = eventBuffer.size();
+  doc["sensor_ready"] = sensorReady;
+  doc["sensor_valid"] = latestReading.valid;
+  doc["sensor_read_ok"] = lastSensorReadSucceeded;
+  doc["sensor_sample_age_ms"] =
+      latestReading.valid && nowMs >= latestReading.timestampMs
+          ? nowMs - latestReading.timestampMs
+          : 0U;
+  doc["sensor_failures"] = consecutiveSensorReadFailures;
+
+  if (doc.overflowed()) {
+    AppLog::warn("[status] payload JSON overflowed before serialization.");
+  }
 
   String payload;
   serializeJson(doc, payload);
@@ -124,7 +149,8 @@ String buildStatusPayload() {
 }
 
 String buildTelemetryPayload() {
-  StaticJsonDocument<320> doc;
+  const unsigned long nowMs = millis();
+  StaticJsonDocument<640> doc;
   doc["device_uid"] = DeviceSettings::technicalDeviceUid();
   doc["device_id"] = DeviceSettings::effectiveDeviceId(runtimeConfig());
   doc["timestamp"] = currentTimestampSeconds();
@@ -139,14 +165,28 @@ String buildTelemetryPayload() {
   doc["pitch_deg"] = latestReading.pitchDeg;
   doc["roll_deg"] = latestReading.rollDeg;
   doc["battery_level"] = batteryLevelPercent();
+  doc["battery_percent"] = batteryLevelPercent();
   doc["wifi_rssi"] = connectivityManager.wifiRssi();
+  doc["rssi"] = connectivityManager.wifiRssi();
+  doc["sensor_ready"] = sensorReady;
+  doc["sensor_valid"] = latestReading.valid;
+  doc["sensor_read_ok"] = lastSensorReadSucceeded;
+  doc["sensor_sample_age_ms"] =
+      latestReading.valid && nowMs >= latestReading.timestampMs
+          ? nowMs - latestReading.timestampMs
+          : 0U;
+  doc["sensor_failures"] = consecutiveSensorReadFailures;
+
+  if (doc.overflowed()) {
+    AppLog::warn("[telemetry] payload JSON overflowed before serialization.");
+  }
 
   String payload;
   serializeJson(doc, payload);
   return payload;
 }
 
-void queueOrPublish(const String& topic, const String& payload) {
+bool queueOrPublish(const String& topic, const String& payload) {
   if (mqttClient.publish(topic, payload, false)) {
     if (AppConfig::FIRMWARE_CONNECTIVITY_DEBUG_ENABLED) {
       AppLog::debugf("MQTT publish OK | topico=%s | bytes=%u\n",
@@ -156,7 +196,7 @@ void queueOrPublish(const String& topic, const String& payload) {
     if (AppConfig::FIRMWARE_EVENT_BUFFER_DEBUG_ENABLED) {
       AppLog::debugf("Evento enviado para %s\n", topic.c_str());
     }
-    return;
+    return true;
   }
 
   if (AppConfig::FIRMWARE_CONNECTIVITY_DEBUG_ENABLED) {
@@ -185,6 +225,8 @@ void queueOrPublish(const String& topic, const String& payload) {
       lastEventBufferPersistAtMs = millis();
     }
   }
+
+  return false;
 }
 
 void flushBufferedEvents() {
@@ -243,9 +285,16 @@ IndicatorState computeIndicatorState() {
 }
 
 void publishFallAlert(const FallAlert& alert) {
+  const String topic = DeviceSettings::buildTopic(runtimeConfig(), "events");
   const String payload = buildEventPayload(
       "fall_detected", alert.accelMagnitudeG, alert.gyroMagnitudeDegPerSec, true);
-  queueOrPublish(DeviceSettings::buildTopic(runtimeConfig(), "events"), payload);
+  const bool published = queueOrPublish(topic, payload);
+  if (AppConfig::FIRMWARE_MQTT_DIAGNOSTIC_ENABLED) {
+    AppLog::warnf("[event] publish %s topic=%s type=fall_detected bytes=%u\n",
+                  published ? "ok" : "queued",
+                  topic.c_str(),
+                  static_cast<unsigned>(payload.length()));
+  }
   indicator.triggerAlarm();
 }
 
@@ -256,25 +305,62 @@ void publishSosAlert() {
 
   const String payload =
       buildEventPayload("sos_pressed", accelMagnitude, gyroMagnitude, false);
-  queueOrPublish(DeviceSettings::buildTopic(runtimeConfig(), "events"), payload);
+  const String topic = DeviceSettings::buildTopic(runtimeConfig(), "events");
+  const bool published = queueOrPublish(topic, payload);
+  if (AppConfig::FIRMWARE_MQTT_DIAGNOSTIC_ENABLED) {
+    AppLog::warnf("[event] publish %s topic=%s type=sos_pressed bytes=%u\n",
+                  published ? "ok" : "queued",
+                  topic.c_str(),
+                  static_cast<unsigned>(payload.length()));
+  }
   indicator.triggerAlarm(4);
 }
 
 void publishPeriodicStatus() {
-  if (!latestReading.valid) {
-    return;
-  }
-
   const String payload = buildStatusPayload();
   const String topic = DeviceSettings::buildTopic(runtimeConfig(), "status");
   if (AppConfig::FIRMWARE_CONNECTIVITY_DEBUG_ENABLED) {
     AppLog::debugf("Publicando status MQTT em %s\n", topic.c_str());
   }
-  queueOrPublish(topic, payload);
+  const bool published = queueOrPublish(topic, payload);
+  if (AppConfig::FIRMWARE_MQTT_DIAGNOSTIC_ENABLED) {
+    AppLog::infof("[status] publish %s topic=%s bytes=%u mqtt_connected=%u sensor_valid=%u\n",
+                  published ? "ok" : "queued",
+                  topic.c_str(),
+                  static_cast<unsigned>(payload.length()),
+                  mqttClient.isConnected() ? 1U : 0U,
+                  latestReading.valid ? 1U : 0U);
+  }
 }
 
-void publishPeriodicTelemetry() {
-  if (!latestReading.valid || !mqttClient.isConnected()) {
+void logTelemetrySkipped(const char* reason, unsigned long nowMs) {
+  if (!AppConfig::FIRMWARE_MQTT_DIAGNOSTIC_ENABLED) {
+    return;
+  }
+
+  if (lastTelemetrySkipLogAtMs > 0U &&
+      (nowMs - lastTelemetrySkipLogAtMs) <
+          AppConfig::FIRMWARE_TELEMETRY_SKIP_LOG_INTERVAL_MS) {
+    return;
+  }
+
+  lastTelemetrySkipLogAtMs = nowMs;
+  AppLog::warnf("[telemetry] skipped reason=%s mqtt_connected=%u sensor_ready=%u sensor_valid=%u failures=%lu\n",
+                reason,
+                mqttClient.isConnected() ? 1U : 0U,
+                sensorReady ? 1U : 0U,
+                latestReading.valid ? 1U : 0U,
+                consecutiveSensorReadFailures);
+}
+
+void publishPeriodicTelemetry(unsigned long nowMs) {
+  if (!mqttClient.isConnected()) {
+    logTelemetrySkipped("mqtt_disconnected", nowMs);
+    return;
+  }
+
+  if (!latestReading.valid) {
+    logTelemetrySkipped("sensor_no_valid_sample", nowMs);
     return;
   }
 
@@ -283,11 +369,22 @@ void publishPeriodicTelemetry() {
   const String payload = buildTelemetryPayload();
   const bool published = mqttClient.publish(topic, payload, false);
 
-  if (AppConfig::FIRMWARE_CONNECTIVITY_DEBUG_ENABLED) {
-    AppLog::debugf("MQTT telemetry %s | topico=%s | bytes=%u\n",
-                   published ? "OK" : "falhou",
-                   topic.c_str(),
-                   static_cast<unsigned>(payload.length()));
+  if (AppConfig::FIRMWARE_MQTT_DIAGNOSTIC_ENABLED) {
+    const unsigned long sampleAgeMs =
+        nowMs >= latestReading.timestampMs ? nowMs - latestReading.timestampMs : 0U;
+    if (published) {
+      AppLog::infof("[telemetry] publish ok topic=%s bytes=%u sample_age_ms=%lu sensor_read_ok=%u\n",
+                    topic.c_str(),
+                    static_cast<unsigned>(payload.length()),
+                    sampleAgeMs,
+                    lastSensorReadSucceeded ? 1U : 0U);
+    } else {
+      AppLog::warnf("[telemetry] publish failed topic=%s bytes=%u mqtt_state=%d sample_age_ms=%lu\n",
+                    topic.c_str(),
+                    static_cast<unsigned>(payload.length()),
+                    mqttClient.currentStateCode(),
+                    sampleAgeMs);
+    }
   }
 }
 
@@ -383,7 +480,8 @@ void holdDisabledBuzzerInactive() {
 }
 
 void logMqttRuntimeContextIfNeeded() {
-  if (!AppConfig::FIRMWARE_CONNECTIVITY_DEBUG_ENABLED) {
+  if (!AppConfig::FIRMWARE_CONNECTIVITY_DEBUG_ENABLED &&
+      !AppConfig::FIRMWARE_MQTT_DIAGNOSTIC_ENABLED) {
     return;
   }
 
@@ -397,15 +495,80 @@ void logMqttRuntimeContextIfNeeded() {
   }
 
   mqttRuntimeContextLogged = true;
-  AppLog::debugf("MQTT runtime deviceId=%s | clientId=%s\n",
-                 DeviceSettings::effectiveDeviceId(runtimeConfig()).c_str(),
-                 DeviceSettings::effectiveMqttClientId(runtimeConfig()).c_str());
-  AppLog::debugf("Topico status: %s\n",
-                 DeviceSettings::buildTopic(runtimeConfig(), "status").c_str());
-  AppLog::debugf("Topico telemetry: %s\n",
-                 DeviceSettings::buildTopic(runtimeConfig(), "telemetry").c_str());
-  AppLog::debugf("Topico events: %s\n",
-                 DeviceSettings::buildTopic(runtimeConfig(), "events").c_str());
+  AppLog::infof("[mqtt] runtime deviceId=%s clientId=%s\n",
+                DeviceSettings::effectiveDeviceId(runtimeConfig()).c_str(),
+                DeviceSettings::effectiveMqttClientId(runtimeConfig()).c_str());
+  AppLog::infof("[mqtt] topic status=%s\n",
+                DeviceSettings::buildTopic(runtimeConfig(), "status").c_str());
+  AppLog::infof("[mqtt] topic telemetry=%s\n",
+                DeviceSettings::buildTopic(runtimeConfig(), "telemetry").c_str());
+  AppLog::infof("[mqtt] topic events=%s\n",
+                DeviceSettings::buildTopic(runtimeConfig(), "events").c_str());
+}
+
+void logSensorReadOkIfDue(const SensorReading& reading, unsigned long nowMs) {
+  if (!AppConfig::FIRMWARE_SENSOR_HEALTH_LOG_ENABLED) {
+    return;
+  }
+
+  if (lastSensorHealthLogAtMs > 0U &&
+      (nowMs - lastSensorHealthLogAtMs) <
+          AppConfig::FIRMWARE_SENSOR_HEALTH_LOG_INTERVAL_MS) {
+    return;
+  }
+
+  lastSensorHealthLogAtMs = nowMs;
+  AppLog::infof("[sensor] read ok ax=%.2f ay=%.2f az=%.2f accel=%.2f gyro=%.1f\n",
+                reading.accelXG,
+                reading.accelYG,
+                reading.accelZG,
+                reading.accelMagnitudeG,
+                reading.gyroMagnitudeDegPerSec);
+}
+
+void logSensorReadFailedIfDue(unsigned long nowMs) {
+  if (!AppConfig::FIRMWARE_SENSOR_HEALTH_LOG_ENABLED) {
+    return;
+  }
+
+  if (lastSensorHealthLogAtMs > 0U &&
+      (nowMs - lastSensorHealthLogAtMs) <
+          AppConfig::FIRMWARE_SENSOR_HEALTH_LOG_INTERVAL_MS) {
+    return;
+  }
+
+  lastSensorHealthLogAtMs = nowMs;
+  AppLog::warnf("[sensor] read failed reason=i2c_read_failed consecutive_failures=%lu last_valid=%u\n",
+                consecutiveSensorReadFailures,
+                latestReading.valid ? 1U : 0U);
+}
+
+void logLoopHealthIfDue(unsigned long nowMs) {
+  if (!AppConfig::FIRMWARE_LOOP_HEALTH_LOG_ENABLED) {
+    return;
+  }
+
+  if (lastLoopHealthLogAtMs > 0U &&
+      (nowMs - lastLoopHealthLogAtMs) <
+          AppConfig::FIRMWARE_LOOP_HEALTH_LOG_INTERVAL_MS) {
+    return;
+  }
+
+  lastLoopHealthLogAtMs = nowMs;
+  const bool telemetryDue =
+      (nowMs - lastTelemetrySentAtMs) >= AppConfig::TELEMETRY_REPORT_INTERVAL_MS;
+  const unsigned long sampleAgeMs =
+      latestReading.valid && nowMs >= latestReading.timestampMs
+          ? nowMs - latestReading.timestampMs
+          : 0U;
+  AppLog::infof("[loop] maintenance_portal_active=%u state=%s wifi_connected=%u mqtt_connected=%u telemetry_due=%u sensor_valid=%u sample_age_ms=%lu\n",
+                setupPortal.isRunning() && !connectivityManager.isSetupMode() ? 1U : 0U,
+                connectivityManager.stateLabel().c_str(),
+                connectivityManager.isWifiConnected() ? 1U : 0U,
+                mqttClient.isConnected() ? 1U : 0U,
+                telemetryDue ? 1U : 0U,
+                latestReading.valid ? 1U : 0U,
+                sampleAgeMs);
 }
 
 void printSensorReading(const SensorReading& reading) {
@@ -544,12 +707,16 @@ void loop() {
   // Wi-Fi, MQTT e setup portal sao mantidos por um unico gerente de conectividade.
   connectivityManager.update();
   logMqttRuntimeContextIfNeeded();
+  logLoopHealthIfDue(nowMs);
 
   if (sensorReady && (nowMs - lastSensorSampleAtMs) >= AppConfig::SENSOR_SAMPLE_INTERVAL_MS) {
     lastSensorSampleAtMs = nowMs;
 
     if (sensor.update()) {
+      lastSensorReadSucceeded = true;
+      consecutiveSensorReadFailures = 0;
       latestReading = sensor.getReading();
+      logSensorReadOkIfDue(latestReading, nowMs);
 
       if (AppConfig::SERIAL_SENSOR_DEBUG_ENABLED &&
           (nowMs - lastSensorDebugAtMs) >= AppConfig::SERIAL_SENSOR_DEBUG_INTERVAL_MS) {
@@ -565,6 +732,10 @@ void loop() {
         AppLog::warn("Queda confirmada com imobilidade.");
         publishFallAlert(alert);
       }
+    } else {
+      lastSensorReadSucceeded = false;
+      ++consecutiveSensorReadFailures;
+      logSensorReadFailedIfDue(nowMs);
     }
   }
 
@@ -583,7 +754,7 @@ void loop() {
 
   if ((nowMs - lastTelemetrySentAtMs) >= AppConfig::TELEMETRY_REPORT_INTERVAL_MS) {
     lastTelemetrySentAtMs = nowMs;
-    publishPeriodicTelemetry();
+    publishPeriodicTelemetry(nowMs);
   }
 
   maybeSyncPatientProfile(nowMs);
