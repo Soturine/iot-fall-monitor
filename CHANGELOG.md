@@ -1,5 +1,19 @@
 # Changelog
 
+## [v0.8.21] - 2026-05-14
+### Corrigido
+- regressao da `v0.8.20` em que falhas de configuracao/readback/calibracao do MPU6050 podiam deixar `sensor_ready=0` e bloquear telemetria real mesmo com Wi-Fi/MQTT online
+- `sensor_ready` voltou a significar MPU encontrado, `WHO_AM_I` compativel e leitura raw basica funcionando; calibracao nao e mais requisito para publicar telemetria
+
+### Alterado
+- versao alinhada para `0.8.21` em `CHANGELOG.md`, `README.md`, `package.json` da raiz, `backend/package.json`, `backend/package-lock.json`, `frontend/package.json` e `frontend/package-lock.json`
+- escrita de registradores do MPU6050 agora usa retry e logs por registrador (`PWR_MGMT_1`, `CONFIG`, `GYRO_CONFIG`, `ACCEL_CONFIG`, `ACCEL_CONFIG2`)
+- readback de `ACCEL_CONFIG`/`GYRO_CONFIG` usa fallback de divisores esperados quando falha, sem impedir o boot do sensor
+- calibracao de acelerometro passa a registrar `continuing_without_offsets` quando falha ou e pulada, mantendo `AX/AY/AZ` em `g` e telemetria ativa
+
+### Documentado
+- procedimento de bancada atualizado para validar `sensor_ready=1`, ausencia de `sensor_no_valid_sample`, publish de telemetria e repouso perto de `1 g`
+
 ## [v0.8.20] - 2026-05-14
 ### Alterado
 - versao alinhada para `0.8.20` em `CHANGELOG.md`, `README.md`, `package.json` da raiz, `backend/package.json`, `backend/package-lock.json`, `frontend/package.json` e `frontend/package-lock.json`

@@ -6,9 +6,9 @@ O objetivo do repositório é integrar hardware embarcado, ingestão de eventos,
 
 ## Baseline Atual
 
-Baseline atual do repositório: `v0.8.20`.
+Baseline atual do repositório: `v0.8.21`.
 
-A baseline `v0.8.20` corrige a conversao do MPU6050 na origem: o firmware passa a usar a faixa efetiva lida nos registradores para converter raw em `g`/`deg/s`, aplica uma calibracao leve e registra logs seriais para confirmar repouso perto de `1 g`.
+A baseline `v0.8.21` recupera a leitura continua do MPU6050 apos a calibracao da `v0.8.20`: `sensor_ready` agora depende de `WHO_AM_I` compativel e leitura raw basica, enquanto readback/calibracao usam fallback e nao bloqueiam a telemetria.
 
 Para a experiência local prevista nesta fase, o projeto está estabilizado para `Node.js 20+`.
 
@@ -181,6 +181,8 @@ Para validar telemetria real do ESP32, deixe `mqtt:watch` aberto, reinicie a pla
 No frontend, o grafico principal de `Sinais recentes do sensor` mostra `Aceleracao resultante (g)`. Valores invalidos, `NaN`, infinitos ou fora de escala operacional visual sao filtrados apenas no grafico; MQTT, backend, banco e payloads continuam preservados.
 
 Para validar a escala fisica do MPU6050, deixe o ESP32 parado sobre a mesa ao reiniciar. O Serial Monitor deve mostrar a faixa efetiva (`accel=+-2g`, `+-4g`, `+-8g` ou `+-16g`), o divisor `lsb_per_g` usado e leituras convertidas com `accel_magnitude` perto de `1.00 g` em repouso. Se aparecer algo perto de `4 g`, ha erro de escala ou movimento durante a calibracao.
+
+Se a calibracao ou o readback de escala falhar, o firmware deve continuar publicando telemetria com fallback: procure `ready=1`, `calibrated=0` e `continuing_without_offsets` no Serial Monitor. `sensor_no_valid_sample` com `sensor_ready=0` deve ocorrer apenas se o MPU6050 nao for encontrado ou se a leitura raw I2C falhar.
 
 O fluxo local esperado usa:
 

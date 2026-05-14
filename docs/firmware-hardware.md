@@ -93,6 +93,8 @@ Configuracao desejada do sensor no boot:
 
 Depois de escrever os registradores, o firmware le `ACCEL_CONFIG` e `GYRO_CONFIG` de volta e usa a faixa efetiva para converter raw em unidade fisica. Se o acelerometro permanecer em `+-2 g`, o divisor usado sera `16384 LSB/g`; se `+-8 g` for realmente aplicado, sera `4096 LSB/g`. Isso evita repouso aparecendo como `4 g` por divisor incompatível.
 
+O sensor e considerado pronto quando o firmware encontra um `WHO_AM_I` compativel e consegue fazer uma leitura raw basica. Falhas de readback de escala ou calibracao nao deixam mais `sensor_ready=0`: o firmware registra o motivo, usa divisor fallback coerente e continua publicando telemetria sem offsets.
+
 ## Logs e diagnostico no firmware
 
 O firmware agora usa um gating simples de logs em [include/app_config.h](../include/app_config.h):
@@ -110,6 +112,7 @@ Na pratica:
 - diagnosticos detalhados de I2C, buffer e conectividade podem ser ligados sem poluir o loop principal por padrao
 - com `FIRMWARE_CONNECTIVITY_DEBUG_ENABLED = true`, o firmware registra host/porta/clientId MQTT efetivos, topicos de `status`, `telemetry` e `events`, e resultado de publish sem expor senha
 - os logs de saude do sensor mostram faixa efetiva, `lsb_per_g`, raw AX/AY/AZ/GX/GY/GZ, conversao em `g`/`deg/s`, calibracao e magnitude publicada
+- no boot, procure `ready=1 calibrated=0 reason=...` quando a calibracao for pulada; isso ainda e operacional e deve publicar telemetria
 - o `MOTION TEST` continua com flags proprias para bancada, mas agora fica desabilitado por padrao para nao misturar teste de bancada com alarme real
 
 ## Identidade do device e pairing
@@ -275,16 +278,19 @@ npm run mqtt:watch --prefix backend
    - `[sensor] mpu range accel=+-...g gyro=+-...dps`
    - `[sensor] accel scale lsb_per_g=...`
    - `[sensor] calibration ok ...` ou `calibration skipped reason=...`
+   - `[sensor] ready=1 calibrated=...`
    - `[sensor] read ok ...`
    - `[telemetry] publish ok ...` repetindo a cada `TELEMETRY_REPORT_INTERVAL_MS`
-6. Deixe o ESP32 parado sobre a mesa e confirme `[sensor] read ok ... magnitude=...` perto de `1.00 g`.
-7. Confirme no `mqtt:watch` linhas novas em `queda/devices/esp32_01/telemetry`.
-8. Confirme no dashboard que AX/AY/AZ estao em `g`, `accel_magnitude` fica perto de `1 g` em repouso e o grafico estabiliza perto de `1 g`.
-9. Mexa o sensor rapidamente e confirme que a aceleracao sobe temporariamente.
-10. Deixe parado novamente e confirme retorno para perto de `1 g`.
-11. Se aparecer `[telemetry] skipped reason=mqtt_disconnected`, o problema esta no link MQTT/reconnect.
-12. Se aparecer `[telemetry] skipped reason=sensor_no_valid_sample`, o problema esta no MPU6050/I2C antes de haver amostra valida.
-13. Se o Serial mostrar `publish ok` mas o `mqtt:watch` nao receber, verifique host/porta, broker efetivo, clientId e rede.
+6. Confirme que nao aparece repetidamente `[telemetry] skipped reason=sensor_no_valid_sample ... sensor_ready=0`.
+7. Deixe o ESP32 parado sobre a mesa e confirme `[sensor] read ok ... magnitude=...` perto de `1.00 g`.
+8. Confirme no `mqtt:watch` linhas novas em `queda/devices/esp32_01/telemetry`.
+9. Confirme no dashboard que AX/AY/AZ estao em `g`, `accel_magnitude` fica perto de `1 g` em repouso e o grafico estabiliza perto de `1 g`.
+10. Mexa o sensor rapidamente e confirme que a aceleracao sobe temporariamente.
+11. Deixe parado novamente e confirme retorno para perto de `1 g`.
+12. Se aparecer `[telemetry] skipped reason=mqtt_disconnected`, o problema esta no link MQTT/reconnect.
+13. Se aparecer `[telemetry] skipped reason=sensor_no_valid_sample` com `sensor_ready=1`, o problema esta em leitura raw temporaria/I2C apos o boot.
+14. Se aparecer `[telemetry] skipped reason=sensor_no_valid_sample` com `sensor_ready=0`, o firmware nao encontrou o MPU6050 ou nao conseguiu leitura raw basica no boot.
+15. Se o Serial mostrar `publish ok` mas o `mqtt:watch` nao receber, verifique host/porta, broker efetivo, clientId e rede.
 
 ## Buzzer e motion test
 

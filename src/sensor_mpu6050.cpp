@@ -33,6 +33,7 @@ constexpr uint8_t kAccelFs8G = 0x10;
 constexpr uint8_t kAccelFs16G = 0x18;
 constexpr uint8_t kDesiredGyroFs = kGyroFs500Dps;
 constexpr uint8_t kDesiredAccelFs = kAccelFs8G;
+constexpr uint8_t kRegisterIoAttempts = 3;
 
 constexpr float kDefaultAccelLsbPerG = 4096.0f;
 constexpr float kDefaultGyroLsbPerDegPerSec = 65.5f;
@@ -82,6 +83,26 @@ bool writeRegister(TwoWire& wire, uint8_t address, uint8_t reg, uint8_t value) {
   return wire.endTransmission() == 0;
 }
 
+bool writeRegisterWithRetry(TwoWire& wire,
+                            uint8_t address,
+                            uint8_t reg,
+                            uint8_t value,
+                            const char* label) {
+  for (uint8_t attempt = 1; attempt <= kRegisterIoAttempts; ++attempt) {
+    if (writeRegister(wire, address, reg, value)) {
+      AppLog::infof("[sensor] write %s ok value=0x%02X\n", label, value);
+      return true;
+    }
+
+    delay(5);
+  }
+
+  AppLog::warnf("[sensor] write %s failed value=0x%02X continuing_if_raw_read_works\n",
+                label,
+                value);
+  return false;
+}
+
 bool readRegisters(TwoWire& wire,
                    uint8_t address,
                    uint8_t startRegister,
@@ -113,6 +134,24 @@ bool readRegisters(TwoWire& wire,
 
 bool readRegister(TwoWire& wire, uint8_t address, uint8_t reg, uint8_t& value) {
   return readRegisters(wire, address, reg, &value, 1);
+}
+
+bool readRegisterWithRetry(TwoWire& wire,
+                           uint8_t address,
+                           uint8_t reg,
+                           uint8_t& value,
+                           const char* label) {
+  for (uint8_t attempt = 1; attempt <= kRegisterIoAttempts; ++attempt) {
+    if (readRegister(wire, address, reg, value)) {
+      AppLog::infof("[sensor] readback %s ok value=0x%02X\n", label, value);
+      return true;
+    }
+
+    delay(5);
+  }
+
+  AppLog::warnf("[sensor] readback %s failed continuing_with_fallback\n", label);
+  return false;
 }
 
 int16_t joinBytes(uint8_t msb, uint8_t lsb) {
@@ -247,12 +286,19 @@ void printProbeDetails(TwoWire& wire, uint8_t address) {
 }  // namespace
 
 bool SensorMPU6050::begin(TwoWire& wire, uint8_t address) {
+  AppLog::info("[sensor] begin start");
+
   pinMode(AppConfig::I2C_SDA_PIN, INPUT_PULLUP);
   pinMode(AppConfig::I2C_SCL_PIN, INPUT_PULLUP);
 
   wire_ = &wire;
   address_ = address;
   whoAmI_ = 0;
+  ready_ = false;
+  reading_ = SensorReading();
+  filterInitialized_ = false;
+  accelCalibrationApplied_ = false;
+  calibrationStatus_ = "not_started";
 
   wire_->begin(AppConfig::I2C_SDA_PIN, AppConfig::I2C_SCL_PIN);
   wire_->setClock(100000);
@@ -269,34 +315,51 @@ bool SensorMPU6050::begin(TwoWire& wire, uint8_t address) {
   printAddressProbe(*wire_, kAlternateAddress);
   printProbeDetails(*wire_, address_);
 
-  if (!readRegister(*wire_, address_, kRegisterWhoAmI, whoAmI_)) {
+  if (!readRegisterWithRetry(*wire_, address_, kRegisterWhoAmI, whoAmI_, "WHO_AM_I")) {
     if (address_ != kAlternateAddress) {
-      AppLog::warnf("Falha em 0x%02X. Tentando endereco alternativo 0x%02X...\n",
+      AppLog::warnf("[sensor] probe failed address=0x%02X; trying fallback address=0x%02X\n",
                     address_,
                     kAlternateAddress);
       address_ = kAlternateAddress;
       printProbeDetails(*wire_, address_);
 
-      if (!readRegister(*wire_, address_, kRegisterWhoAmI, whoAmI_)) {
-        AppLog::error("Nao foi possivel identificar o sensor no barramento I2C.");
+      if (!readRegisterWithRetry(*wire_, address_, kRegisterWhoAmI, whoAmI_, "WHO_AM_I")) {
+        AppLog::error("[sensor] ready=0 reason=who_am_i_read_failed");
         ready_ = false;
         return false;
       }
     } else {
-      AppLog::error("Nao foi possivel identificar o sensor no barramento I2C.");
+      AppLog::error("[sensor] ready=0 reason=who_am_i_read_failed");
       ready_ = false;
       return false;
     }
   }
 
   if (whoAmI_ != kMpu6050WhoAmIValue && whoAmI_ != kMpu6500WhoAmIValue) {
-    AppLog::errorf("WHO_AM_I 0x%02X nao eh compativel com o driver atual.\n", whoAmI_);
+    AppLog::errorf("[sensor] ready=0 reason=who_am_i_incompatible value=0x%02X\n", whoAmI_);
     ready_ = false;
     return false;
   }
 
-  if (!configureSensor()) {
-    AppLog::error("Falha ao configurar os registradores do IMU.");
+  AppLog::infof("[sensor] probe ok address=0x%02X who_am_i=0x%02X [%s]\n",
+                address_,
+                whoAmI_,
+                sensorNameFromWhoAmI(whoAmI_));
+
+  const bool configured = configureSensor();
+  if (!configured) {
+    AppLog::warn("[sensor] configuration incomplete; continuing if raw read works.");
+  }
+
+  int16_t rawAccelX = 0;
+  int16_t rawAccelY = 0;
+  int16_t rawAccelZ = 0;
+  int16_t rawGyroX = 0;
+  int16_t rawGyroY = 0;
+  int16_t rawGyroZ = 0;
+
+  if (!readRawSample(rawAccelX, rawAccelY, rawAccelZ, rawGyroX, rawGyroY, rawGyroZ)) {
+    AppLog::error("[sensor] ready=0 reason=raw_read_failed_after_begin");
     ready_ = false;
     return false;
   }
@@ -307,6 +370,10 @@ bool SensorMPU6050::begin(TwoWire& wire, uint8_t address) {
                 sensorNameFromWhoAmI(whoAmI_));
 
   ready_ = true;
+  AppLog::infof("[sensor] ready=1 calibrated=%u reason=%s configured=%u\n",
+                accelCalibrationApplied_ ? 1U : 0U,
+                calibrationStatus_,
+                configured ? 1U : 0U);
   return true;
 }
 
@@ -315,43 +382,51 @@ bool SensorMPU6050::configureSensor() {
     return false;
   }
 
+  bool configured = true;
+
   // Usa o PLL do giroscopio X para clock mais estavel e tira o sensor do sleep.
-  if (!writeRegister(*wire_, address_, kRegisterPowerMgmt1, 0x01)) {
-    return false;
-  }
+  configured =
+      writeRegisterWithRetry(*wire_, address_, kRegisterPowerMgmt1, 0x01, "PWR_MGMT_1") &&
+      configured;
   delay(20);
 
   // Mantem o DLPF em faixa moderada para reduzir ruido sem perder demais a dinamica.
-  if (!writeRegister(*wire_, address_, kRegisterConfig, kDlpfCfg21Hz)) {
-    return false;
-  }
+  configured =
+      writeRegisterWithRetry(*wire_, address_, kRegisterConfig, kDlpfCfg21Hz, "CONFIG") &&
+      configured;
 
-  if (!writeRegister(*wire_, address_, kRegisterGyroConfig, kDesiredGyroFs)) {
-    return false;
-  }
+  configured =
+      writeRegisterWithRetry(*wire_, address_, kRegisterGyroConfig, kDesiredGyroFs, "GYRO_CONFIG") &&
+      configured;
 
-  if (!writeRegister(*wire_, address_, kRegisterAccelConfig, kDesiredAccelFs)) {
-    return false;
-  }
+  configured =
+      writeRegisterWithRetry(*wire_, address_, kRegisterAccelConfig, kDesiredAccelFs, "ACCEL_CONFIG") &&
+      configured;
+
+  AppLog::info("[sensor] configured desired accel=+-8g gyro=+-500dps");
 
   // Em MPUs da familia 6500/9250, ACCEL_CONFIG2 controla o filtro do acelerometro.
   // Em chips que nao implementam o registro, a escrita pode ser ignorada sem afetar a leitura basica.
-  writeRegister(*wire_, address_, kRegisterAccelConfig2, kDlpfCfg21Hz);
+  writeRegisterWithRetry(*wire_, address_, kRegisterAccelConfig2, kDlpfCfg21Hz, "ACCEL_CONFIG2");
 
   delay(10);
-  refreshScaleFromRegisters();
+  configured = refreshScaleFromRegisters() && configured;
 
   if (accelFsBits_ != kDesiredAccelFs || gyroFsBits_ != kDesiredGyroFs) {
     AppLog::warn("[sensor] range readback diferente do desejado; tentando reconfigurar uma vez.");
-    writeRegister(*wire_, address_, kRegisterGyroConfig, kDesiredGyroFs);
-    writeRegister(*wire_, address_, kRegisterAccelConfig, kDesiredAccelFs);
+    configured =
+        writeRegisterWithRetry(*wire_, address_, kRegisterGyroConfig, kDesiredGyroFs, "GYRO_CONFIG") &&
+        configured;
+    configured =
+        writeRegisterWithRetry(*wire_, address_, kRegisterAccelConfig, kDesiredAccelFs, "ACCEL_CONFIG") &&
+        configured;
     delay(10);
-    refreshScaleFromRegisters();
+    configured = refreshScaleFromRegisters() && configured;
   }
 
   calibrateAccelerometer();
 
-  return true;
+  return configured;
 }
 
 bool SensorMPU6050::refreshScaleFromRegisters() {
@@ -363,7 +438,7 @@ bool SensorMPU6050::refreshScaleFromRegisters() {
   uint8_t accelConfig = 0;
   uint8_t gyroConfig = 0;
 
-  if (readRegister(*wire_, address_, kRegisterAccelConfig, accelConfig)) {
+  if (readRegisterWithRetry(*wire_, address_, kRegisterAccelConfig, accelConfig, "ACCEL_CONFIG")) {
     accelFsBits_ = accelConfig & kFsSelMask;
     accelRangeG_ = accelRangeGFromFs(accelFsBits_);
     accelLsbPerG_ = accelLsbPerGFromFs(accelFsBits_);
@@ -375,7 +450,7 @@ bool SensorMPU6050::refreshScaleFromRegisters() {
     AppLog::warn("[sensor] nao foi possivel ler ACCEL_CONFIG; usando divisor esperado para +-8g.");
   }
 
-  if (readRegister(*wire_, address_, kRegisterGyroConfig, gyroConfig)) {
+  if (readRegisterWithRetry(*wire_, address_, kRegisterGyroConfig, gyroConfig, "GYRO_CONFIG")) {
     gyroFsBits_ = gyroConfig & kFsSelMask;
     gyroRangeDegPerSec_ = gyroRangeDegPerSecFromFs(gyroFsBits_);
     gyroLsbPerDegPerSec_ = gyroLsbPerDegPerSecFromFs(gyroFsBits_);
@@ -413,12 +488,14 @@ bool SensorMPU6050::refreshScaleFromRegisters() {
 
 void SensorMPU6050::calibrateAccelerometer() {
   accelCalibrationApplied_ = false;
+  calibrationStatus_ = "not_started";
   accelOffsetXG_ = 0.0f;
   accelOffsetYG_ = 0.0f;
   accelOffsetZG_ = 0.0f;
 
   if (!AppConfig::SENSOR_ACCEL_CALIBRATION_ENABLED || wire_ == nullptr) {
-    AppLog::info("[sensor] calibration skipped reason=disabled");
+    calibrationStatus_ = "disabled";
+    AppLog::info("[sensor] calibration skipped reason=disabled continuing_without_offsets");
     return;
   }
 
@@ -488,9 +565,11 @@ void SensorMPU6050::calibrateAccelerometer() {
   const uint16_t minRequiredSamples =
       static_cast<uint16_t>((AppConfig::SENSOR_ACCEL_CALIBRATION_SAMPLES * 8U) / 10U);
   if (validSamples < minRequiredSamples) {
+    calibrationStatus_ = "read_failed";
     AppLog::warnf("[sensor] calibration skipped reason=read_failed samples=%u/%u\n",
                   static_cast<unsigned>(validSamples),
                   static_cast<unsigned>(AppConfig::SENSOR_ACCEL_CALIBRATION_SAMPLES));
+    AppLog::warn("[sensor] calibration skipped continuing_without_offsets");
     return;
   }
 
@@ -543,18 +622,22 @@ void SensorMPU6050::calibrateAccelerometer() {
 
   if (meanAccelMagnitudeG < AppConfig::SENSOR_ACCEL_CALIBRATION_MIN_MAG_G ||
       meanAccelMagnitudeG > AppConfig::SENSOR_ACCEL_CALIBRATION_MAX_MAG_G) {
+    calibrationStatus_ = "scale_or_orientation";
     AppLog::warnf("[sensor] calibration skipped reason=scale_or_orientation magnitude_before=%.3f expected=%.2f..%.2f\n",
                   meanAccelMagnitudeG,
                   AppConfig::SENSOR_ACCEL_CALIBRATION_MIN_MAG_G,
                   AppConfig::SENSOR_ACCEL_CALIBRATION_MAX_MAG_G);
+    AppLog::warn("[sensor] calibration skipped continuing_without_offsets");
     return;
   }
 
   if (accelSpanG > AppConfig::SENSOR_ACCEL_CALIBRATION_MAX_SPAN_G ||
       meanGyroMagnitudeDegPerSec > AppConfig::SENSOR_ACCEL_CALIBRATION_MAX_GYRO_DPS) {
+    calibrationStatus_ = "unstable";
     AppLog::warnf("[sensor] calibration skipped reason=unstable span=%.3f gyro=%.2f\n",
                   accelSpanG,
                   meanGyroMagnitudeDegPerSec);
+    AppLog::warn("[sensor] calibration skipped continuing_without_offsets");
     return;
   }
 
@@ -566,6 +649,7 @@ void SensorMPU6050::calibrateAccelerometer() {
   accelOffsetYG_ = meanAccelYG - targetAccelYG;
   accelOffsetZG_ = meanAccelZG - targetAccelZG;
   accelCalibrationApplied_ = true;
+  calibrationStatus_ = "applied";
 
   const float magnitudeAfter =
       sqrtf(((meanAccelXG - accelOffsetXG_) * (meanAccelXG - accelOffsetXG_)) +

@@ -132,6 +132,8 @@ Unidades do contrato:
 
 O firmware converte raw do MPU6050 usando a faixa efetiva lida em `ACCEL_CONFIG`/`GYRO_CONFIG`. Em repouso, `accel_magnitude` deve ficar perto de `1.00 g`; valores estaveis perto de `4 g` indicam divisor de escala incorreto ou sensor ainda publicando firmware antigo.
 
+Falhas de readback ou calibracao nao devem interromper o contrato MQTT: o firmware usa fallback de escala, segue sem offsets quando necessario e publica telemetria se a leitura raw I2C estiver funcionando.
+
 ### Visualizacao da telemetria no frontend
 
 O contrato MQTT e a persistencia nao mudam. Na pagina de detalhe do device, o grafico principal usa a serie `accel_magnitude` como `Aceleracao resultante (g)`, com fallback visual calculado a partir de AX/AY/AZ quando a magnitude vier ausente ou fora da escala. O eixo Y e formatado em 2 casas decimais e o tooltip tecnico mostra tambem `gyro_magnitude` em `deg/s` e AX/AY/AZ em `g`.

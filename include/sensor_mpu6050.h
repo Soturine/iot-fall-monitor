@@ -45,6 +45,7 @@ class SensorMPU6050 {
   float accelLsbPerG_ = 4096.0f;
   float gyroLsbPerDegPerSec_ = 65.5f;
   bool accelCalibrationApplied_ = false;
+  const char* calibrationStatus_ = "not_started";
   float accelOffsetXG_ = 0.0f;
   float accelOffsetYG_ = 0.0f;
   float accelOffsetZG_ = 0.0f;
