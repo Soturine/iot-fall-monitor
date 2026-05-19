@@ -86,15 +86,21 @@ export function AppLayout() {
             <div className="border-b border-surface-100 px-6 py-6">
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.34em] text-surface-500">
-                    Projeto Queda
-                  </p>
-                  <h1 className="mt-3 font-display text-3xl text-surface-900">
-                    Monitor IoT
-                  </h1>
-                  <p className="mt-2 text-sm text-surface-600">
-                    Escopo por organização, pacientes, dispositivos pareados e
-                    resposta operacional.
+                  <div className="flex items-center gap-2.5">
+                    <div className="grid h-10 w-10 place-items-center rounded-2xl bg-gradient-to-br from-teal-500 to-surface-800 text-white shadow-soft">
+                      <ShieldCheck className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.32em] text-teal-700">
+                        Healthtech IoT
+                      </p>
+                      <h1 className="font-display text-xl leading-tight text-surface-900">
+                        Monitor de Quedas
+                      </h1>
+                    </div>
+                  </div>
+                  <p className="mt-4 text-sm leading-relaxed text-surface-600">
+                    Pacientes, dispositivos pareados, alertas em tempo real e resposta operacional.
                   </p>
                 </div>
                 <Button
@@ -107,16 +113,16 @@ export function AppLayout() {
               </div>
             </div>
 
-            <div className="space-y-2 px-4 py-4">
+            <div className="space-y-1 px-4 py-4">
               {navItems.map(({ to, label, icon: Icon }) => (
                 <NavLink
                   key={to}
                   className={({ isActive }) =>
                     cn(
-                      "flex items-center justify-between rounded-2xl px-4 py-3 text-sm font-semibold transition",
+                      "group flex items-center justify-between rounded-xl px-3.5 py-2.5 text-sm font-semibold transition",
                       isActive
-                        ? "bg-surface-800 text-white shadow-panel"
-                        : "text-surface-700 hover:bg-white/75",
+                        ? "bg-surface-900 text-white shadow-soft"
+                        : "text-surface-700 hover:bg-white",
                     )
                   }
                   onClick={() => setMenuOpen(false)}
@@ -125,13 +131,22 @@ export function AppLayout() {
                   {({ isActive }) => (
                     <>
                       <span className="flex items-center gap-3">
-                        <Icon className="h-4 w-4" />
+                        <span
+                          className={cn(
+                            "grid h-8 w-8 place-items-center rounded-lg transition",
+                            isActive
+                              ? "bg-teal-500/20 text-teal-300"
+                              : "bg-surface-100 text-surface-600 group-hover:bg-teal-50 group-hover:text-teal-600",
+                          )}
+                        >
+                          <Icon className="h-4 w-4" />
+                        </span>
                         {label}
                       </span>
                       <ChevronRight
                         className={cn(
                           "h-4 w-4 transition",
-                          isActive ? "opacity-100" : "opacity-40",
+                          isActive ? "opacity-100" : "opacity-30 group-hover:opacity-60",
                         )}
                       />
                     </>

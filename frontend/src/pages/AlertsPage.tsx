@@ -153,26 +153,43 @@ export function AlertsPage() {
     return <LoadingState label="Carregando fila de alertas..." />;
   }
 
+  const openCount = alerts.filter((alert) => alert.status === "open").length;
+  const ackCount = alerts.filter((alert) => alert.status === "acknowledged").length;
+  const criticalCount = alerts.filter((a) => a.event.severity === "critical").length;
+
   return (
     <div className="space-y-6">
-      <Card>
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.28em] text-surface-500">
-              Resposta operacional
-            </p>
-            <h2 className="mt-2 font-display text-3xl text-surface-900">
+      <Card className="relative overflow-hidden border-white/60 bg-gradient-to-br from-white via-white to-danger-50/40">
+        <div className="pointer-events-none absolute -right-24 -top-20 h-72 w-72 rounded-full bg-danger-500/10 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-24 -left-16 h-64 w-64 rounded-full bg-petrol-500/10 blur-3xl" />
+        <div className="relative flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div className="max-w-2xl">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-gradient-to-br from-danger-500 to-danger-700 text-white shadow-soft">
+                <Siren className="h-4 w-4" />
+              </span>
+              <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-danger-700">
+                Resposta operacional
+              </p>
+            </div>
+            <h2 className="mt-3 font-display text-3xl text-surface-900 lg:text-4xl">
               Alertas e histórico do escopo ativo
             </h2>
-            <p className="mt-2 text-sm text-surface-600">
-              Esta fila já chega filtrada pelo backend com base na organização ativa
-              e, quando houver caregiver assignments, pelo conjunto de pacientes permitido.
+            <p className="mt-2 text-sm leading-6 text-surface-600">
+              A fila chega filtrada pelo backend conforme a organização ativa e,
+              quando aplicável, os assignments de caregiver permitem reduzir o escopo.
             </p>
           </div>
-          <Badge tone="danger">{alerts.filter((alert) => alert.status === "open").length} abertos</Badge>
+          <div className="flex flex-wrap gap-2">
+            {criticalCount > 0 ? (
+              <Badge tone="critical">{criticalCount} críticos</Badge>
+            ) : null}
+            <Badge tone="danger" dot>{openCount} abertos</Badge>
+            <Badge tone="warning" dot>{ackCount} em atendimento</Badge>
+          </div>
         </div>
 
-        <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <div className="relative mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
           <div>
             <label className="label">Status</label>
             <select
@@ -251,71 +268,87 @@ export function AlertsPage() {
         <Card>
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.28em] text-surface-500">
+              <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-petrol-700">
                 Fila ativa
               </p>
-              <h3 className="mt-2 font-display text-2xl text-surface-900">
+              <h3 className="mt-2 font-display text-xl text-surface-900">
                 Alertas registrados
               </h3>
             </div>
-            <Badge tone="warning">{alerts.length} itens</Badge>
+            <Badge tone="muted">{alerts.length} itens</Badge>
           </div>
 
           <div className="mt-5 space-y-3">
             {alerts.length ? (
-              alerts.map((alert) => (
-                <div
-                  key={alert.id}
-                  className="rounded-[24px] border border-surface-100 bg-surface-50/70 p-4"
-                >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge tone={statusTone(alert.status) as never}>
-                      {humanizeAlertStatus(alert.status)}
-                    </Badge>
-                    <Badge tone={severityTone(alert.event.severity) as never}>
-                      {humanizeSeverity(alert.event.severity)}
-                    </Badge>
-                    <span className="text-sm text-surface-500">
-                      {formatDateTime(alert.event.eventTime)}
-                    </span>
-                  </div>
-                  <div className="mt-3">
-                    <p className="font-semibold text-surface-900">
-                      {alert.device.name || alert.device.deviceIdentifier}
-                    </p>
-                    <p className="text-sm text-surface-600">
-                      {alert.patient?.fullName || "Sem paciente"} • {alert.event.message}
-                    </p>
-                  </div>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <Button onClick={() => openAlert(alert.id)} variant="secondary">
-                      <Eye className="h-4 w-4" />
-                      Detalhes
-                    </Button>
-                    {canMutateAlerts && alert.status === "open" ? (
-                      <Button onClick={() => executeAction(alert.id, "acknowledge")}>
-                        <ShieldCheck className="h-4 w-4" />
-                        Acknowledge
+              alerts.map((alert) => {
+                const sev = alert.event.severity;
+                const accent =
+                  sev === "critical"
+                    ? "from-danger-500 to-danger-700"
+                    : sev === "high"
+                      ? "from-amber-500 to-danger-500"
+                      : sev === "medium"
+                        ? "from-amber-400 to-amber-600"
+                        : "from-teal-400 to-teal-600";
+                return (
+                  <div
+                    key={alert.id}
+                    className="group relative overflow-hidden rounded-2xl border border-surface-100 bg-white p-4 shadow-soft transition hover:-translate-y-0.5 hover:shadow-panel"
+                  >
+                    <span className={`absolute inset-y-0 left-0 w-1 bg-gradient-to-b ${accent}`} />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge tone={statusTone(alert.status) as never} dot>
+                        {humanizeAlertStatus(alert.status)}
+                      </Badge>
+                      <Badge tone={sev === "critical" ? "critical" : (severityTone(sev) as never)}>
+                        {humanizeSeverity(sev)}
+                      </Badge>
+                      <span className="ml-auto text-xs font-medium text-surface-500">
+                        {formatDateTime(alert.event.eventTime)}
+                      </span>
+                    </div>
+                    <div className="mt-3">
+                      <p className="font-display text-lg font-semibold text-surface-900">
+                        {alert.device.name || alert.device.deviceIdentifier}
+                      </p>
+                      <p className="mt-1 text-sm text-surface-600">
+                        <span className="font-medium text-surface-800">
+                          {alert.patient?.fullName || "Sem paciente"}
+                        </span>
+                        <span className="mx-1.5 text-surface-300">•</span>
+                        {alert.event.message}
+                      </p>
+                    </div>
+                    <div className="mt-4 flex flex-wrap gap-2 border-t border-surface-100 pt-3">
+                      <Button onClick={() => openAlert(alert.id)} variant="secondary">
+                        <Eye className="h-4 w-4" />
+                        Detalhes
                       </Button>
-                    ) : null}
-                    {canMutateAlerts && ["open", "acknowledged"].includes(alert.status) ? (
-                      <Button onClick={() => executeAction(alert.id, "resolve")} variant="secondary">
-                        <Undo2 className="h-4 w-4" />
-                        Resolver
-                      </Button>
-                    ) : null}
-                    {canMutateAlerts && ["open", "acknowledged"].includes(alert.status) ? (
-                      <Button onClick={() => executeAction(alert.id, "cancel")} variant="danger">
-                        <ShieldOff className="h-4 w-4" />
-                        Cancelar
-                      </Button>
-                    ) : null}
+                      {canMutateAlerts && alert.status === "open" ? (
+                        <Button onClick={() => executeAction(alert.id, "acknowledge")}>
+                          <ShieldCheck className="h-4 w-4" />
+                          Acknowledge
+                        </Button>
+                      ) : null}
+                      {canMutateAlerts && ["open", "acknowledged"].includes(alert.status) ? (
+                        <Button onClick={() => executeAction(alert.id, "resolve")} variant="secondary">
+                          <Undo2 className="h-4 w-4" />
+                          Resolver
+                        </Button>
+                      ) : null}
+                      {canMutateAlerts && ["open", "acknowledged"].includes(alert.status) ? (
+                        <Button onClick={() => executeAction(alert.id, "cancel")} variant="danger">
+                          <ShieldOff className="h-4 w-4" />
+                          Cancelar
+                        </Button>
+                      ) : null}
+                    </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             ) : (
               <EmptyState
-                description="Não há alertas compatíveis com os filtros atuais."
+                description="Nenhum alerta compatível com os filtros atuais. Ajuste o intervalo ou limpe a severidade."
                 title="Fila vazia"
               />
             )}
@@ -325,27 +358,29 @@ export function AlertsPage() {
         <Card>
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-xs font-bold uppercase tracking-[0.28em] text-surface-500">
+              <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-petrol-700">
                 Histórico
               </p>
-              <h3 className="mt-2 font-display text-2xl text-surface-900">
+              <h3 className="mt-2 font-display text-xl text-surface-900">
                 Eventos recentes
               </h3>
             </div>
-            <Siren className="h-6 w-6 text-danger-600" />
+            <span className="inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-danger-50 text-danger-600">
+              <Siren className="h-4 w-4" />
+            </span>
           </div>
           <div className="mt-5 space-y-3">
             {events.length ? (
               events.map((event) => (
                 <div
                   key={event.id}
-                  className="rounded-[24px] border border-surface-100 bg-white p-4"
+                  className="rounded-2xl border border-surface-100 bg-gradient-to-br from-white to-surface-50/60 p-4 transition hover:border-surface-200"
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge tone={severityTone(event.severity) as never}>
                       {humanizeSeverity(event.severity)}
                     </Badge>
-                    <span className="text-sm text-surface-500">
+                    <span className="ml-auto text-xs font-medium text-surface-500">
                       {formatDateTime(event.eventTime)}
                     </span>
                   </div>

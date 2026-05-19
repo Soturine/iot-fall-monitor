@@ -205,59 +205,79 @@ export function DeviceDetailPage() {
 
   return (
     <div className="space-y-6">
-      <Card className="relative overflow-hidden bg-gradient-to-br from-surface-900 via-surface-800 to-surface-700 text-white">
-        <div className="absolute inset-y-0 right-0 w-72 bg-gradient-to-l from-danger-500/20 to-transparent blur-3xl" />
+      <Card className="relative overflow-hidden border-petrol-900/40 bg-gradient-to-br from-petrol-950 via-petrol-900 to-petrol-800 text-white">
+        <div className="pointer-events-none absolute -right-24 -top-24 h-80 w-80 rounded-full bg-teal-500/20 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-32 -left-16 h-72 w-72 rounded-full bg-petrol-500/30 blur-3xl" />
+        <div
+          className="pointer-events-none absolute inset-y-0 right-0 hidden w-1/3 bg-cover bg-center opacity-[0.08] md:block"
+          style={{ backgroundImage: "url(/images/campus-bloco-6-gramado.jpeg)" }}
+        />
         <div className="relative">
           <Link
-            className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/20"
+            className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-white transition hover:bg-white/20"
             to="/devices"
           >
-            <ArrowLeft className="h-4 w-4" />
-            Voltar para dispositivos
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Dispositivos
           </Link>
 
-          <div className="mt-6 flex flex-wrap items-start justify-between gap-4">
-            <div>
+          <div className="mt-6 flex flex-wrap items-start justify-between gap-6">
+            <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <Badge tone={detail.device.status.online ? "success" : "warning"}>
+                <Badge tone={detail.device.status.online ? "success" : "warning"} dot>
                   {detail.device.status.online ? "Online" : "Offline"}
                 </Badge>
                 <Badge tone="info">{detail.device.claimStatus}</Badge>
                 <Badge tone={deviceBehaviorTone(detail.device.behavior.state) as never}>
                   {humanizeDeviceBehaviorState(detail.device.behavior.state)}
                 </Badge>
-                <Badge tone={activeAlerts.length ? "danger" : "info"}>
+                <Badge tone={activeAlerts.length ? "critical" : "muted"}>
                   {activeAlerts.length} alertas ativos
                 </Badge>
               </div>
-              <h2 className="mt-4 font-display text-4xl">{detail.device.name}</h2>
-              <p className="mt-2 text-sm text-white/75">
-                {detail.device.currentPatient?.fullName || "Sem paciente ativo"} •{" "}
+              <h2 className="mt-4 font-display text-4xl tracking-tight">
+                {detail.device.name}
+              </h2>
+              <p className="mt-2 text-sm text-white/80">
+                <span className="font-medium text-white">
+                  {detail.device.currentPatient?.fullName || "Sem paciente ativo"}
+                </span>
+                <span className="mx-2 text-white/40">•</span>
                 {detail.device.location || "Local não informado"}
               </p>
-              <p className="mt-2 text-xs font-bold uppercase tracking-[0.24em] text-white/55">
-                {detail.device.deviceIdentifier}
-              </p>
-              <p className="mt-1 text-xs text-white/55">{detail.device.deviceUid}</p>
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-white/65">
+                <span className="rounded-md bg-white/10 px-2 py-1 font-mono">
+                  {detail.device.deviceIdentifier}
+                </span>
+                <span className="rounded-md bg-white/5 px-2 py-1 font-mono text-white/45">
+                  {detail.device.deviceUid}
+                </span>
+              </div>
             </div>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-[24px] bg-white/10 p-4 backdrop-blur">
-                <p className="text-xs uppercase tracking-[0.24em] text-white/65">Bateria</p>
-                <p className="mt-3 flex items-center gap-2 text-3xl font-semibold">
-                  <BatteryCharging className="h-5 w-5 text-amber-300" />
-                  {detail.device.status.batteryPercent ?? "--"}%
+            <div className="grid w-full gap-3 sm:w-auto sm:grid-cols-3">
+              <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
+                <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.24em] text-white/65">
+                  <BatteryCharging className="h-4 w-4 text-amber-300" />
+                  Bateria
+                </div>
+                <p className="mt-3 font-display text-3xl font-semibold">
+                  {detail.device.status.batteryPercent ?? "--"}
+                  <span className="ml-0.5 text-base font-medium text-white/65">%</span>
                 </p>
               </div>
-              <div className="rounded-[24px] bg-white/10 p-4 backdrop-blur">
-                <p className="text-xs uppercase tracking-[0.24em] text-white/65">RSSI</p>
-                <p className="mt-3 flex items-center gap-2 text-3xl font-semibold">
-                  <Signal className="h-5 w-5 text-emerald-300" />
+              <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
+                <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.24em] text-white/65">
+                  <Signal className="h-4 w-4 text-teal-300" />
+                  RSSI
+                </div>
+                <p className="mt-3 font-display text-3xl font-semibold">
                   {detail.device.status.wifiRssi ?? "--"}
+                  <span className="ml-0.5 text-base font-medium text-white/65">dBm</span>
                 </p>
               </div>
-              <div className="rounded-[24px] bg-white/10 p-4 backdrop-blur">
-                <p className="text-xs uppercase tracking-[0.24em] text-white/65">Claim</p>
-                <p className="mt-3 text-sm font-semibold">
+              <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
+                <p className="text-[10px] uppercase tracking-[0.24em] text-white/65">Claim</p>
+                <p className="mt-3 text-sm font-semibold leading-snug">
                   {detail.device.claimedAt
                     ? formatDateTime(detail.device.claimedAt)
                     : "Ainda não pareado"}
@@ -271,21 +291,21 @@ export function DeviceDetailPage() {
       <Card>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.28em] text-surface-500">
+            <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-petrol-700">
               Realtime desta tela
             </p>
-            <h3 className="mt-2 font-display text-2xl text-surface-900">
+            <h3 className="mt-2 font-display text-xl text-surface-900">
               Painel e device acompanhados em camadas separadas
             </h3>
           </div>
-          <Badge tone={realtimeTone(connectionPhase) as never}>
+          <Badge tone={realtimeTone(connectionPhase) as never} dot>
             {humanizeRealtimePhase(connectionPhase)}
           </Badge>
         </div>
         <p className="mt-3 text-sm text-surface-600">{realtimeSummary}</p>
         <p className="mt-2 text-xs text-surface-500">
-          Device offline significa ausencia recente de status/telemetria MQTT no backend.
-          Ultimo contato: {formatRelativeTime(detail.device.status.lastSeenAt)}.
+          Device offline significa ausência recente de status/telemetria MQTT no backend.
+          Último contato: {formatRelativeTime(detail.device.status.lastSeenAt)}.
         </p>
       </Card>
 

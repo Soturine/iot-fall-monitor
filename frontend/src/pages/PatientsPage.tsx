@@ -1,10 +1,21 @@
 import { useEffect, useState } from "react";
-import { Edit3, Plus } from "lucide-react";
+import { Activity, Cpu, Edit3, HeartPulse, Plus, UserRound, Users } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { Badge } from "../components/ui/Badge";
 import { Button } from "../components/ui/Button";
-import { Card } from "../components/ui/Card";
+import type { ReactNode } from "react";
+
+function DataTile({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-surface-100 bg-white px-3 py-2.5">
+      <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-surface-500">
+        {icon} {label}
+      </p>
+      <p className="mt-1 font-mono text-sm font-semibold text-surface-900">{value}</p>
+    </div>
+  );
+}
 import { EmptyState } from "../components/ui/EmptyState";
 import { LoadingState } from "../components/ui/LoadingState";
 import { Modal } from "../components/ui/Modal";
@@ -144,19 +155,37 @@ export function PatientsPage() {
 
   return (
     <div className="space-y-6">
-      <Card>
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.28em] text-surface-500">
-              Pacientes e idosos
-            </p>
-            <h2 className="mt-2 font-display text-3xl text-surface-900">
+      {/* Header institucional */}
+      <section className="relative overflow-hidden rounded-3xl border border-surface-100 bg-white shadow-soft">
+        <img
+          alt=""
+          aria-hidden="true"
+          className="pointer-events-none absolute right-0 top-0 hidden h-full w-1/3 object-cover opacity-30 [mask-image:linear-gradient(to_left,black,transparent)] lg:block"
+          src="/images/idosa-enfermeira-ipd.png"
+        />
+        <div className="relative flex flex-col gap-4 px-6 py-6 lg:flex-row lg:items-end lg:justify-between lg:px-8">
+          <div className="max-w-2xl">
+            <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.32em] text-teal-700">
+              <Users className="h-3.5 w-3.5" /> Pacientes e idosos
+            </div>
+            <h2 className="mt-3 font-display text-2xl text-surface-900 md:text-3xl">
               Escopo assistencial da organização
             </h2>
-            <p className="mt-2 text-sm text-surface-600">
+            <p className="mt-2 text-sm leading-6 text-surface-600">
               Cada paciente pertence ao tenant ativo, pode ter cuidadores atribuídos
               e mantém rastreabilidade do vínculo com o dispositivo.
             </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Badge tone="muted" dot>
+                {patients.length} {patients.length === 1 ? "paciente" : "pacientes"}
+              </Badge>
+              <Badge tone="success" dot>
+                {patients.filter((p) => p.status === "active").length} ativos
+              </Badge>
+              <Badge tone="info">
+                {patients.filter((p) => p.currentDevice).length} com device
+              </Badge>
+            </div>
           </div>
           {canManagePatients ? (
             <Button onClick={openCreateModal}>
@@ -165,74 +194,109 @@ export function PatientsPage() {
             </Button>
           ) : null}
         </div>
-      </Card>
+      </section>
 
       {patients.length ? (
         <div className="grid gap-4 xl:grid-cols-2">
           {patients.map((patient) => (
-            <Card key={patient.id} className="overflow-hidden">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge tone={patient.status === "active" ? "success" : "warning"}>
-                      {patient.status}
-                    </Badge>
-                    {patient.currentDevice ? (
-                      <Badge tone="info">1 device ativo</Badge>
-                    ) : (
-                      <Badge tone="neutral">Sem device atual</Badge>
-                    )}
+            <article
+              key={patient.id}
+              className="group relative overflow-hidden rounded-3xl border border-surface-100 bg-white shadow-soft transition hover:border-teal-200 hover:shadow-ring"
+            >
+              <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-teal-400 via-teal-500 to-surface-700 opacity-70" />
+              <div className="p-6">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-teal-50 to-surface-100 text-teal-700 ring-1 ring-inset ring-teal-100">
+                      <UserRound className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge tone={patient.status === "active" ? "success" : "warning"} dot>
+                          {patient.status === "active" ? "Ativo" : "Arquivado"}
+                        </Badge>
+                        {patient.currentDevice ? (
+                          <Badge tone="info" dot>Device pareado</Badge>
+                        ) : (
+                          <Badge tone="muted">Sem device</Badge>
+                        )}
+                      </div>
+                      <h3 className="mt-2 font-display text-xl font-semibold text-surface-900">
+                        {patient.fullName}
+                      </h3>
+                      <p className="mt-0.5 text-sm text-surface-600">
+                        Nascimento ·{" "}
+                        {patient.birthDate ? formatDateTime(patient.birthDate) : "não informado"}
+                      </p>
+                    </div>
                   </div>
-                  <h3 className="mt-3 font-display text-2xl text-surface-900">
-                    {patient.fullName}
-                  </h3>
-                  <p className="mt-1 text-sm text-surface-600">
-                    Nascimento:{" "}
-                    {patient.birthDate ? formatDateTime(patient.birthDate) : "não informado"}
-                  </p>
-                  <p className="mt-1 text-sm text-surface-600">
-                    Peso/altura: {patient.weightKg != null ? `${patient.weightKg} kg` : "--"} â€¢{" "}
-                    {patient.heightCm != null ? `${patient.heightCm} cm` : "--"}
-                  </p>
-                  <p className="mt-2 text-sm text-surface-600">
-                    {patient.notes || "Sem observações adicionais."}
-                  </p>
+                  {canManagePatients ? (
+                    <Button
+                      aria-label="Editar paciente"
+                      onClick={() => openEditModal(patient)}
+                      variant="secondary"
+                    >
+                      <Edit3 className="h-4 w-4" />
+                    </Button>
+                  ) : null}
                 </div>
 
-                {canManagePatients ? (
-                  <Button onClick={() => openEditModal(patient)} variant="secondary">
-                    <Edit3 className="h-4 w-4" />
-                  </Button>
+                <div className="mt-5 grid grid-cols-2 gap-3">
+                  <DataTile
+                    icon={<HeartPulse className="h-3.5 w-3.5" />}
+                    label="Peso"
+                    value={patient.weightKg != null ? `${patient.weightKg} kg` : "—"}
+                  />
+                  <DataTile
+                    icon={<Activity className="h-3.5 w-3.5" />}
+                    label="Altura"
+                    value={patient.heightCm != null ? `${patient.heightCm} cm` : "—"}
+                  />
+                </div>
+
+                {patient.notes ? (
+                  <p className="mt-4 rounded-xl border-l-2 border-teal-300 bg-surface-50/70 px-3 py-2 text-sm italic text-surface-700">
+                    “{patient.notes}”
+                  </p>
                 ) : null}
-              </div>
 
-              <div className="mt-6 grid gap-3 sm:grid-cols-2">
-                <div className="rounded-[24px] bg-surface-50 p-4">
-                  <p className="text-xs font-bold uppercase tracking-[0.24em] text-surface-500">
-                    Device atual
-                  </p>
-                  <p className="mt-2 text-sm font-semibold text-surface-900">
-                    {patient.currentDevice
-                      ? `${patient.currentDevice.name} • ${patient.currentDevice.deviceIdentifier}`
-                      : "Nenhum device atribuído"}
-                  </p>
-                </div>
-                <div className="rounded-[24px] bg-surface-50 p-4">
-                  <p className="text-xs font-bold uppercase tracking-[0.24em] text-surface-500">
-                    Cuidadores vinculados
-                  </p>
-                  <p className="mt-2 text-sm font-semibold text-surface-900">
-                    {patient.assignedCaregivers.length
-                      ? patient.assignedCaregivers.map((assignment) => assignment.user.name).join(", ")
-                      : "Sem assignment explícito"}
-                  </p>
+                <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-2xl border border-surface-100 bg-surface-50/60 p-4">
+                    <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-surface-500">
+                      <Cpu className="h-3 w-3" /> Device atual
+                    </p>
+                    <p className="mt-1.5 text-sm font-semibold text-surface-900">
+                      {patient.currentDevice
+                        ? patient.currentDevice.name
+                        : "Nenhum device atribuído"}
+                    </p>
+                    {patient.currentDevice ? (
+                      <p className="mt-0.5 font-mono text-xs text-surface-500">
+                        {patient.currentDevice.deviceIdentifier}
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="rounded-2xl border border-surface-100 bg-surface-50/60 p-4">
+                    <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-surface-500">
+                      <Users className="h-3 w-3" /> Cuidadores
+                    </p>
+                    <p className="mt-1.5 text-sm font-semibold text-surface-900">
+                      {patient.assignedCaregivers.length
+                        ? patient.assignedCaregivers
+                            .map((assignment) => assignment.user.name)
+                            .join(", ")
+                        : "Sem assignment explícito"}
+                    </p>
+                  </div>
                 </div>
               </div>
-            </Card>
+            </article>
           ))}
         </div>
       ) : (
         <EmptyState
+          icon={<UserRound className="h-6 w-6" />}
+          tone="success"
           action={
             canManagePatients ? (
               <Button onClick={openCreateModal}>
