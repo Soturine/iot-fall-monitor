@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap");
 
 @tailwind base;
 @tailwind components;
@@ -6,16 +6,18 @@
 
 @layer base {
   :root {
-    color: #223731;
+    color: #172836;
     background:
-      radial-gradient(circle at top left, rgba(79, 115, 103, 0.18), transparent 28%),
-      radial-gradient(circle at top right, rgba(241, 165, 58, 0.12), transparent 22%),
-      #f6f7f4;
-    font-family: "Manrope", "Segoe UI", sans-serif;
+      radial-gradient(900px 480px at 0% -10%, rgba(14, 165, 151, 0.10), transparent 60%),
+      radial-gradient(700px 420px at 100% 0%, rgba(42, 71, 89, 0.12), transparent 60%),
+      linear-gradient(180deg, #f5f8fa 0%, #eef3f7 100%);
+    background-attachment: fixed;
+    font-family: "Inter", "Manrope", "Segoe UI", sans-serif;
     font-synthesis: none;
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "cv11", "ss01";
   }
 
   * {
@@ -28,7 +30,6 @@
 
   body {
     @apply m-0 min-h-screen bg-transparent text-surface-900;
-    background-size: auto, auto, cover;
   }
 
   button,
@@ -45,19 +46,62 @@
 
 @layer components {
   .panel {
-    @apply rounded-3xl border border-white/70 bg-white/85 shadow-panel backdrop-blur;
+    @apply rounded-3xl border border-white/70 bg-white/90 shadow-ring backdrop-blur;
   }
 
   .panel-soft {
-    @apply rounded-3xl border border-surface-100 bg-surface-50/70 shadow-panel;
+    @apply rounded-3xl border border-surface-100 bg-white/70 shadow-soft;
+  }
+
+  .panel-dark {
+    @apply rounded-3xl border border-white/5 bg-gradient-to-br from-surface-800 to-surface-900 text-white shadow-panel;
   }
 
   .field {
-    @apply w-full rounded-2xl border border-surface-200 bg-white px-4 py-3 text-sm text-surface-900 outline-none transition focus:border-surface-400 focus:ring-4 focus:ring-surface-100;
+    @apply w-full rounded-xl border border-surface-200 bg-white px-4 py-3 text-sm text-surface-900 outline-none transition placeholder:text-surface-400 focus:border-teal-500 focus:ring-4 focus:ring-teal-100;
   }
 
   .label {
-    @apply mb-2 block text-sm font-semibold text-surface-700;
+    @apply mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-surface-600;
+  }
+
+  .stat-card {
+    @apply panel relative overflow-hidden p-5;
+  }
+
+  .stat-card::after {
+    content: "";
+    position: absolute;
+    inset: auto -20% -60% auto;
+    width: 220px;
+    height: 220px;
+    background: radial-gradient(closest-side, rgba(14, 165, 151, 0.18), transparent 70%);
+    pointer-events: none;
+  }
+
+  .table-pro {
+    @apply w-full border-separate border-spacing-0 text-left text-sm;
+  }
+  .table-pro thead th {
+    @apply sticky top-0 z-10 bg-surface-50/95 px-4 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-surface-500 backdrop-blur;
+  }
+  .table-pro tbody td {
+    @apply border-t border-surface-100 px-4 py-3 align-middle text-surface-800;
+  }
+  .table-pro tbody tr:hover td {
+    @apply bg-surface-50/60;
+  }
+
+  .kbd {
+    @apply rounded-md border border-surface-200 bg-white px-1.5 py-0.5 font-mono text-[11px] text-surface-600 shadow-sm;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-surface-200 bg-white px-3 py-1 text-xs font-semibold text-surface-700;
+  }
+
+  .divider-soft {
+    @apply h-px w-full bg-gradient-to-r from-transparent via-surface-200 to-transparent;
   }
 }
 
@@ -67,10 +111,40 @@
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(79, 115, 103, 0.28);
+  background: rgba(42, 71, 89, 0.28);
   border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(42, 71, 89, 0.45);
 }
 
 ::-webkit-scrollbar-track {
   background: transparent;
+}
+
+/* Subtle entrance on routed sections */
+@keyframes panel-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modalIn {
+  from { opacity: 0; transform: translateY(10px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+main > * {
+  animation: panel-rise 280ms ease-out both;
 }

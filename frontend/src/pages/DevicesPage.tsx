@@ -12,6 +12,7 @@ import { LoadingState } from "../components/ui/LoadingState";
 import { Modal } from "../components/ui/Modal";
 import { useAuth } from "../contexts/AuthContext";
 import { useRealtime } from "../contexts/RealtimeContext";
+import { cn } from "../lib/cn";
 import { applyTelemetryPatchToDeviceList } from "../lib/deviceRealtime";
 import {
   deviceBehaviorTone,
@@ -450,48 +451,62 @@ export function DevicesPage() {
       ? `${lastConnectError}${lastConnectErrorCode ? ` (${lastConnectErrorCode})` : ""}`
       : `Socket do painel desconectado: ${humanizeSocketDisconnectReason(lastDisconnectReason)}. O inventario continua mostrando o ultimo snapshot conhecido.`;
 
+  const claimedCount = devices.filter((d) => d.claimStatus === "claimed").length;
+  const activeAlertsCount = devices.reduce((acc, d) => acc + (d.activeAlerts || 0), 0);
+
   return (
     <div className="space-y-6">
-      <Card>
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.28em] text-surface-500">
-              Inventário pareado
-            </p>
-            <h2 className="mt-2 font-display text-3xl text-surface-900">
+      <Card className="relative overflow-hidden border-white/60 bg-gradient-to-br from-white via-white to-teal-50/40">
+        <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-teal-400/10 blur-3xl" />
+        <div className="pointer-events-none absolute -bottom-24 -left-16 h-64 w-64 rounded-full bg-petrol-500/10 blur-3xl" />
+        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+          <div className="max-w-2xl">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-gradient-to-br from-teal-500 to-petrol-700 text-white shadow-soft">
+                <ShieldCheck className="h-4 w-4" />
+              </span>
+              <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-petrol-700">
+                Inventário pareado
+              </p>
+            </div>
+            <h2 className="mt-3 font-display text-3xl text-surface-900 lg:text-4xl">
               Devices vinculados e em onboarding
             </h2>
-            <p className="mt-2 text-sm text-surface-600">
-              O backend agora distingue descoberta técnica, claim seguro por código
-              temporário e vínculo do device com o paciente certo.
+            <p className="mt-2 text-sm leading-6 text-surface-600">
+              Descoberta técnica, claim seguro por código temporário e vínculo
+              do device ao paciente certo — tudo em um único fluxo.
             </p>
             <div className="mt-4 flex flex-wrap gap-2">
-              <Badge tone={realtimeTone(connectionPhase) as never}>
+              <Badge tone={realtimeTone(connectionPhase) as never} dot>
                 {humanizeRealtimePhase(connectionPhase)}
               </Badge>
-              <Badge tone={offlineDevices > 0 ? "warning" : "success"}>
-                {offlineDevices} sem telemetria MQTT recente
+              <Badge tone={offlineDevices > 0 ? "warning" : "success"} dot>
+                {offlineDevices} sem telemetria recente
               </Badge>
+              <Badge tone="info">{claimedCount} claimed</Badge>
+              {activeAlertsCount > 0 ? (
+                <Badge tone="danger">{activeAlertsCount} alertas ativos</Badge>
+              ) : null}
             </div>
-            <p className="mt-2 max-w-3xl text-xs text-surface-500">
+            <p className="mt-3 max-w-3xl text-xs leading-5 text-surface-500">
               {realtimeSummary}
             </p>
           </div>
           {canManageDevices ? (
-            <Button onClick={openPairingModal}>
+            <Button className="shadow-soft" onClick={openPairingModal}>
               <ShieldCheck className="h-4 w-4" />
               Parear dispositivo
             </Button>
           ) : null}
         </div>
 
-        <div className="mt-6 grid gap-3 md:grid-cols-[1fr_220px_220px]">
+        <div className="relative mt-6 grid gap-3 md:grid-cols-[1fr_200px_200px]">
           <div>
-            <label className="label">Buscar por nome, UID ou identificador</label>
+            <label className="label">Buscar dispositivo</label>
             <input
               className="field"
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Buscar dispositivo..."
+              placeholder="Nome, UID ou identificador..."
               value={search}
             />
           </div>
@@ -521,120 +536,192 @@ export function DevicesPage() {
 
       {devices.length ? (
         <div className="grid gap-4 xl:grid-cols-2">
-          {devices.map((device) => (
-            <Card key={device.id} className="overflow-hidden">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge tone={device.status.online ? "success" : "neutral"}>
-                      {device.status.online ? "Online" : "Offline"}
-                    </Badge>
-                    <Badge
-                      tone={
-                        device.claimStatus === "claimed"
-                          ? "info"
-                          : device.claimStatus === "disabled"
-                            ? "warning"
-                            : "neutral"
-                      }
-                    >
-                      {device.claimStatus}
-                    </Badge>
-                    <Badge tone={deviceBehaviorTone(device.behavior.state) as never}>
-                      {humanizeDeviceBehaviorState(device.behavior.state)}
-                    </Badge>
-                    {device.activeAlerts > 0 ? (
-                      <Badge tone="danger">{device.activeAlerts} alertas</Badge>
-                    ) : null}
+          {devices.map((device) => {
+            const battery = device.status.batteryPercent;
+            const batteryTone =
+              typeof battery !== "number"
+                ? "text-surface-500"
+                : battery <= 15
+                  ? "text-danger-600"
+                  : battery <= 35
+                    ? "text-amber-600"
+                    : "text-teal-700";
+            const rssi = device.status.wifiRssi;
+            const rssiTone =
+              typeof rssi !== "number"
+                ? "text-surface-500"
+                : rssi >= -60
+                  ? "text-teal-700"
+                  : rssi >= -75
+                    ? "text-amber-600"
+                    : "text-danger-600";
+
+            return (
+              <Card
+                key={device.id}
+                className="group relative overflow-hidden transition hover:-translate-y-0.5 hover:shadow-panel"
+              >
+                <span
+                  className={cn(
+                    "absolute inset-y-0 left-0 w-1",
+                    device.status.online
+                      ? "bg-gradient-to-b from-teal-400 to-teal-600"
+                      : "bg-gradient-to-b from-surface-300 to-surface-400",
+                  )}
+                />
+                <div className="flex flex-wrap items-start justify-between gap-4">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge tone={device.status.online ? "success" : "muted"} dot>
+                        {device.status.online ? "Online" : "Offline"}
+                      </Badge>
+                      <Badge
+                        tone={
+                          device.claimStatus === "claimed"
+                            ? "info"
+                            : device.claimStatus === "disabled"
+                              ? "warning"
+                              : "neutral"
+                        }
+                      >
+                        {device.claimStatus}
+                      </Badge>
+                      <Badge tone={deviceBehaviorTone(device.behavior.state) as never}>
+                        {humanizeDeviceBehaviorState(device.behavior.state)}
+                      </Badge>
+                      {device.activeAlerts > 0 ? (
+                        <Badge tone="critical">{device.activeAlerts} alertas</Badge>
+                      ) : null}
+                    </div>
+                    <h3 className="mt-3 font-display text-2xl text-surface-900 truncate">
+                      {device.name}
+                    </h3>
+                    <p className="mt-1 text-sm text-surface-600">
+                      <span className="font-medium text-surface-800">
+                        {device.currentPatient?.fullName || "Sem paciente ativo"}
+                      </span>
+                      <span className="mx-1.5 text-surface-300">•</span>
+                      {device.location || "Local não informado"}
+                    </p>
+                    <p className="mt-2 text-xs text-surface-500">
+                      Heurística: {humanizeDeviceBehaviorState(device.behavior.state)} ·
+                      confiança {humanizeDeviceBehaviorConfidence(device.behavior.confidence)}
+                    </p>
+                    <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-surface-500">
+                      <span className="rounded-md bg-surface-100 px-2 py-0.5 font-mono">
+                        {device.deviceIdentifier}
+                      </span>
+                      <span className="rounded-md bg-surface-50 px-2 py-0.5 font-mono text-surface-400">
+                        {device.deviceUid}
+                      </span>
+                    </div>
                   </div>
-                  <h3 className="mt-3 font-display text-2xl text-surface-900">
-                    {device.name}
-                  </h3>
-                  <p className="mt-1 text-sm text-surface-600">
-                    {device.currentPatient?.fullName || "Sem paciente ativo"} •{" "}
-                    {device.location || "Local não informado"}
-                  </p>
-                  <p className="mt-2 text-xs text-surface-500">
-                    Heuristica experimental: {humanizeDeviceBehaviorState(device.behavior.state)} -
-                    confianca {humanizeDeviceBehaviorConfidence(device.behavior.confidence)}
-                  </p>
-                  <p className="mt-2 text-xs font-semibold uppercase tracking-[0.22em] text-surface-500">
-                    {device.deviceIdentifier}
-                  </p>
-                  <p className="mt-1 text-xs text-surface-500">{device.deviceUid}</p>
-                </div>
-                {canManageDevices ? (
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      onClick={() => {
-                        setEditingDevice(device);
-                        setEditModalOpen(true);
-                      }}
-                      variant="secondary"
-                    >
-                      <Edit3 className="h-4 w-4" />
-                    </Button>
-                    {device.claimStatus === "claimed" ? (
+                  {canManageDevices ? (
+                    <div className="flex flex-wrap gap-2">
                       <Button
                         onClick={() => {
-                          setAssigningDevice(device);
-                          setAssignmentForm({
-                            patientId: device.currentPatient?.id
-                              ? String(device.currentPatient.id)
-                              : "",
-                            reason: "",
-                          });
-                          setAssignmentModalOpen(true);
+                          setEditingDevice(device);
+                          setEditModalOpen(true);
                         }}
                         variant="secondary"
                       >
-                        <UsersRound className="h-4 w-4" />
+                        <Edit3 className="h-4 w-4" />
                       </Button>
-                    ) : null}
+                      {device.claimStatus === "claimed" ? (
+                        <Button
+                          onClick={() => {
+                            setAssigningDevice(device);
+                            setAssignmentForm({
+                              patientId: device.currentPatient?.id
+                                ? String(device.currentPatient.id)
+                                : "",
+                              reason: "",
+                            });
+                            setAssignmentModalOpen(true);
+                          }}
+                          variant="secondary"
+                        >
+                          <UsersRound className="h-4 w-4" />
+                        </Button>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="mt-6 grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-2xl border border-surface-100 bg-gradient-to-br from-white to-surface-50 p-4">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-surface-500">
+                      Bateria
+                    </p>
+                    <p className={cn("mt-2 font-display text-2xl font-semibold", batteryTone)}>
+                      {battery ?? "--"}
+                      <span className="ml-0.5 text-sm font-medium text-surface-500">%</span>
+                    </p>
+                    <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-surface-100">
+                      <div
+                        className={cn(
+                          "h-full rounded-full",
+                          typeof battery === "number" && battery <= 15
+                            ? "bg-danger-500"
+                            : typeof battery === "number" && battery <= 35
+                              ? "bg-amber-500"
+                              : "bg-teal-500",
+                        )}
+                        style={{ width: `${Math.max(0, Math.min(100, battery ?? 0))}%` }}
+                      />
+                    </div>
                   </div>
-                ) : null}
-              </div>
+                  <div className="rounded-2xl border border-surface-100 bg-gradient-to-br from-white to-surface-50 p-4">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-surface-500">
+                      RSSI
+                    </p>
+                    <p className={cn("mt-2 font-display text-2xl font-semibold", rssiTone)}>
+                      {rssi ?? "--"}
+                      <span className="ml-0.5 text-sm font-medium text-surface-500">dBm</span>
+                    </p>
+                    <p className="mt-2 text-[11px] text-surface-500">
+                      {typeof rssi === "number"
+                        ? rssi >= -60
+                          ? "Sinal excelente"
+                          : rssi >= -75
+                            ? "Sinal aceitável"
+                            : "Sinal fraco"
+                        : "Sem leitura"}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-surface-100 bg-gradient-to-br from-white to-surface-50 p-4">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-surface-500">
+                      Último contato
+                    </p>
+                    <p className="mt-2 text-sm font-semibold text-surface-900">
+                      {formatRelativeTime(device.status.lastSeenAt)}
+                    </p>
+                    <p className="mt-2 text-[11px] text-surface-500 truncate">
+                      {device.status.lastSeenAt
+                        ? formatDateTime(device.status.lastSeenAt)
+                        : "Sem registros"}
+                    </p>
+                  </div>
+                </div>
 
-              <div className="mt-6 grid gap-3 sm:grid-cols-3">
-                <div className="rounded-[24px] bg-surface-50 p-4">
-                  <p className="text-xs font-bold uppercase tracking-[0.24em] text-surface-500">
-                    Bateria
-                  </p>
-                  <p className="mt-2 text-2xl font-semibold text-surface-900">
-                    {device.status.batteryPercent ?? "--"}%
-                  </p>
+                <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-surface-100 pt-4">
+                  <span className="text-xs text-surface-600">
+                    Claim{" "}
+                    <span className="font-semibold text-surface-800">
+                      {device.claimedAt ? formatDateTime(device.claimedAt) : "aguardando"}
+                    </span>
+                  </span>
+                  <Link
+                    className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-petrol-700 to-petrol-900 px-4 py-2 text-sm font-semibold text-white shadow-soft transition hover:from-petrol-800 hover:to-petrol-950"
+                    to={`/devices/${device.id}`}
+                  >
+                    Ver detalhe
+                    <span aria-hidden>→</span>
+                  </Link>
                 </div>
-                <div className="rounded-[24px] bg-surface-50 p-4">
-                  <p className="text-xs font-bold uppercase tracking-[0.24em] text-surface-500">
-                    RSSI
-                  </p>
-                  <p className="mt-2 text-2xl font-semibold text-surface-900">
-                    {device.status.wifiRssi ?? "--"}
-                  </p>
-                </div>
-                <div className="rounded-[24px] bg-surface-50 p-4">
-                  <p className="text-xs font-bold uppercase tracking-[0.24em] text-surface-500">
-                    Último contato
-                  </p>
-                  <p className="mt-2 text-sm font-semibold text-surface-900">
-                    {formatRelativeTime(device.status.lastSeenAt)}
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-                <span className="text-sm text-surface-600">
-                  Claim em {device.claimedAt ? formatDateTime(device.claimedAt) : "aguardando"}
-                </span>
-                <Link
-                  className="rounded-full bg-surface-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-surface-700"
-                  to={`/devices/${device.id}`}
-                >
-                  Ver detalhe
-                </Link>
-              </div>
-            </Card>
-          ))}
+              </Card>
+            );
+          })}
         </div>
       ) : (
         <EmptyState

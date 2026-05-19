@@ -1,4 +1,4 @@
-import { HeartPulse, ShieldAlert, Siren, Wifi } from "lucide-react";
+import { HeartPulse, ShieldAlert, ShieldCheck, Siren, Wifi } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast";
@@ -91,56 +91,77 @@ export function LoginPage() {
   return (
     <div className="min-h-screen px-4 py-6 md:px-6">
       <div className="mx-auto grid min-h-[calc(100vh-3rem)] max-w-7xl gap-6 lg:grid-cols-[1.05fr_0.95fr]">
-        <section className="panel relative overflow-hidden px-8 py-10 md:px-10">
-          <div className="absolute inset-0 bg-app-grid bg-[size:28px_28px] opacity-35" />
-          <div className="relative">
-            <p className="text-xs font-bold uppercase tracking-[0.36em] text-surface-500">
-              Sistema academico full-stack
-            </p>
-            <h1 className="mt-4 max-w-2xl font-display text-5xl leading-[1.02] text-surface-900 md:text-6xl">
-              Monitoramento de quedas, imobilidade e resposta operacional.
+        <section className="panel-dark relative overflow-hidden px-8 py-10 md:px-10">
+          <img
+            alt=""
+            aria-hidden="true"
+            className="absolute inset-0 h-full w-full object-cover opacity-30"
+            src="/images/hero-idosa-familia-enfermeira-campus.png"
+          />
+          <div className="absolute inset-0 bg-gradient-to-br from-surface-900/85 via-surface-900/70 to-teal-900/60" />
+          <div className="absolute inset-0 bg-app-grid bg-[size:28px_28px] opacity-20" />
+          <div className="relative flex h-full flex-col">
+            <div className="flex items-center gap-2.5">
+              <div className="grid h-10 w-10 place-items-center rounded-2xl bg-white/10 text-teal-300 ring-1 ring-white/15 backdrop-blur">
+                <ShieldCheck className="h-5 w-5" />
+              </div>
+              <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-teal-200">
+                Healthtech IoT · Monitoramento contínuo
+              </p>
+            </div>
+
+            <h1 className="mt-8 max-w-2xl font-display text-5xl leading-[1.02] text-white md:text-6xl">
+              Cuidado conectado para quem importa.
             </h1>
-            <p className="mt-5 max-w-2xl text-base text-surface-600 md:text-lg">
-              Painel responsivo conectado ao ESP32 via MQTT, com historico clinico,
-              alerta em tempo real e gestao de dispositivos por paciente.
+            <p className="mt-5 max-w-2xl text-base text-white/75 md:text-lg">
+              Detecção de quedas e imobilidade em tempo real, integrada ao ESP32 via MQTT, com
+              histórico clínico, alertas críticos e gestão multi-tenant de dispositivos.
             </p>
 
-            <div className="mt-10 grid gap-4 md:grid-cols-2">
+            <div className="mt-10 grid gap-3 md:grid-cols-2">
               {[
                 {
                   icon: Siren,
-                  title: "Alertas criticos ao vivo",
-                  description: "Queda e SOS entram instantaneamente no dashboard via Socket.IO.",
+                  title: "Alertas críticos ao vivo",
+                  description: "Quedas e SOS chegam ao painel via Socket.IO em milissegundos.",
                 },
                 {
                   icon: Wifi,
-                  title: "Status operacional",
-                  description: "Ultimo contato, RSSI, bateria e saude de conectividade em um so lugar.",
+                  title: "Saúde operacional",
+                  description: "Último contato, RSSI, bateria e conectividade de cada device.",
                 },
                 {
                   icon: HeartPulse,
-                  title: "Historico interpretavel",
-                  description: "Eventos, telemetria e resolucao de alerta com rastreabilidade.",
+                  title: "Histórico interpretável",
+                  description: "Eventos, telemetria e resolução de alertas auditáveis.",
                 },
                 {
                   icon: ShieldAlert,
                   title: "Fluxo de resposta",
-                  description: "Acknowledge, cancelamento e resolucao com auditoria simplificada.",
+                  description: "Acknowledge, cancelamento e resolução em um clique.",
                 },
               ].map(({ icon: Icon, title, description }) => (
                 <div
                   key={title}
-                  className="rounded-[28px] border border-white/70 bg-white/75 p-5 shadow-panel"
+                  className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur transition hover:border-teal-400/40 hover:bg-white/10"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="rounded-2xl bg-surface-800 p-3 text-white">
-                      <Icon className="h-5 w-5" />
+                    <div className="grid h-9 w-9 place-items-center rounded-xl bg-teal-500/20 text-teal-200">
+                      <Icon className="h-4 w-4" />
                     </div>
-                    <h2 className="font-display text-xl text-surface-900">{title}</h2>
+                    <h2 className="font-display text-base text-white">{title}</h2>
                   </div>
-                  <p className="mt-3 text-sm leading-6 text-surface-600">{description}</p>
+                  <p className="mt-2.5 text-sm leading-6 text-white/70">{description}</p>
                 </div>
               ))}
+            </div>
+
+            <div className="mt-auto pt-10">
+              <div className="flex items-center gap-3 text-xs text-white/55">
+                <span className="h-px flex-1 bg-white/15" />
+                <span className="uppercase tracking-[0.3em]">Multi-tenant · LGPD-ready</span>
+                <span className="h-px flex-1 bg-white/15" />
+              </div>
             </div>
           </div>
         </section>

@@ -10,13 +10,13 @@ type ButtonProps = PropsWithChildren<
 
 const variants = {
   primary:
-    "bg-surface-800 text-white hover:bg-surface-700 focus:ring-surface-200",
+    "bg-gradient-to-b from-surface-800 to-surface-900 text-white shadow-soft hover:from-surface-700 hover:to-surface-800 focus:ring-surface-200",
   secondary:
-    "bg-white text-surface-800 border border-surface-200 hover:border-surface-300 focus:ring-surface-200",
+    "bg-white text-surface-800 border border-surface-200 hover:border-teal-400 hover:text-teal-700 focus:ring-teal-100",
   ghost:
     "bg-transparent text-surface-700 hover:bg-surface-100 focus:ring-surface-100",
   danger:
-    "bg-danger-600 text-white hover:bg-danger-700 focus:ring-danger-100",
+    "bg-danger-600 text-white shadow-soft hover:bg-danger-700 focus:ring-danger-100",
 };
 
 export function Button({
