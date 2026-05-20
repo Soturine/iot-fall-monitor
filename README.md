@@ -63,6 +63,14 @@ O modelo atual deixou de ser um painel global único e passou a trabalhar com or
 - suporte a buzzer e modo opcional de teste de movimento em bancada
 - scripts Windows para setup, banco, start, stop e smoke test
 
+## Capturas de Tela
+
+A estrutura para capturas reais da interface `v0.8.25` está preparada em [docs/assets](docs/assets/README.md). Ainda não há screenshots ou GIFs reais versionados nesta rodada, então o README não referencia imagens inexistentes.
+
+Quando forem capturadas com o projeto rodando, as imagens devem ser salvas em `docs/assets/screenshots/` com nomes como `dashboard-v0.8.25.png`, `device-detail-telemetry-v0.8.25.png`, `alerts-v0.8.25.png`, `login-v0.8.25.png`, `patients-v0.8.25.png` e `esp32-portal-v0.8.25.png`. O GIF real do fluxo ESP32/evento -> MQTT -> backend -> dashboard deve usar `docs/assets/gifs/realtime-alert-flow-v0.8.25.gif`.
+
+Não use mockups ou imagens simuladas como se fossem screenshots reais. Ao adicionar uma captura, atualize esta seção com Markdown simples e uma legenda curta explicando o que a tela demonstra.
+
 ## Arquitetura
 
 ```text

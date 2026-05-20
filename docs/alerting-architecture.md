@@ -23,6 +23,12 @@ ESP32 detecta queda ou SOS
 
 O alerta atual e interno ao sistema: ele persiste em MySQL e aparece em realtime no painel. Ainda não existe envio externo de SMS, WhatsApp, e-mail, push ou webhook.
 
+## Registro visual do fluxo
+
+Screenshots e GIFs reais do fluxo de alertas devem ser armazenados em [assets](assets/README.md). Para a `v0.8.25`, a estrutura espera `screenshots/alerts-v0.8.25.png` e, quando houver captura real ponta a ponta, `gifs/realtime-alert-flow-v0.8.25.gif`.
+
+Não há imagem referenciada aqui enquanto esses arquivos não forem capturados e versionados.
+
 ## Topicos MQTT
 
 Base padrão:

@@ -1,7 +1,17 @@
 # Changelog
 
 ## [Unreleased]
+### Adicionado
+- estrutura `docs/assets/screenshots/` e `docs/assets/gifs/` para organizar capturas reais do dashboard, detalhe de dispositivo, alertas, login/cadastro, pacientes e portal ESP32
+
+### Documentação
+- README preparado para uma seção de capturas reais da interface web `v0.8.25`, sem inserir links quebrados enquanto os arquivos ainda não existem
+- docs técnicos passam a indicar onde screenshots/GIFs reais devem ser armazenados e referenciados
+- `docs/assets/README.md` documenta nomes esperados, checklist de captura e regra explícita contra imagens simuladas
+
 ### Pendente / Faltando
+- capturar screenshots reais da interface web `v0.8.25` com o projeto rodando
+- capturar GIF real do fluxo ESP32/evento -> MQTT -> backend -> dashboard atualizando
 - ativar FFT como decisão real somente após calibração e validação com dados reais
 - implementar sessões completas de calibração por SOS
 - testar classificação de movimentos com múltiplas runs por classe

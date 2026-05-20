@@ -128,6 +128,10 @@ flowchart TD
   H -->|Sim| L[Ignora duplicata sem novo alerta]
 ```
 
+### Assets visuais
+
+Capturas reais da integração web/MQTT devem ficar em [assets](assets/README.md). A pasta já reserva nomes para dashboard, detalhe do dispositivo, alertas e GIF do fluxo ESP32/evento -> MQTT -> backend -> dashboard. Enquanto esses arquivos não existirem no repositório, os docs não devem criar links de imagem.
+
 ### `status`
 
 ```json
