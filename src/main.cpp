@@ -9,6 +9,7 @@
 #include "connectivity_manager.h"
 #include "device_config.h"
 #include "event_buffer.h"
+#include "fall_feature_extractor.h"
 #include "fall_detector.h"
 #include "models.h"
 #include "mqtt_client.h"
@@ -23,6 +24,7 @@ namespace {
 // Instancias globais simples mantem o loop principal enxuto para o firmware.
 SensorMPU6050 sensor;
 FallDetector fallDetector;
+FallFeatureExtractor fallFeatureExtractor;
 ConfigStore configStore;
 WifiManager wifiManager;
 DeviceMqttClient mqttClient;
@@ -102,13 +104,118 @@ const DeviceSettings::DeviceConfig& runtimeConfig() {
   return connectivityManager.config();
 }
 
+void addTimeDomainFeatures(JsonObject features, const FallTimeDomainFeatures& timeFeatures) {
+  features["available"] = timeFeatures.available;
+  features["sample_count"] = timeFeatures.sampleCount;
+  features["window_started_at_ms"] = timeFeatures.windowStartedAtMs;
+  features["window_ended_at_ms"] = timeFeatures.windowEndedAtMs;
+  features["window_duration_ms"] = timeFeatures.windowDurationMs;
+
+  if (!timeFeatures.available) {
+    return;
+  }
+
+  features["mean_ax"] = timeFeatures.meanAxG;
+  features["mean_ay"] = timeFeatures.meanAyG;
+  features["mean_az"] = timeFeatures.meanAzG;
+  features["std_ax"] = timeFeatures.stdAxG;
+  features["std_ay"] = timeFeatures.stdAyG;
+  features["std_az"] = timeFeatures.stdAzG;
+  features["mean_gx"] = timeFeatures.meanGxDps;
+  features["mean_gy"] = timeFeatures.meanGyDps;
+  features["mean_gz"] = timeFeatures.meanGzDps;
+  features["std_gx"] = timeFeatures.stdGxDps;
+  features["std_gy"] = timeFeatures.stdGyDps;
+  features["std_gz"] = timeFeatures.stdGzDps;
+  features["energy_ax"] = timeFeatures.energyAx;
+  features["energy_ay"] = timeFeatures.energyAy;
+  features["energy_az"] = timeFeatures.energyAz;
+  features["energy_gx"] = timeFeatures.energyGx;
+  features["energy_gy"] = timeFeatures.energyGy;
+  features["energy_gz"] = timeFeatures.energyGz;
+  features["peak_accel_magnitude"] = timeFeatures.peakAccelMagnitudeG;
+  features["peak_gyro_magnitude"] = timeFeatures.peakGyroMagnitudeDps;
+  features["mean_jerk"] = timeFeatures.meanJerkGPerSec;
+  features["peak_jerk"] = timeFeatures.peakJerkGPerSec;
+}
+
+void addFrequencyDomainFeatures(JsonObject features,
+                                const FallFrequencyDomainFeatures& frequencyFeatures) {
+  features["available"] = frequencyFeatures.available;
+  features["experimental"] = frequencyFeatures.experimental;
+  features["window_size"] = frequencyFeatures.windowSize;
+  features["sample_interval_ms"] = frequencyFeatures.sampleIntervalMs;
+  features["sample_count"] = frequencyFeatures.sampleCount;
+
+  if (!frequencyFeatures.available) {
+    features["reason"] = "fft_experimental_disabled";
+    features["spectral_energy_ax"] = nullptr;
+    features["spectral_energy_ay"] = nullptr;
+    features["spectral_energy_az"] = nullptr;
+    features["spectral_energy_gx"] = nullptr;
+    features["spectral_energy_gy"] = nullptr;
+    features["spectral_energy_gz"] = nullptr;
+    features["dominant_frequency_ax"] = nullptr;
+    features["dominant_frequency_ay"] = nullptr;
+    features["dominant_frequency_az"] = nullptr;
+    features["dominant_frequency_gx"] = nullptr;
+    features["dominant_frequency_gy"] = nullptr;
+    features["dominant_frequency_gz"] = nullptr;
+    return;
+  }
+
+  features["spectral_energy_ax"] = frequencyFeatures.spectralEnergyAx;
+  features["spectral_energy_ay"] = frequencyFeatures.spectralEnergyAy;
+  features["spectral_energy_az"] = frequencyFeatures.spectralEnergyAz;
+  features["spectral_energy_gx"] = frequencyFeatures.spectralEnergyGx;
+  features["spectral_energy_gy"] = frequencyFeatures.spectralEnergyGy;
+  features["spectral_energy_gz"] = frequencyFeatures.spectralEnergyGz;
+  features["dominant_frequency_ax"] = frequencyFeatures.dominantFrequencyAxHz;
+  features["dominant_frequency_ay"] = frequencyFeatures.dominantFrequencyAyHz;
+  features["dominant_frequency_az"] = frequencyFeatures.dominantFrequencyAzHz;
+  features["dominant_frequency_gx"] = frequencyFeatures.dominantFrequencyGxHz;
+  features["dominant_frequency_gy"] = frequencyFeatures.dominantFrequencyGyHz;
+  features["dominant_frequency_gz"] = frequencyFeatures.dominantFrequencyGzHz;
+}
+
+void enrichFallAlertWithCurrentWindow(FallAlert& alert, const SensorReading& reading) {
+  alert.decisionSource = "firmware";
+  alert.algorithmVersion = AppConfig::FALL_DECISION_ENGINE_VERSION;
+  alert.activityStateEstimate = "queda_confirmada";
+  alert.confidence = 0.76f;
+  alert.candidate = true;
+  alert.pitchDeg = reading.pitchDeg;
+  alert.rollDeg = reading.rollDeg;
+  alert.accelMagnitudeG = alert.accelMagnitudeG > 0.0f
+                              ? alert.accelMagnitudeG
+                              : reading.accelMagnitudeG;
+  alert.gyroMagnitudeDegPerSec = alert.gyroMagnitudeDegPerSec > 0.0f
+                                      ? alert.gyroMagnitudeDegPerSec
+                                      : reading.gyroMagnitudeDegPerSec;
+  alert.peakAccelG = alert.accelMagnitudeG;
+  alert.peakGyroDps = alert.gyroMagnitudeDegPerSec;
+  alert.sampleCount = alert.samplesConsidered;
+  alert.windowEndedAtMs = alert.timestampMs > 0U ? alert.timestampMs : reading.timestampMs;
+  alert.windowStartedAtMs =
+      alert.analysisWindowMs > 0U && alert.windowEndedAtMs >= alert.analysisWindowMs
+          ? alert.windowEndedAtMs - alert.analysisWindowMs
+          : 0U;
+  alert.timeDomainFeatures = fallFeatureExtractor.timeDomainSnapshot();
+  alert.frequencyDomainFeatures = fallFeatureExtractor.frequencyDomainSnapshot();
+  alert.linkedTelemetryWindow.available = false;
+  alert.linkedTelemetryWindow.reason = "backend_links_persisted_telemetry";
+  alert.linkedTelemetryWindow.windowStartedAtMs = alert.windowStartedAtMs;
+  alert.linkedTelemetryWindow.windowEndedAtMs = alert.windowEndedAtMs;
+  alert.linkedTelemetryWindow.sampleCount = alert.sampleCount;
+}
+
 String buildEventPayload(const char* eventType,
                          float accelMagnitudeG,
                          float gyroMagnitudeDegPerSec,
                          bool immobilityConfirmed,
                          const FallAlert* fallAlert = nullptr) {
   // Mantem o formato do payload centralizado em um unico ponto.
-  StaticJsonDocument<896> doc;
+  StaticJsonDocument<2304> doc;
   doc["device_uid"] = DeviceSettings::technicalDeviceUid();
   doc["device_id"] = DeviceSettings::effectiveDeviceId(runtimeConfig());
   doc["event_type"] = eventType;
@@ -120,12 +227,31 @@ String buildEventPayload(const char* eventType,
   doc["battery_percent"] = batteryLevelPercent();
 
   if (fallAlert != nullptr) {
-    doc["decision_source"] = "firmware";
+    doc["decision_source"] = fallAlert->decisionSource;
+    doc["algorithm_version"] = fallAlert->algorithmVersion;
+    doc["detected"] = fallAlert->detected;
+    doc["candidate"] = fallAlert->candidate;
+    doc["reason"] = fallAlert->reason;
+    doc["activity_state_estimate"] = fallAlert->activityStateEstimate;
+    doc["confidence"] = fallAlert->confidence;
     doc["fall_reason"] = fallAlert->reason;
+    doc["window_started_at_ms"] = fallAlert->windowStartedAtMs;
+    doc["window_ended_at_ms"] = fallAlert->windowEndedAtMs;
     doc["analysis_window_ms"] = fallAlert->analysisWindowMs;
+    doc["sample_count"] = fallAlert->sampleCount;
     doc["samples_considered"] = fallAlert->samplesConsidered;
+    doc["peak_accel_g"] = fallAlert->peakAccelG;
+    doc["peak_gyro_dps"] = fallAlert->peakGyroDps;
+    doc["accel_magnitude_g"] = fallAlert->accelMagnitudeG;
+    doc["gyro_magnitude_dps"] = fallAlert->gyroMagnitudeDegPerSec;
+    doc["pitch_deg"] = fallAlert->pitchDeg;
+    doc["roll_deg"] = fallAlert->rollDeg;
+    doc["orientation_delta_deg"] = fallAlert->orientationDeltaDeg;
+    doc["immobility_duration_ms"] = fallAlert->immobilityDurationMs;
 
     JsonObject features = doc.createNestedObject("features");
+    features["decision_source"] = fallAlert->decisionSource;
+    features["algorithm_version"] = fallAlert->algorithmVersion;
     features["reason"] = fallAlert->reason;
     features["peak_accel_magnitude_g"] = fallAlert->accelMagnitudeG;
     features["peak_gyro_magnitude_dps"] = fallAlert->gyroMagnitudeDegPerSec;
@@ -134,6 +260,23 @@ String buildEventPayload(const char* eventType,
     features["immobility_duration_ms"] = fallAlert->immobilityDurationMs;
     features["analysis_window_ms"] = fallAlert->analysisWindowMs;
     features["samples_considered"] = fallAlert->samplesConsidered;
+    features["activity_state_estimate"] = fallAlert->activityStateEstimate;
+    features["confidence"] = fallAlert->confidence;
+
+    JsonObject timeFeatures = doc.createNestedObject("features_time_domain");
+    addTimeDomainFeatures(timeFeatures, fallAlert->timeDomainFeatures);
+
+    JsonObject frequencyFeatures = doc.createNestedObject("features_frequency_domain");
+    addFrequencyDomainFeatures(frequencyFeatures, fallAlert->frequencyDomainFeatures);
+
+    JsonObject linkedTelemetryWindow = doc.createNestedObject("linked_telemetry_window");
+    linkedTelemetryWindow["available"] = fallAlert->linkedTelemetryWindow.available;
+    linkedTelemetryWindow["reason"] = fallAlert->linkedTelemetryWindow.reason;
+    linkedTelemetryWindow["window_started_at_ms"] =
+        fallAlert->linkedTelemetryWindow.windowStartedAtMs;
+    linkedTelemetryWindow["window_ended_at_ms"] =
+        fallAlert->linkedTelemetryWindow.windowEndedAtMs;
+    linkedTelemetryWindow["sample_count"] = fallAlert->linkedTelemetryWindow.sampleCount;
 
     JsonObject thresholds = doc.createNestedObject("thresholds");
     thresholds["impact_accel_g"] = AppConfig::IMPACT_THRESHOLD_G;
@@ -835,6 +978,7 @@ void loop() {
       lastSensorReadSucceeded = sensor.lastReadSucceeded();
       consecutiveSensorReadFailures = sensor.consecutiveFailureCount();
       latestReading = sensor.getReading();
+      fallFeatureExtractor.addSample(latestReading);
       logSensorReadOkIfDue(latestReading, nowMs);
 
       if (AppConfig::SERIAL_SENSOR_DEBUG_ENABLED &&
@@ -846,8 +990,9 @@ void loop() {
       handleMotionTest(latestReading, nowMs);
 
       // O detector trabalha sobre a ultima leitura filtrada do sensor.
-      const FallAlert alert = fallDetector.update(latestReading);
+      FallAlert alert = fallDetector.update(latestReading);
       if (alert.detected) {
+        enrichFallAlertWithCurrentWindow(alert, latestReading);
         AppLog::warn("Queda confirmada com imobilidade.");
         publishFallAlert(alert);
       }

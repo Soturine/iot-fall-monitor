@@ -31,6 +31,18 @@ function toFiniteNumber(value, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function toNullableBoolean(value) {
+  if (value == null || value === "") {
+    return null;
+  }
+
+  return toBoolean(value);
+}
+
+function isPlainObject(value) {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
 function validateTelemetryPayload(payload = {}) {
   const missingFields = TELEMETRY_REQUIRED_NUMERIC_FIELDS.filter(
     (field) => toNullableNumber(payload[field]) == null,
@@ -225,6 +237,91 @@ function buildTelemetryEvidence(rows, eventTime, immobilityConfirmed = false) {
       };
     }),
   };
+}
+
+function buildFirmwareDecisionSummary(payload = {}) {
+  const features = isPlainObject(payload.features) ? payload.features : {};
+  const featuresTimeDomain = isPlainObject(payload.features_time_domain)
+    ? payload.features_time_domain
+    : null;
+  const featuresFrequencyDomain = isPlainObject(payload.features_frequency_domain)
+    ? payload.features_frequency_domain
+    : null;
+  const linkedTelemetryWindow = isPlainObject(payload.linked_telemetry_window)
+    ? payload.linked_telemetry_window
+    : null;
+  const algorithmVersion = payload.algorithm_version || features.algorithm_version || null;
+  const decisionSource = payload.decision_source || features.decision_source || null;
+  const reason = payload.reason || payload.fall_reason || features.reason || null;
+
+  if (
+    !algorithmVersion &&
+    !decisionSource &&
+    !reason &&
+    !featuresTimeDomain &&
+    !featuresFrequencyDomain
+  ) {
+    return null;
+  }
+
+  return {
+    decisionSource,
+    algorithmVersion,
+    detected: toNullableBoolean(payload.detected),
+    candidate: toNullableBoolean(payload.candidate),
+    reason,
+    activityStateEstimate:
+      payload.activity_state_estimate || features.activity_state_estimate || null,
+    confidence: toNullableNumber(payload.confidence ?? features.confidence),
+    windowStartedAtMs: toNullableNumber(payload.window_started_at_ms),
+    windowEndedAtMs: toNullableNumber(payload.window_ended_at_ms),
+    analysisWindowMs: toNullableNumber(payload.analysis_window_ms),
+    sampleCount: toNullableNumber(payload.sample_count ?? payload.samples_considered),
+    peakAccelG: toNullableNumber(payload.peak_accel_g ?? features.peak_accel_magnitude_g),
+    peakGyroDps: toNullableNumber(payload.peak_gyro_dps ?? features.peak_gyro_magnitude_dps),
+    accelMagnitudeG: toNullableNumber(payload.accel_magnitude_g ?? payload.accel_magnitude),
+    gyroMagnitudeDps: toNullableNumber(payload.gyro_magnitude_dps ?? payload.gyro_magnitude),
+    pitchDeg: toNullableNumber(payload.pitch_deg),
+    rollDeg: toNullableNumber(payload.roll_deg),
+    orientationDeltaDeg: toNullableNumber(
+      payload.orientation_delta_deg ?? features.orientation_delta_deg,
+    ),
+    immobilityConfirmed: toNullableBoolean(
+      payload.immobility_confirmed ?? features.immobility_confirmed,
+    ),
+    immobilityDurationMs: toNullableNumber(
+      payload.immobility_duration_ms ?? features.immobility_duration_ms,
+    ),
+    featuresTimeDomain,
+    featuresFrequencyDomain,
+    linkedTelemetryWindow,
+  };
+}
+
+function buildEvidenceSummaryForPayload(evidence, payload = {}) {
+  const summary = {
+    ...(evidence?.summary || buildEmptyEvidence().summary),
+  };
+  const firmwareDecision = buildFirmwareDecisionSummary(payload);
+
+  summary.linkedTelemetryWindow = {
+    status: evidence?.status || "none",
+    telemetryId: evidence?.telemetryId || null,
+    sampleCount: Number(evidence?.sampleCount || 0),
+    windowSeconds: evidence?.windowSeconds ?? 0,
+    links: evidence?.links || [],
+  };
+
+  if (firmwareDecision) {
+    summary.firmwareDecision = firmwareDecision;
+    summary.decisionSource = firmwareDecision.decisionSource;
+    summary.algorithmVersion = firmwareDecision.algorithmVersion;
+    summary.confidence = firmwareDecision.confidence;
+    summary.reason = firmwareDecision.reason;
+    summary.activityStateEstimate = firmwareDecision.activityStateEstimate;
+  }
+
+  return summary;
 }
 
 async function resolveFallTelemetryEvidence({ device, eventTime, immobility }, executor = null) {
@@ -422,6 +519,7 @@ async function recordEventFromMqtt({
   const evidence = eventType === "fall_detected"
     ? await resolveFallTelemetryEvidence({ device, eventTime, immobility }, executor)
     : buildEmptyEvidence(immobility);
+  const evidenceSummary = buildEvidenceSummaryForPayload(evidence, payload);
   let severity = deriveSeverity(eventType, payload);
 
   if (eventType === "fall_detected" && evidence.status === "none") {
@@ -465,7 +563,7 @@ async function recordEventFromMqtt({
       evidence.telemetryId,
       evidence.sampleCount,
       evidence.windowSeconds,
-      JSON.stringify(evidence.summary),
+      JSON.stringify(evidenceSummary),
       eventTime,
       JSON.stringify(payload),
     ],
@@ -720,6 +818,7 @@ async function listDeviceEvents(deviceId, filters = {}, accessContext) {
 
 module.exports = {
   buildTelemetryEvidence,
+  buildEvidenceSummaryForPayload,
   deriveMessage,
   deriveSeverity,
   getEventById,

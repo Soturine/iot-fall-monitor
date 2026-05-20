@@ -40,6 +40,7 @@ type EvidenceCarrier = Pick<
   | "evidenceSampleCount"
   | "evidenceWindowSeconds"
   | "evidenceSummary"
+  | "rawPayloadJson"
 >;
 
 function humanizeEvidenceStatus(status?: string) {
@@ -71,11 +72,107 @@ function formatEvidenceNumber(value: number | null | undefined) {
     : "--";
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
+
+function readString(record: Record<string, unknown> | null | undefined, key: string) {
+  const value = record?.[key];
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function readNumber(record: Record<string, unknown> | null | undefined, key: string) {
+  const value = record?.[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function readBoolean(record: Record<string, unknown> | null | undefined, key: string) {
+  const value = record?.[key];
+  return typeof value === "boolean" ? value : null;
+}
+
+function formatConfidence(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value)
+    ? `${Math.round(value * 100)}%`
+    : "--";
+}
+
+function formatMs(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value)
+    ? `${Math.round(value)} ms`
+    : "--";
+}
+
+function extractFirmwareDecision(event: EvidenceCarrier) {
+  const summaryDecision = event.evidenceSummary?.firmwareDecision;
+  if (summaryDecision) {
+    return summaryDecision;
+  }
+
+  const rawPayload = isRecord(event.rawPayloadJson) ? event.rawPayloadJson : null;
+  if (!rawPayload) {
+    return null;
+  }
+
+  const features = isRecord(rawPayload.features) ? rawPayload.features : null;
+  const featuresTimeDomain = isRecord(rawPayload.features_time_domain)
+    ? rawPayload.features_time_domain
+    : null;
+  const featuresFrequencyDomain = isRecord(rawPayload.features_frequency_domain)
+    ? rawPayload.features_frequency_domain
+    : null;
+
+  return {
+    decisionSource: readString(rawPayload, "decision_source") || readString(features, "decision_source"),
+    algorithmVersion:
+      readString(rawPayload, "algorithm_version") || readString(features, "algorithm_version"),
+    detected: readBoolean(rawPayload, "detected"),
+    candidate: readBoolean(rawPayload, "candidate"),
+    reason:
+      readString(rawPayload, "reason") ||
+      readString(rawPayload, "fall_reason") ||
+      readString(features, "reason"),
+    activityStateEstimate:
+      readString(rawPayload, "activity_state_estimate") ||
+      readString(features, "activity_state_estimate"),
+    confidence: readNumber(rawPayload, "confidence") ?? readNumber(features, "confidence"),
+    analysisWindowMs: readNumber(rawPayload, "analysis_window_ms"),
+    sampleCount:
+      readNumber(rawPayload, "sample_count") ?? readNumber(rawPayload, "samples_considered"),
+    peakAccelG:
+      readNumber(rawPayload, "peak_accel_g") ??
+      readNumber(features, "peak_accel_magnitude_g"),
+    peakGyroDps:
+      readNumber(rawPayload, "peak_gyro_dps") ??
+      readNumber(features, "peak_gyro_magnitude_dps"),
+    orientationDeltaDeg:
+      readNumber(rawPayload, "orientation_delta_deg") ??
+      readNumber(features, "orientation_delta_deg"),
+    immobilityConfirmed:
+      readBoolean(rawPayload, "immobility_confirmed") ??
+      readBoolean(features, "immobility_confirmed"),
+    immobilityDurationMs:
+      readNumber(rawPayload, "immobility_duration_ms") ??
+      readNumber(features, "immobility_duration_ms"),
+    featuresTimeDomain,
+    featuresFrequencyDomain,
+  };
+}
+
 function EvidenceSummary({ event }: { event: EvidenceCarrier }) {
+  const firmwareDecision = extractFirmwareDecision(event);
+  const featuresTimeDomain = isRecord(firmwareDecision?.featuresTimeDomain)
+    ? firmwareDecision.featuresTimeDomain
+    : null;
+  const featuresFrequencyDomain = isRecord(firmwareDecision?.featuresFrequencyDomain)
+    ? firmwareDecision.featuresFrequencyDomain
+    : null;
+  const frequencyAvailable = readBoolean(featuresFrequencyDomain, "available");
+
   return (
     <div className="mt-3 border-t border-surface-100 pt-3 text-xs text-surface-600">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="font-semibold text-surface-700">Evidencia do sensor</span>
+        <span className="font-semibold text-surface-700">Evidencia da deteccao</span>
         <Badge tone={evidenceTone(event.evidenceStatus) as never}>
           {humanizeEvidenceStatus(event.evidenceStatus)}
         </Badge>
@@ -93,6 +190,82 @@ function EvidenceSummary({ event }: { event: EvidenceCarrier }) {
           {formatEvidenceNumber(event.evidenceSummary?.maxGyroMagnitude)}
         </p>
       )}
+      {firmwareDecision ? (
+        <div className="mt-3 grid gap-2 rounded-2xl bg-white p-3 ring-1 ring-inset ring-surface-100 md:grid-cols-2">
+          <p>
+            Origem:{" "}
+            <span className="font-semibold text-surface-800">
+              {firmwareDecision.decisionSource || "--"}
+            </span>
+          </p>
+          <p>
+            Algoritmo:{" "}
+            <span className="font-mono text-[11px] font-semibold text-surface-800">
+              {firmwareDecision.algorithmVersion || "--"}
+            </span>
+          </p>
+          <p>
+            Confianca heuristica:{" "}
+            <span className="font-semibold text-surface-800">
+              {formatConfidence(firmwareDecision.confidence)}
+            </span>
+          </p>
+          <p>
+            Estado estimado:{" "}
+            <span className="font-semibold text-surface-800">
+              {humanizeDeviceBehaviorState(firmwareDecision.activityStateEstimate)}
+            </span>
+          </p>
+          <p>
+            Pico aceleração:{" "}
+            <span className="font-semibold text-surface-800">
+              {formatEvidenceNumber(firmwareDecision.peakAccelG)} g
+            </span>
+          </p>
+          <p>
+            Pico giroscopio:{" "}
+            <span className="font-semibold text-surface-800">
+              {formatEvidenceNumber(firmwareDecision.peakGyroDps)} deg/s
+            </span>
+          </p>
+          <p>
+            Imobilidade:{" "}
+            <span className="font-semibold text-surface-800">
+              {formatBooleanDiagnostic(firmwareDecision.immobilityConfirmed)}
+            </span>
+          </p>
+          <p>
+            Janela:{" "}
+            <span className="font-semibold text-surface-800">
+              {formatMs(firmwareDecision.analysisWindowMs)}
+            </span>
+          </p>
+          <p>
+            Amostras do detector:{" "}
+            <span className="font-semibold text-surface-800">
+              {firmwareDecision.sampleCount ?? "--"}
+            </span>
+          </p>
+          <p>
+            FFT:{" "}
+            <span className="font-semibold text-surface-800">
+              {frequencyAvailable ? "experimental disponivel" : "experimental desativada"}
+            </span>
+          </p>
+          {featuresTimeDomain ? (
+            <p className="md:col-span-2">
+              Features tempo: pico jerk{" "}
+              <span className="font-semibold text-surface-800">
+                {formatEvidenceNumber(readNumber(featuresTimeDomain, "peak_jerk"))}
+              </span>{" "}
+              - janela{" "}
+              <span className="font-semibold text-surface-800">
+                {formatMs(readNumber(featuresTimeDomain, "window_duration_ms"))}
+              </span>
+            </p>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -138,96 +311,11 @@ function expectedTopic(deviceIdentifier: string, channel: "status" | "telemetry"
 
 function classifyCurrentState(
   detail: DeviceDetailResponse,
-  latestTelemetry: DeviceDetailResponse["recentTelemetry"][number] | undefined,
+  _latestTelemetry: DeviceDetailResponse["recentTelemetry"][number] | undefined,
 ) {
-  const status = detail.device.status;
-  const telemetryAt = status.lastTelemetryAt || latestTelemetry?.createdAt || null;
-  const telemetryAgeMs = ageMs(telemetryAt);
-  const telemetryStale =
-    telemetryAgeMs == null || telemetryAgeMs > TELEMETRY_STALE_AFTER_MS;
-
-  if (status.online && status.sensorReady === false) {
-    return {
-      label: "Sensor sem leitura valida",
-      tone: "danger",
-      reason: "O device esta online, mas o firmware marcou sensor_ready=0.",
-    };
-  }
-
-  if (status.online && status.sensorValid === false) {
-    return {
-      label: "Sensor sem leitura valida",
-      tone: "warning",
-      reason: "O status MQTT chegou, mas a ultima amostra do MPU6050 nao esta valida.",
-    };
-  }
-
-  if (status.online && !latestTelemetry) {
-    return {
-      label: "Dispositivo online sem telemetry",
-      tone: "warning",
-      reason: "Ha status recente, mas ainda nao ha amostra valida em telemetry_logs.",
-    };
-  }
-
-  if (latestTelemetry && telemetryStale) {
-    return {
-      label: "Telemetria desatualizada",
-      tone: "warning",
-      reason: "A ultima amostra existe, mas esta fora da janela esperada para bancada.",
-    };
-  }
-
-  if (!latestTelemetry || detail.recentTelemetry.length < 4) {
-    return {
-      label: "Sem telemetria suficiente",
-      tone: "neutral",
-      reason: "A classificacao precisa de mais amostras recentes para ganhar estabilidade.",
-    };
-  }
-
-  if (detail.device.behavior.state === "queda_confirmada") {
-    return {
-      label: "Queda confirmada",
-      tone: "danger",
-      reason: detail.device.behavior.reason,
-    };
-  }
-
-  if (detail.device.behavior.state === "queda_suspeita") {
-    return {
-      label: "Possivel queda",
-      tone: "warning",
-      reason: detail.device.behavior.reason,
-    };
-  }
-
-  if (detail.device.behavior.state === "em_movimento") {
-    const accelDelta =
-      typeof latestTelemetry.accelMagnitude === "number"
-        ? Math.abs(latestTelemetry.accelMagnitude - 1)
-        : 0;
-    const gyroMagnitude = latestTelemetry.gyroMagnitude || 0;
-    const intense = accelDelta >= 0.45 || gyroMagnitude >= 80;
-
-    return {
-      label: intense ? "Movimento intenso" : "Movimento leve",
-      tone: "info",
-      reason: detail.device.behavior.reason,
-    };
-  }
-
-  if (["em_reposo", "deitado", "sentado"].includes(detail.device.behavior.state)) {
-    return {
-      label: "Repouso provavel",
-      tone: "success",
-      reason: detail.device.behavior.reason,
-    };
-  }
-
   return {
-    label: "Sem telemetria suficiente",
-    tone: "neutral",
+    label: humanizeDeviceBehaviorState(detail.device.behavior.state),
+    tone: deviceBehaviorTone(detail.device.behavior.state),
     reason: detail.device.behavior.reason,
   };
 }
@@ -358,6 +446,9 @@ export function DeviceDetailPage() {
 
   const latestTelemetry = detail.recentTelemetry.at(-1);
   const latestEvent = detail.recentEvents[0];
+  const latestFallEvent = detail.recentEvents.find(
+    (event) => event.eventType === "fall_detected",
+  );
   const currentState = classifyCurrentState(detail, latestTelemetry);
   const statusTopic = expectedTopic(detail.device.deviceIdentifier, "status");
   const telemetryTopic = expectedTopic(detail.device.deviceIdentifier, "telemetry");
@@ -369,6 +460,11 @@ export function DeviceDetailPage() {
     telemetryAge == null || telemetryAge > TELEMETRY_STALE_AFTER_MS;
   const onlineWithoutTelemetry = detail.device.status.online && !latestTelemetry;
   const onlineWithStaleTelemetry = detail.device.status.online && telemetryIsStale;
+  const telemetryFreshnessLabel = !latestTelemetry
+    ? "sem amostra real"
+    : telemetryIsStale
+      ? "desatualizada"
+      : "recente";
   const activeAlerts = detail.recentAlerts.filter((alert) =>
     ["open", "acknowledged"].includes(alert.status),
   );
@@ -632,9 +728,33 @@ export function DeviceDetailPage() {
               </p>
               <p className="mt-1 text-xs text-surface-600">
                 Confianca {humanizeDeviceBehaviorConfidence(detail.device.behavior.confidence)} -
-                heuristica experimental
+                heuristica experimental - {telemetryFreshnessLabel}
               </p>
               <p className="mt-2 text-xs text-surface-500">{currentState.reason}</p>
+              <div className="mt-3 grid gap-1 text-xs text-surface-500">
+                <span>
+                  Ultima telemetria usada:{" "}
+                  <strong className="text-surface-700">
+                    {lastTelemetryAt ? formatRelativeTime(lastTelemetryAt) : "sem amostra"}
+                  </strong>
+                </span>
+                <span>
+                  Ultima queda/evento:{" "}
+                  <strong className="text-surface-700">
+                    {latestFallEvent?.eventTime
+                      ? formatRelativeTime(latestFallEvent.eventTime)
+                      : lastEventAt
+                        ? formatRelativeTime(lastEventAt)
+                        : "sem evento"}
+                  </strong>
+                </span>
+                <span>
+                  Sensor valido:{" "}
+                  <strong className="text-surface-700">
+                    {formatBooleanDiagnostic(detail.device.status.sensorValid)}
+                  </strong>
+                </span>
+              </div>
             </div>
             <div className="rounded-[24px] bg-surface-50 p-4">
               <p className="text-xs font-bold uppercase tracking-[0.24em] text-surface-500">

@@ -39,6 +39,8 @@ O modelo atual deixou de ser um painel global único e passou a trabalhar com or
 - lock leve por device na ingestão MQTT para reduzir corrida entre status/eventos/telemetria simultâneos
 - alertas idempotentes por evento MQTT persistido
 - vínculo técnico entre queda detectada e janela de telemetria relacionada
+- evidência estruturada do firmware para `fall_detected`, com versão do algoritmo, janela, picos, imobilidade e features no domínio do tempo
+- base experimental para FFT/Fourier e calibração futura por classes de movimento, sem trocar a decisão principal atual
 - logs de ingestão MQTT com `correlationId`, escopo, duração e motivo de descarte
 - testes unitários e de integração leve para alertas, ingestão MQTT e realtime escopado
 - suite de stress dry-run para rajadas de telemetria, quedas, payloads ruins e concorrência
@@ -52,6 +54,7 @@ O modelo atual deixou de ser um painel global único e passou a trabalhar com or
 - diagnóstico de realtime/socket no frontend
 - separação entre saúde do socket do navegador e saúde operacional do dispositivo
 - status comportamental/postural heurístico experimental
+- estados explícitos para sensor inválido, telemetria desatualizada, movimento leve/intenso, queda, SOS manual e calibração pendente
 - suporte a buzzer e modo opcional de teste de movimento em bancada
 - scripts Windows para setup, banco, start, stop e smoke test
 
@@ -310,12 +313,22 @@ Estados atuais:
 
 - `pre_calibracao`
 - `desconhecido`
+- `sem_telemetria_suficiente`
+- `sensor_sem_leitura_valida`
+- `telemetria_desatualizada`
 - `em_reposo`
+- `repouso_provavel`
 - `deitado`
 - `sentado`
+- `sentado_deitado_provavel`
 - `em_movimento`
+- `movimento_leve`
+- `movimento_intenso`
 - `queda_suspeita`
 - `queda_confirmada`
+- `sos_manual`
+- `calibracao_pendente`
+- `em_calibracao`
 
 O frontend exibe esse status de forma discreta no dashboard, na lista de dispositivos e na página de detalhe do dispositivo. A interpretação deve ser tratada como apoio operacional experimental, não como avaliação médica.
 

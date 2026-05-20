@@ -141,6 +141,14 @@ test("fall_detected com telemetria recente vincula evidencia", async () => {
         timestamp: Math.floor(eventTime.getTime() / 1000),
         accel_magnitude: 3.9,
         immobility_confirmed: true,
+        decision_source: "firmware",
+        algorithm_version: "threshold_fsm_v2_time_features_v1",
+        confidence: 0.76,
+        features_time_domain: {
+          available: true,
+          sample_count: 64,
+          peak_jerk: 8.4,
+        },
       },
       correlationId: "trace_evidence",
     });
@@ -149,6 +157,12 @@ test("fall_detected com telemetria recente vincula evidencia", async () => {
     assert.equal(event.evidenceTelemetryId, 22);
     assert.equal(event.evidenceSampleCount, 2);
     assert.equal(event.severity, "critical");
+    assert.equal(event.evidenceSummary.firmwareDecision.decisionSource, "firmware");
+    assert.equal(
+      event.evidenceSummary.firmwareDecision.algorithmVersion,
+      "threshold_fsm_v2_time_features_v1",
+    );
+    assert.equal(event.evidenceSummary.firmwareDecision.featuresTimeDomain.sample_count, 64);
     assert.equal(harness.calls.evidenceInserts.length, 2);
   } finally {
     harness.restore();

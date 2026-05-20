@@ -14,6 +14,8 @@ function summarizePayload(payload) {
     device_id: payload.device_id,
     device_uid: payload.device_uid,
     event_type: payload.event_type,
+    decision_source: payload.decision_source,
+    algorithm_version: payload.algorithm_version,
     timestamp: payload.timestamp,
     ax: payload.ax,
     ay: payload.ay,

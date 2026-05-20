@@ -98,6 +98,8 @@ function buildTelemetry(options, index) {
 }
 
 function buildEvent(options) {
+  const fallDetected = options.eventType === "fall_detected";
+
   return {
     device_id: options.deviceId,
     device_uid: options.deviceUid,
@@ -106,6 +108,37 @@ function buildEvent(options) {
     immobility_confirmed: false,
     accel_magnitude: 2.8,
     gyro_magnitude: 180,
+    decision_source: fallDetected ? "firmware" : undefined,
+    algorithm_version: fallDetected ? "mqtt_publish_test_threshold_fsm_v2_time_features_v1" : undefined,
+    detected: fallDetected || undefined,
+    candidate: fallDetected || undefined,
+    reason: fallDetected ? "impact_orientation_immobility" : undefined,
+    activity_state_estimate: fallDetected ? "queda_suspeita" : undefined,
+    confidence: fallDetected ? 0.62 : undefined,
+    analysis_window_ms: fallDetected ? 2800 : undefined,
+    sample_count: fallDetected ? 56 : undefined,
+    peak_accel_g: fallDetected ? 2.8 : undefined,
+    peak_gyro_dps: fallDetected ? 180 : undefined,
+    orientation_delta_deg: fallDetected ? 52 : undefined,
+    features_time_domain: fallDetected
+      ? {
+          available: true,
+          sample_count: 56,
+          window_duration_ms: 2800,
+          peak_accel_magnitude: 2.8,
+          peak_gyro_magnitude: 180,
+          peak_jerk: 7.1,
+        }
+      : undefined,
+    features_frequency_domain: fallDetected
+      ? {
+          available: false,
+          experimental: true,
+          reason: "fft_experimental_disabled",
+          window_size: 64,
+          sample_interval_ms: 50,
+        }
+      : undefined,
     message: "Evento MQTT de teste local.",
     timestamp: nowSeconds(),
   };

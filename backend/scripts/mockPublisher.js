@@ -94,15 +94,51 @@ function publishTelemetry() {
 
 function publishAlert() {
   const fallDetected = Math.random() > 0.4;
+  const accelMagnitude = fallDetected ? randomBetween(2.8, 5.4, 2) : randomBetween(0.9, 1.4, 2);
+  const gyroMagnitude = fallDetected ? randomBetween(130, 260, 2) : randomBetween(12, 40, 2);
 
   publish("events", {
     device_uid: deviceUid,
     device_id: deviceId,
     event_type: fallDetected ? "fall_detected" : "sos_pressed",
     timestamp: nowUnix(),
-    accel_magnitude: fallDetected ? randomBetween(2.8, 5.4, 2) : randomBetween(0.9, 1.4, 2),
-    gyro_magnitude: fallDetected ? randomBetween(130, 260, 2) : randomBetween(12, 40, 2),
+    accel_magnitude: accelMagnitude,
+    gyro_magnitude: gyroMagnitude,
     immobility_confirmed: fallDetected,
+    decision_source: fallDetected ? "firmware" : undefined,
+    algorithm_version: fallDetected ? "mock_threshold_fsm_v2_time_features_v1" : undefined,
+    detected: fallDetected || undefined,
+    candidate: fallDetected || undefined,
+    reason: fallDetected ? "impact_orientation_immobility" : undefined,
+    activity_state_estimate: fallDetected ? "queda_confirmada" : undefined,
+    confidence: fallDetected ? 0.76 : undefined,
+    analysis_window_ms: fallDetected ? 3600 : undefined,
+    sample_count: fallDetected ? 72 : undefined,
+    peak_accel_g: fallDetected ? accelMagnitude : undefined,
+    peak_gyro_dps: fallDetected ? gyroMagnitude : undefined,
+    orientation_delta_deg: fallDetected ? randomBetween(48, 72, 1) : undefined,
+    features_time_domain: fallDetected
+      ? {
+          available: true,
+          sample_count: 64,
+          window_duration_ms: 3200,
+          std_ax: 0.18,
+          std_ay: 0.21,
+          std_az: 0.16,
+          peak_accel_magnitude: accelMagnitude,
+          peak_gyro_magnitude: gyroMagnitude,
+          peak_jerk: 8.4,
+        }
+      : undefined,
+    features_frequency_domain: fallDetected
+      ? {
+          available: false,
+          experimental: true,
+          reason: "fft_experimental_disabled",
+          window_size: 64,
+          sample_interval_ms: 50,
+        }
+      : undefined,
     battery_level: Math.max(48, Math.min(100, 92 - Math.floor(Math.random() * 10))),
     message: fallDetected
       ? "Queda simulada com possível imobilidade."

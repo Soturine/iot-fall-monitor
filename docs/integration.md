@@ -76,13 +76,28 @@ Exemplo de `fall_detected`:
   "accel_magnitude": 3.74,
   "gyro_magnitude": 182.5,
   "immobility_confirmed": true,
+  "decision_source": "firmware",
+  "algorithm_version": "threshold_fsm_v2_time_features_v1",
+  "reason": "impact_orientation_immobility",
+  "activity_state_estimate": "queda_confirmada",
+  "confidence": 0.76,
+  "features_time_domain": {
+    "available": true,
+    "sample_count": 64,
+    "window_duration_ms": 3200
+  },
+  "features_frequency_domain": {
+    "available": false,
+    "experimental": true,
+    "reason": "fft_experimental_disabled"
+  },
   "battery_level": 100
 }
 ```
 
 O campo `timestamp` deve ser Unix time em segundos quando o NTP ja sincronizou. Para `device_status.last_seen_at`, o backend usa a hora real de recebimento MQTT, porque a chegada de `status`/`telemetry` ja prova presenca recente do ESP32. Para `telemetry.created_at` e `events.event_time`, o timestamp do device so e usado quando e plausivel e esta proximo do recebimento; se o firmware estiver no fallback monotônico de boot (`millis()/1000`) ou com clock/NTP stale, o backend usa a hora de recebimento para evitar grafico antigo, evidencia quebrada e falso offline.
 
-Para `fall_detected`, o evento nao e mais tratado como alerta confiavel isolado. O backend procura telemetria do mesmo device entre `event_time - 10s` e `event_time + 3s`. Se encontrar amostras, grava `evidenceStatus` (`partial` ou `linked`), `evidenceTelemetryId`, contagem, janela e resumo tecnico. Se nao encontrar, grava o evento com `evidenceStatus=none`, loga warning e nao cria alerta automatico de queda. `sos_pressed` continua podendo criar alerta sem telemetria por ser acionamento manual.
+Para `fall_detected`, o firmware continua sendo a fonte da decisao local e do buzzer. O backend nao recalcula a queda para acionar alarme local; ele audita o evento, preserva `raw_payload_json`, copia a decisao/feature set para `evidence_summary_json` e procura telemetria do mesmo device entre `event_time - 10s` e `event_time + 3s`. Se encontrar amostras, grava `evidenceStatus` (`partial` ou `linked`), `evidenceTelemetryId`, contagem, janela e resumo tecnico. Se nao encontrar, grava o evento com `evidenceStatus=none`, loga warning e nao cria alerta automatico de queda. `sos_pressed` continua podendo criar alerta sem telemetria por ser acionamento manual.
 
 ### `status`
 
@@ -157,25 +172,36 @@ Estados implementados nesta versao:
 
 - `pre_calibracao`
 - `desconhecido`
+- `sem_telemetria_suficiente`
+- `sensor_sem_leitura_valida`
+- `telemetria_desatualizada`
 - `em_reposo`
+- `repouso_provavel`
 - `deitado`
 - `sentado`
+- `sentado_deitado_provavel`
 - `em_movimento`
+- `movimento_leve`
+- `movimento_intenso`
 - `queda_suspeita`
 - `queda_confirmada`
+- `sos_manual`
+- `calibracao_pendente`
+- `em_calibracao`
 
 Estados reservados para evolucao futura:
 
 - `andando`
 - `correndo`
 - `caido`
+- `queda_com_imobilidade`
 
 Cada snapshot de device agora pode carregar um bloco derivado como:
 
 ```json
 {
   "behavior": {
-    "state": "em_reposo",
+    "state": "repouso_provavel",
     "confidence": "medio",
     "reason": "Telemetria recente sugere repouso estavel, ainda sem postura especifica forte.",
     "experimental": true,
@@ -191,14 +217,16 @@ Cada snapshot de device agora pode carregar um bloco derivado como:
 
 Heuristica atual, em alto nivel:
 
-- sem telemetria suficiente ou conexao muito recente: `pre_calibracao`
-- telemetria stale ou insuficiente: `desconhecido`
-- baixa movimentacao: `em_reposo`
-- baixa movimentacao + orientacao horizontal estavel: `deitado`
-- baixa movimentacao + orientacao inclinada estavel: `sentado`
-- variacao acima do repouso: `em_movimento`
+- sem telemetria suficiente: `sem_telemetria_suficiente`
+- status online com sensor invalido: `sensor_sem_leitura_valida`
+- telemetria stale: `telemetria_desatualizada`
+- janela inicial curta: `calibracao_pendente`
+- baixa movimentacao: `repouso_provavel`
+- baixa movimentacao + orientacao horizontal/inclinada estavel: `sentado_deitado_provavel`
+- variacao acima do repouso: `movimento_leve` ou `movimento_intenso`
 - `fall_detected` recente: `queda_suspeita` ou `queda_confirmada`
 - `fall_detected` recente sem evidencia de telemetria: no maximo `queda_suspeita`
+- `sos_pressed` recente: `sos_manual`
 
 O frontend usa esse bloco para mostrar o estado atual no dashboard, na lista de devices e na pagina de detalhe, sempre como heuristica experimental.
 

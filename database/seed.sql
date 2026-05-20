@@ -209,7 +209,32 @@ VALUES (
     'maxGyroMagnitude', 182.5,
     'immobilityConfirmed', TRUE,
     'firstSampleAt', UTC_TIMESTAMP(),
-    'lastSampleAt', UTC_TIMESTAMP()
+    'lastSampleAt', UTC_TIMESTAMP(),
+    'decisionSource', 'firmware',
+    'algorithmVersion', 'seed_threshold_fsm_v2_time_features_v1',
+    'confidence', 0.76,
+    'firmwareDecision', JSON_OBJECT(
+      'decisionSource', 'firmware',
+      'algorithmVersion', 'seed_threshold_fsm_v2_time_features_v1',
+      'reason', 'impact_orientation_immobility',
+      'activityStateEstimate', 'queda_confirmada',
+      'confidence', 0.76,
+      'sampleCount', 72,
+      'peakAccelG', 3.74,
+      'peakGyroDps', 182.5,
+      'immobilityConfirmed', TRUE,
+      'featuresTimeDomain', JSON_OBJECT(
+        'available', TRUE,
+        'sample_count', 64,
+        'window_duration_ms', 3200,
+        'peak_jerk', 8.4
+      ),
+      'featuresFrequencyDomain', JSON_OBJECT(
+        'available', FALSE,
+        'experimental', TRUE,
+        'reason', 'fft_experimental_disabled'
+      )
+    )
   ),
   UTC_TIMESTAMP(),
   JSON_OBJECT(
@@ -220,6 +245,17 @@ VALUES (
     'accel_magnitude', 3.74,
     'gyro_magnitude', 182.5,
     'immobility_confirmed', TRUE,
+    'decision_source', 'firmware',
+    'algorithm_version', 'seed_threshold_fsm_v2_time_features_v1',
+    'detected', TRUE,
+    'candidate', TRUE,
+    'reason', 'impact_orientation_immobility',
+    'activity_state_estimate', 'queda_confirmada',
+    'confidence', 0.76,
+    'analysis_window_ms', 3600,
+    'sample_count', 72,
+    'peak_accel_g', 3.74,
+    'peak_gyro_dps', 182.5,
     'battery_level', 86
   )
 );

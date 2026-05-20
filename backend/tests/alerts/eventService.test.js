@@ -2,6 +2,7 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 
 const {
+  buildEvidenceSummaryForPayload,
   buildTelemetryEvidence,
   deriveSeverity,
   shouldCreateAlert,
@@ -94,6 +95,54 @@ test("buildTelemetryEvidence marca queda sem amostras como none", () => {
   assert.equal(evidence.status, "none");
   assert.equal(evidence.telemetryId, null);
   assert.equal(evidence.sampleCount, 0);
+});
+
+test("buildEvidenceSummaryForPayload preserva decisao e features do firmware", () => {
+  const eventTime = new Date("2026-05-13T14:38:10.000Z");
+  const evidence = buildTelemetryEvidence(
+    [
+      {
+        id: 2,
+        accel_magnitude: 3.8,
+        gyro_magnitude: 180,
+        created_at: eventTime,
+      },
+    ],
+    eventTime,
+    true,
+  );
+  const summary = buildEvidenceSummaryForPayload(evidence, {
+    event_type: "fall_detected",
+    decision_source: "firmware",
+    algorithm_version: "threshold_fsm_v2_time_features_v1",
+    detected: true,
+    candidate: true,
+    reason: "impact_orientation_immobility",
+    activity_state_estimate: "queda_confirmada",
+    confidence: 0.76,
+    peak_accel_g: 3.8,
+    peak_gyro_dps: 180,
+    features_time_domain: {
+      available: true,
+      sample_count: 64,
+      peak_jerk: 8.2,
+    },
+    features_frequency_domain: {
+      available: false,
+      experimental: true,
+      reason: "fft_experimental_disabled",
+    },
+  });
+
+  assert.equal(summary.maxAccelMagnitude, 3.8);
+  assert.equal(summary.firmwareDecision.decisionSource, "firmware");
+  assert.equal(
+    summary.firmwareDecision.algorithmVersion,
+    "threshold_fsm_v2_time_features_v1",
+  );
+  assert.equal(summary.firmwareDecision.featuresTimeDomain.sample_count, 64);
+  assert.equal(summary.firmwareDecision.featuresFrequencyDomain.available, false);
+  assert.equal(summary.linkedTelemetryWindow.status, "partial");
 });
 
 test("validateTelemetryPayload exige eixos reais e sensor valido", () => {

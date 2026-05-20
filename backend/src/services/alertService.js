@@ -8,6 +8,8 @@ const { parseDateBoundary } = require("../utils/time");
 const { createAuditLog } = require("./auditService");
 const { assertRole, buildScopeFilter, canAccessScope } = require("./scopeService");
 
+const RECENT_FALL_ALERT_DEDUP_WINDOW_SECONDS = 20;
+
 function toIso(value) {
   if (!value) {
     return null;
@@ -24,6 +26,38 @@ function toNullableNumber(value) {
 
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+async function findRecentOpenFallAlert(event, executor = null) {
+  if (!event?.device?.id || event.eventType !== "fall_detected" || !event.eventTime) {
+    return null;
+  }
+
+  const eventTime = event.eventTime instanceof Date
+    ? event.eventTime
+    : new Date(event.eventTime);
+
+  if (Number.isNaN(eventTime.getTime())) {
+    return null;
+  }
+
+  const row = await one(
+    executor,
+    `
+      SELECT a.id
+      FROM alerts a
+      INNER JOIN events e ON e.id = a.event_id
+      WHERE a.device_id = ?
+        AND e.event_type = 'fall_detected'
+        AND a.status IN ('open', 'acknowledged')
+        AND ABS(TIMESTAMPDIFF(SECOND, e.event_time, ?)) <= ?
+      ORDER BY e.event_time DESC, a.id DESC
+      LIMIT 1
+    `,
+    [event.device.id, eventTime, RECENT_FALL_ALERT_DEDUP_WINDOW_SECONDS],
+  );
+
+  return row?.id ? Number(row.id) : null;
 }
 
 function mapAlertRow(row) {
@@ -144,6 +178,25 @@ async function fetchAlertRow(alertId, executor = null) {
 
 async function createAlertForEvent(event, executor = null, options = {}) {
   const startedAt = process.hrtime.bigint();
+  if (options.dedupeRecentFallAlert) {
+    const existingAlertId = await findRecentOpenFallAlert(event, executor);
+
+    if (existingAlertId) {
+      const alert = await fetchAlertRow(existingAlertId, executor);
+      logger.info("Alerta recente de queda reaproveitado.", {
+        correlationId: options.correlationId || null,
+        eventId: event.id,
+        alertId: alert.id,
+        status: alert.status,
+        organizationId: alert.organizationId,
+        patientId: alert.patientId,
+        dedupWindowSeconds: RECENT_FALL_ALERT_DEDUP_WINDOW_SECONDS,
+        durationMs: elapsedMsSince(startedAt),
+      });
+      return alert;
+    }
+  }
+
   const result = await execute(
     executor,
     `

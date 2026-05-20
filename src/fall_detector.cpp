@@ -67,15 +67,27 @@ FallAlert FallDetector::update(const SensorReading& reading) {
 
       if (immobileAccumulatedMs_ >= AppConfig::REQUIRED_IMMOBILITY_MS) {
         alert.detected = true;
+        alert.candidate = true;
         alert.immobilityConfirmed = true;
+        alert.decisionSource = "firmware";
+        alert.algorithmVersion = AppConfig::FALL_DECISION_ENGINE_VERSION;
+        alert.activityStateEstimate = "queda_confirmada";
+        alert.confidence = 0.76f;
         alert.accelMagnitudeG = peakAccelMagnitudeG_;
         alert.gyroMagnitudeDegPerSec = peakGyroMagnitudeDegPerSec_;
+        alert.peakAccelG = peakAccelMagnitudeG_;
+        alert.peakGyroDps = peakGyroMagnitudeDegPerSec_;
+        alert.pitchDeg = reading.pitchDeg;
+        alert.rollDeg = reading.rollDeg;
         alert.orientationDeltaDeg = peakOrientationDeltaDeg_;
         alert.immobilityDurationMs = immobileAccumulatedMs_;
         alert.analysisWindowMs =
             candidateStartedAtMs_ == 0U || nowMs < candidateStartedAtMs_
                 ? 0U
                 : nowMs - candidateStartedAtMs_;
+        alert.windowStartedAtMs = candidateStartedAtMs_;
+        alert.windowEndedAtMs = nowMs;
+        alert.sampleCount = samplesConsidered_;
         alert.samplesConsidered = samplesConsidered_;
         alert.timestampMs = nowMs;
         reset();

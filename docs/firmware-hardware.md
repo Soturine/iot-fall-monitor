@@ -44,6 +44,7 @@ Na pratica:
 - `EVENT_BUFFER_PERSISTENCE_ENABLED`
 - `PERSISTED_EVENT_BUFFER_CAPACITY`
 - limites do portal, timeouts de fallback, pinos e thresholds do detector
+- flags experimentais de features/FFT: `FALL_FEATURE_EXTRACTOR_ENABLED`, `FALL_FFT_EXPERIMENTAL_ENABLED`, `FALL_FFT_WINDOW_SIZE`, `FALL_FFT_SAMPLE_INTERVAL_MS`, `FALL_DECISION_ENGINE_VERSION`
 
 ## Estado atual do firmware
 
@@ -69,6 +70,9 @@ Defaults atuais relevantes:
 - `SOS_BUTTON_ENABLED = false`
 - `STATUS_LED_ENABLED = false`
 - `MOTION_TEST_MODE_ENABLED = false`
+- `FALL_FEATURE_EXTRACTOR_ENABLED = true`
+- `FALL_FFT_EXPERIMENTAL_ENABLED = false`
+- `FALL_FFT_WINDOW_SIZE = 64`
 
 Comandos uteis:
 
@@ -585,6 +589,28 @@ Todos os payloads sao `JSON` em `snake_case`.
   "accel_magnitude": 3.74,
   "gyro_magnitude": 182.5,
   "immobility_confirmed": true,
+  "decision_source": "firmware",
+  "algorithm_version": "threshold_fsm_v2_time_features_v1",
+  "detected": true,
+  "candidate": true,
+  "reason": "impact_orientation_immobility",
+  "activity_state_estimate": "queda_confirmada",
+  "confidence": 0.76,
+  "analysis_window_ms": 3600,
+  "sample_count": 72,
+  "peak_accel_g": 3.74,
+  "peak_gyro_dps": 182.5,
+  "features_time_domain": {
+    "available": true,
+    "sample_count": 64,
+    "window_duration_ms": 3200,
+    "peak_jerk": 8.4
+  },
+  "features_frequency_domain": {
+    "available": false,
+    "experimental": true,
+    "reason": "fft_experimental_disabled"
+  },
   "battery_level": 100
 }
 ```
@@ -632,6 +658,24 @@ Observacoes relevantes:
 - `telemetry` nao entra no `EventBuffer`
 - o modo de teste `MPU6050 + buzzer` nao altera payloads
 - os topicos continuam `queda/devices/{deviceId}/{canal}`
+- `features_time_domain` e diagnostico/calibracao; nao substitui a FSM atual
+- `features_frequency_domain` permanece desativado ate validacao de FFT/Fourier com dados reais
+
+## Features experimentais de queda
+
+O firmware agora mantem uma janela circular leve de amostras para anexar evidencia ao evento de queda. Com `SENSOR_SAMPLE_INTERVAL_MS = 50`, a taxa esperada e de cerca de `20 Hz`; com `FALL_FFT_WINDOW_SIZE = 64`, a janela cobre aproximadamente `3,2 s`.
+
+O que entra no payload quando a queda e confirmada:
+
+- origem da decisao: `decision_source=firmware`
+- versao do algoritmo: `FALL_DECISION_ENGINE_VERSION`
+- janela e quantidade de amostras consideradas
+- picos de aceleracao e giroscopio
+- imobilidade, orientacao e confiança heuristica
+- medias, desvios, energia por eixo e jerk aproximado no dominio do tempo
+- estrutura de FFT/Fourier com `available=false`, pronta para etapa futura
+
+O buzzer continua vinculado somente a `fall_detected` confirmado localmente. A nova camada de features nao gera alarme sozinha.
 
 ## Parametros atuais de calibracao do `fall_detector`
 
@@ -705,6 +749,7 @@ constexpr unsigned long REQUIRED_IMMOBILITY_MS = 1800;
 | `fall_detector` | `include/fall_detector.h`, `src/fall_detector.cpp` | maquina de estados da queda |
 | `mqtt_client` | `include/mqtt_client.h`, `src/mqtt_client.cpp` | publicacao MQTT |
 | `event_buffer` | `include/event_buffer.h`, `src/event_buffer.cpp` | reenvio local de `events` e `status` |
+| `fall_feature_extractor` | `include/fall_feature_extractor.h`, `src/fall_feature_extractor.cpp` | features experimentais em janela circular para evidencia/calibracao |
 | `buzzer_led` | `include/buzzer_led.h`, `src/buzzer_led.cpp` | sinalizacao sonora/visual e pulso do motion test |
 | `main` | `src/main.cpp` | integracao do loop principal |
 

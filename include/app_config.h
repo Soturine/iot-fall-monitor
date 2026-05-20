@@ -145,7 +145,7 @@ constexpr float SENSOR_ACCEL_CALIBRATION_MAX_GYRO_DPS = 20.0f;
 constexpr unsigned long STATUS_REPORT_INTERVAL_MS = 60000;
 constexpr unsigned long TELEMETRY_REPORT_INTERVAL_MS = 2000;
 constexpr unsigned long MQTT_RECONNECT_INTERVAL_MS = 5000;
-constexpr uint16_t MQTT_PACKET_BUFFER_SIZE = 1024;
+constexpr uint16_t MQTT_PACKET_BUFFER_SIZE = 3072;
 constexpr unsigned long SOS_HOLD_TIME_MS = 1500;
 
 // Buffer local para eventos criticos.
@@ -169,5 +169,13 @@ constexpr float IMMOBILE_GYRO_THRESHOLD_DPS = 15.0f;
 constexpr unsigned long ORIENTATION_WINDOW_MS = 1500;
 constexpr unsigned long IMMOBILITY_WINDOW_MS = 4000;
 constexpr unsigned long REQUIRED_IMMOBILITY_MS = 2000;
+
+// Camada experimental de features. A decisao principal continua na FSM atual.
+constexpr bool FALL_FEATURE_EXTRACTOR_ENABLED = true;
+constexpr bool FALL_FFT_EXPERIMENTAL_ENABLED = false;
+constexpr size_t FALL_FFT_WINDOW_SIZE = 64;
+constexpr size_t FALL_FEATURE_WINDOW_SIZE = FALL_FFT_WINDOW_SIZE;
+constexpr unsigned long FALL_FFT_SAMPLE_INTERVAL_MS = SENSOR_SAMPLE_INTERVAL_MS;
+constexpr char FALL_DECISION_ENGINE_VERSION[] = "threshold_fsm_v2_time_features_v1";
 
 }  // namespace AppConfig

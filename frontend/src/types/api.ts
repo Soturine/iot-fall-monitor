@@ -63,15 +63,26 @@ export interface DeviceStatus {
 export type DeviceBehaviorState =
   | "pre_calibracao"
   | "desconhecido"
+  | "sem_telemetria_suficiente"
+  | "sensor_sem_leitura_valida"
+  | "telemetria_desatualizada"
   | "em_reposo"
+  | "repouso_provavel"
   | "deitado"
   | "sentado"
+  | "sentado_deitado_provavel"
   | "em_movimento"
+  | "movimento_leve"
+  | "movimento_intenso"
   | "queda_suspeita"
   | "queda_confirmada"
+  | "sos_manual"
+  | "calibracao_pendente"
+  | "em_calibracao"
   | "andando"
   | "correndo"
-  | "caido";
+  | "caido"
+  | "queda_com_imobilidade";
 
 export type DeviceBehaviorConfidence = "baixo" | "medio" | "alto";
 
@@ -167,6 +178,47 @@ export interface EvidenceSummary {
   immobilityConfirmed: boolean;
   firstSampleAt: string | null;
   lastSampleAt: string | null;
+  decisionSource?: string | null;
+  algorithmVersion?: string | null;
+  confidence?: number | null;
+  reason?: string | null;
+  activityStateEstimate?: string | null;
+  firmwareDecision?: {
+    decisionSource?: string | null;
+    algorithmVersion?: string | null;
+    detected?: boolean | null;
+    candidate?: boolean | null;
+    reason?: string | null;
+    activityStateEstimate?: string | null;
+    confidence?: number | null;
+    windowStartedAtMs?: number | null;
+    windowEndedAtMs?: number | null;
+    analysisWindowMs?: number | null;
+    sampleCount?: number | null;
+    peakAccelG?: number | null;
+    peakGyroDps?: number | null;
+    accelMagnitudeG?: number | null;
+    gyroMagnitudeDps?: number | null;
+    pitchDeg?: number | null;
+    rollDeg?: number | null;
+    orientationDeltaDeg?: number | null;
+    immobilityConfirmed?: boolean | null;
+    immobilityDurationMs?: number | null;
+    featuresTimeDomain?: Record<string, unknown> | null;
+    featuresFrequencyDomain?: Record<string, unknown> | null;
+    linkedTelemetryWindow?: Record<string, unknown> | null;
+  } | null;
+  linkedTelemetryWindow?: {
+    status?: string | null;
+    telemetryId?: number | null;
+    sampleCount?: number | null;
+    windowSeconds?: number | null;
+    links?: Array<{
+      telemetryLogId?: number | null;
+      relativeMs?: number | null;
+      role?: string | null;
+    }>;
+  } | null;
 }
 
 export interface EventRecord {

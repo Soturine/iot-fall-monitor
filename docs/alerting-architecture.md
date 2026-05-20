@@ -106,7 +106,18 @@ Para queda, essas amostras tambem viram evidencia tecnica consultavel quando o e
   "gyro_magnitude": 182.5,
   "immobility_confirmed": true,
   "decision_source": "firmware",
+  "algorithm_version": "threshold_fsm_v2_time_features_v1",
+  "detected": true,
+  "candidate": true,
+  "reason": "impact_orientation_immobility",
+  "activity_state_estimate": "queda_confirmada",
+  "confidence": 0.76,
   "fall_reason": "impact_orientation_immobility",
+  "window_started_at_ms": 123456,
+  "window_ended_at_ms": 127056,
+  "sample_count": 72,
+  "peak_accel_g": 3.74,
+  "peak_gyro_dps": 182.5,
   "features": {
     "peak_accel_magnitude_g": 3.74,
     "peak_gyro_magnitude_dps": 182.5,
@@ -115,6 +126,25 @@ Para queda, essas amostras tambem viram evidencia tecnica consultavel quando o e
     "immobility_duration_ms": 2100,
     "analysis_window_ms": 3600,
     "samples_considered": 72
+  },
+  "features_time_domain": {
+    "available": true,
+    "sample_count": 64,
+    "window_duration_ms": 3200,
+    "peak_accel_magnitude": 3.74,
+    "peak_gyro_magnitude": 182.5,
+    "peak_jerk": 8.4
+  },
+  "features_frequency_domain": {
+    "available": false,
+    "experimental": true,
+    "reason": "fft_experimental_disabled",
+    "window_size": 64,
+    "sample_interval_ms": 50
+  },
+  "linked_telemetry_window": {
+    "available": false,
+    "reason": "backend_links_persisted_telemetry"
   },
   "battery_level": 86
 }
@@ -211,7 +241,15 @@ O evento recebe:
 - `evidenceWindowSeconds`: intervalo entre primeira e ultima amostra vinculada
 - `evidenceSummary`: pico de aceleracao, pico de giro, imobilidade confirmada, primeira e ultima amostra
 
-O payload bruto do firmware tambem fica preservado em `raw_payload_json`, incluindo `decision_source`, `fall_reason`, `features`, thresholds e demais campos enviados. O `evidenceSummary` do backend continua sendo o resumo das amostras realmente persistidas em `telemetry_logs`, evitando duplicar a decisao do firmware.
+O payload bruto do firmware tambem fica preservado em `raw_payload_json`, incluindo `decision_source`, `algorithm_version`, `fall_reason`, `features`, `features_time_domain`, `features_frequency_domain`, thresholds e demais campos enviados.
+
+O `evidenceSummary` do backend continua sendo o resumo das amostras realmente persistidas em `telemetry_logs`, mas agora tambem incorpora um bloco `firmwareDecision` com a decisao local e as features enviadas. Isso evita duplicar a decisao: o firmware decide o alarme local/buzzer, enquanto o backend audita a decisao e relaciona as amostras persistidas.
+
+Responsabilidades atuais:
+
+- firmware: decide queda confirmada em tempo real e aciona buzzer local somente nesse caso
+- backend: registra evento, preserva payload bruto, relaciona evidencia de telemetria, cria alerta interno quando a regra permitir e evita duplicata curta de alerta aberto/em atendimento para a mesma queda
+- frontend: exibe estado, evidencia, alertas e diagnostico, sem decidir queda real
 
 A tabela `event_telemetry_evidence` guarda as amostras relacionadas com `relative_ms` e `role` (`nearest`, `peak`, `before_peak`, `after_peak`). Isso mantem compatibilidade com eventos antigos: se nao houver evidencia, os campos ficam nulos/default e a API devolve `evidenceStatus=none`.
 
@@ -225,7 +263,9 @@ VALUES (...)
 ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)
 ```
 
-O indice unico `alerts.event_id` impede alerta duplicado para o mesmo evento persistido. Duplicatas MQTT sem identificador externo ainda podem virar eventos distintos; hoje nao existe um `event_uid` no contrato do firmware.
+O indice unico `alerts.event_id` impede alerta duplicado para o mesmo evento persistido. Alem disso, na ingestao MQTT, `createAlertForEvent` pode reaproveitar um alerta de queda aberto/em atendimento para o mesmo device em uma janela curta de `20s`, reduzindo duplicidade quando o mesmo movimento gera pacotes proximos.
+
+Duplicatas MQTT sem identificador externo ainda podem virar eventos distintos em `events`; hoje nao existe um `event_uid` no contrato do firmware. A deduplicacao curta age apenas sobre a fila de alertas, nao apaga os eventos auditaveis.
 
 Para `fall_detected`, a criacao de alerta agora acontece somente depois de `recordEventFromMqtt` preencher a evidencia. Eventos sem evidencia permanecem auditaveis em `events`, mas nao entram automaticamente na fila critica.
 

@@ -104,15 +104,25 @@ export function deviceBehaviorTone(state?: string | null) {
     case "queda_confirmada":
       return "danger";
     case "queda_suspeita":
+    case "sensor_sem_leitura_valida":
+    case "telemetria_desatualizada":
+    case "sos_manual":
       return "warning";
     case "em_movimento":
+    case "movimento_leve":
+    case "movimento_intenso":
       return "info";
     case "em_reposo":
+    case "repouso_provavel":
       return "success";
     case "deitado":
     case "sentado":
+    case "sentado_deitado_provavel":
       return "info";
     case "pre_calibracao":
+    case "calibracao_pendente":
+    case "em_calibracao":
+    case "sem_telemetria_suficiente":
     case "desconhecido":
       return "neutral";
     default:
@@ -126,24 +136,46 @@ export function humanizeDeviceBehaviorState(state?: string | null) {
       return "Pre-calibracao";
     case "desconhecido":
       return "Desconhecido";
+    case "sem_telemetria_suficiente":
+      return "Sem telemetria suficiente";
+    case "sensor_sem_leitura_valida":
+      return "Sensor sem leitura valida";
+    case "telemetria_desatualizada":
+      return "Telemetria desatualizada";
     case "em_reposo":
       return "Em repouso";
+    case "repouso_provavel":
+      return "Repouso provavel";
     case "deitado":
       return "Deitado";
     case "sentado":
       return "Sentado";
+    case "sentado_deitado_provavel":
+      return "Sentado/deitado provavel";
     case "em_movimento":
       return "Em movimento";
+    case "movimento_leve":
+      return "Movimento leve";
+    case "movimento_intenso":
+      return "Movimento intenso";
     case "queda_suspeita":
       return "Queda suspeita";
     case "queda_confirmada":
       return "Queda confirmada";
+    case "sos_manual":
+      return "SOS manual";
+    case "calibracao_pendente":
+      return "Calibracao pendente";
+    case "em_calibracao":
+      return "Em calibracao";
     case "andando":
       return "Andando";
     case "correndo":
       return "Correndo";
     case "caido":
       return "Caido";
+    case "queda_com_imobilidade":
+      return "Queda com imobilidade";
     default:
       return "Indefinido";
   }

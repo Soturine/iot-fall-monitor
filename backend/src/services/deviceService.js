@@ -281,7 +281,7 @@ async function fetchTelemetryWindowsByDeviceIds(
   return groupRowsByDeviceId(rows, mapTelemetryRow);
 }
 
-async function fetchRecentFallEventsByDeviceIds(deviceIds, executor = null) {
+async function fetchRecentBehaviorEventsByDeviceIds(deviceIds, executor = null) {
   if (!deviceIds.length) {
     return new Map();
   }
@@ -307,7 +307,7 @@ async function fetchRecentFallEventsByDeviceIds(deviceIds, executor = null) {
           ) AS event_rank
         FROM events e
         WHERE e.device_id IN (${placeholders})
-          AND e.event_type = 'fall_detected'
+          AND e.event_type IN ('fall_detected', 'sos_pressed', 'calibration_started', 'calibration_sample_started')
           AND e.event_time >= UTC_TIMESTAMP() - INTERVAL 10 MINUTE
       ) ranked
       WHERE ranked.event_rank = 1
@@ -342,8 +342,8 @@ async function fetchTelemetryWindowByDeviceId(deviceId, sampleLimit = 6, executo
   return rows.map(mapTelemetryRow);
 }
 
-async function fetchRecentFallEventByDeviceId(deviceId, executor = null) {
-  const row = await one(
+async function fetchRecentBehaviorEventsByDeviceId(deviceId, executor = null) {
+  const rows = await execute(
     executor,
     `
       SELECT
@@ -357,29 +357,23 @@ async function fetchRecentFallEventByDeviceId(deviceId, executor = null) {
         e.created_at
       FROM events e
       WHERE e.device_id = ?
-        AND e.event_type = 'fall_detected'
+        AND e.event_type IN ('fall_detected', 'sos_pressed', 'calibration_started', 'calibration_sample_started')
         AND e.event_time >= UTC_TIMESTAMP() - INTERVAL 10 MINUTE
       ORDER BY e.event_time DESC, e.id DESC
-      LIMIT 1
+      LIMIT 4
     `,
     [deviceId],
   );
 
-  if (!row) {
-    return [];
-  }
-
-  return [
-    {
-      eventType: row.event_type,
-      severity: row.severity,
-      immobility: toBoolean(row.immobility),
-      evidenceStatus: row.evidence_status || "none",
-      evidenceSampleCount: row.evidence_sample_count == null ? 0 : Number(row.evidence_sample_count),
-      eventTime: toIso(row.event_time),
-      createdAt: toIso(row.created_at),
-    },
-  ];
+  return rows.map((row) => ({
+    eventType: row.event_type,
+    severity: row.severity,
+    immobility: toBoolean(row.immobility),
+    evidenceStatus: row.evidence_status || "none",
+    evidenceSampleCount: row.evidence_sample_count == null ? 0 : Number(row.evidence_sample_count),
+    eventTime: toIso(row.event_time),
+    createdAt: toIso(row.created_at),
+  }));
 }
 
 async function attachBehaviorToDevices(devices, executor = null) {
@@ -388,9 +382,9 @@ async function attachBehaviorToDevices(devices, executor = null) {
   }
 
   const deviceIds = devices.map((device) => device.id);
-  const [telemetryWindows, recentFallEvents] = await Promise.all([
-    fetchTelemetryWindowsByDeviceIds(deviceIds, 6, executor),
-    fetchRecentFallEventsByDeviceIds(deviceIds, executor),
+  const [telemetryWindows, recentBehaviorEvents] = await Promise.all([
+    fetchTelemetryWindowsByDeviceIds(deviceIds, 12, executor),
+    fetchRecentBehaviorEventsByDeviceIds(deviceIds, executor),
   ]);
 
   return devices.map((device) => ({
@@ -398,7 +392,7 @@ async function attachBehaviorToDevices(devices, executor = null) {
     behavior: computeDeviceBehavior({
       status: device.status,
       telemetrySamples: telemetryWindows.get(device.id) || [],
-      recentEvents: recentFallEvents.get(device.id) || [],
+      recentEvents: recentBehaviorEvents.get(device.id) || [],
     }),
   }));
 }
@@ -561,8 +555,8 @@ async function getDeviceIdentitySnapshot(deviceId, executor = null) {
 }
 
 async function getDeviceBehaviorSnapshot(deviceId, status, executor = null) {
-  const telemetrySamples = await fetchTelemetryWindowByDeviceId(deviceId, 6, executor);
-  const recentEvents = await fetchRecentFallEventByDeviceId(deviceId, executor);
+  const telemetrySamples = await fetchTelemetryWindowByDeviceId(deviceId, 12, executor);
+  const recentEvents = await fetchRecentBehaviorEventsByDeviceId(deviceId, executor);
 
   return computeDeviceBehavior({
     status,

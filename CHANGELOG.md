@@ -5,10 +5,15 @@
 - firmware passa a publicar `telemetry` periodica somente quando ha amostra valida e fresca do MPU6050; status continua carregando diagnostico do sensor
 - backend passa a rejeitar payloads `telemetry` sem eixos reais (`ax`, `ay`, `az`, `gx`, `gy`, `gz`) ou com `sensor_valid=false`, sem criar `telemetry_logs` invalidos
 - detalhe do dispositivo passa a mostrar diagnostico de telemetria, topicos esperados/observados, saude do sensor e alerta de device online sem telemetria recente
+- `fall_detected` passa a carregar decisao estruturada do firmware, features no dominio do tempo e placeholder de FFT experimental, mantendo a FSM atual como decisao principal
+- `deviceBehaviorService` passa a centralizar estados experimentais mais explicitos, como `sensor_sem_leitura_valida`, `telemetria_desatualizada`, `movimento_leve`, `movimento_intenso`, `sos_manual` e `calibracao_pendente`
+- o frontend de detalhe passa a exibir o estado atual vindo do backend e evidencias estruturadas da deteccao, sem assumir decisao clinica na tela
 
 ### Adicionado
 - migracao idempotente `npm run db:migrate:sensor-diagnostics --prefix backend` para colunas de saude do sensor em `device_status`
 - payload `fall_detected` do firmware agora inclui features estruturadas da decisao local, preservadas em `raw_payload_json`
+- camada firmware `FallFeatureExtractor` para janela circular de amostras e features no dominio do tempo, com interface de FFT ainda desativada por flag
+- proposta tecnica expandida para calibracao futura por SOS, sessoes, amostras, feature sets e perfis por paciente/dispositivo
 
 ## [v0.8.22] - 2026-05-14
 ### Corrigido

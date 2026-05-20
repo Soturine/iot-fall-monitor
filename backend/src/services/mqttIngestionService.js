@@ -341,7 +341,10 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
       });
 
       if (shouldCreateAlertForEvent(event)) {
-        const alert = await createAlertForEvent(event, connection, { correlationId });
+        const alert = await createAlertForEvent(event, connection, {
+          correlationId,
+          dedupeRecentFallAlert: true,
+        });
 
         return {
           channel: "events",
