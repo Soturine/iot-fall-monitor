@@ -72,6 +72,9 @@ Exemplo de `fall_detected`:
   "device_uid": "esp32-a1b2c3d4e5f6",
   "device_id": "esp32_01",
   "event_type": "fall_detected",
+  "event_uuid": "esp32-a1b2c3d4e5f6-fall_detected-1760000000-12345-7",
+  "event_sequence": 7,
+  "sample_seq": 341,
   "timestamp": 1760000000,
   "accel_magnitude": 3.74,
   "gyro_magnitude": 182.5,
@@ -97,7 +100,33 @@ Exemplo de `fall_detected`:
 
 O campo `timestamp` deve ser Unix time em segundos quando o NTP já sincronizou. Para `device_status.last_seen_at`, o backend usa a hora real de recebimento MQTT, porque a chegada de `status`/`telemetry` já prova presença recente do ESP32. Para `telemetry.created_at` e `events.event_time`, o timestamp do device só e usado quando e plausível e esta próximo do recebimento; se o firmware estiver no fallback monotônico de boot (`millis()/1000`) ou com clock/NTP stale, o backend usa a hora de recebimento para evitar gráfico antigo, evidência quebrada e falso offline.
 
-Para `fall_detected`, o firmware continua sendo a fonte da decisão local e do buzzer. O backend não recalcula a queda para acionar alarme local; ele audita o evento, preserva `raw_payload_json`, copia a decisão/feature set para `evidence_summary_json` e procura telemetria do mesmo device entre `event_time - 10s` e `event_time + 3s`. Se encontrar amostras, grava `evidenceStatus` (`partial` ou `linked`), `evidenceTelemetryId`, contagem, janela e resumo técnico. Se não encontrar, grava o evento com `evidenceStatus=none`, loga warning e não cria alerta automático de queda. `sos_pressed` continua podendo criar alerta sem telemetria por ser acionamento manual.
+Para `fall_detected`, o firmware continua sendo a fonte da decisão local e do buzzer. O backend não recalcula a queda para acionar alarme local; ele audita o evento, preserva `raw_payload_json`, copia a decisão/feature set para `evidence_summary_json` e procura telemetria do mesmo device entre `event_time - 10s` e `event_time + 3s`. Se encontrar amostras, grava `evidenceStatus` (`partial` ou `linked`), `evidenceTelemetryId`, contagem, janela e resumo técnico. Se não encontrar, grava o evento com `evidenceStatus=none`, loga warning e não cria alerta automático de queda. `sos_pressed` e `manual_sos` continuam podendo criar alerta sem telemetria por serem acionamento manual.
+
+### Confiabilidade por criticidade
+
+`telemetry` é periódica e pode tolerar perda eventual. Eventos críticos do canal `events`, como `fall_detected`, SOS manual e `sensor_fault`, precisam ser rastreáveis. Por isso, a `v0.8.25` adiciona:
+
+- `event_uuid`: identifica o evento crítico de forma estável durante reenvios
+- `event_sequence`: contador monotônico local de eventos críticos no firmware
+- `sample_seq`: contador da amostra de sensor mais recente associada ao evento
+- fila circular em RAM no firmware para reenviar eventos quando o MQTT voltar
+- deduplicação no backend por `event_uuid`, sem exigir migration de schema
+
+```mermaid
+flowchart TD
+  A[ESP32 detecta evento] --> B[Tenta publicar MQTT events]
+  B --> C{Publish aceito?}
+  C -->|Nao| D[Enfileira em RAM]
+  D --> E[Reconecta MQTT]
+  E --> F[Flush da fila]
+  C -->|Sim| G[Backend recebe evento]
+  F --> G
+  G --> H{event_uuid existente?}
+  H -->|Nao| I[eventService grava events]
+  I --> J[alertService cria alerta quando permitido]
+  J --> K[Socket.IO atualiza dashboard]
+  H -->|Sim| L[Ignora duplicata sem novo alerta]
+```
 
 ### `status`
 
@@ -617,7 +646,7 @@ Elas não disparam notificação externa. No estado atual do projeto, alerta sig
 - `telemetry` continua fora do `EventBuffer` do firmware
 - `battery_level` do firmware real ainda e placeholder
 - o firmware só considera o device realmente saudavel quando `Wi-Fi + MQTT` estão simultaneamente ok
-- eventos criticos pendentes agora contam com um snapshot pequeno em `NVS`, reduzindo perda após reboot rapido
+- eventos críticos pendentes ficam primeiro em RAM; um snapshot pequeno em `NVS` pode reduzir perda após reboot rápido, mas não substitui persistência durável
 - o AP curto `Q-ESP32-*` pode ficar sempre ativo em bancada com `SETUP_PORTAL_ALWAYS_ON = true`; com a flag desligada, aparece apenas em `SETUP_MODE` ou quando `FORCE_SETUP_MODE_ON_BOOT = true`
 - para depuração local no Windows, a porta serial também pode ser liberada com `.\scripts\free-serial-port.ps1 -Port COM4` quando um monitor `PlatformIO` antigo ficar preso
 - o fluxo de upload do firmware na placa atual pode ainda exigir `BOOT` manual durante o `Connecting...`; isso não altera o contrato MQTT nem o backend

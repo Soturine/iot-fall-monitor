@@ -135,6 +135,30 @@ function buildHarness(options = {}) {
     recordEventFromMqtt: async ({ payload, eventTime, receivedAt }) => {
       calls.events.push({ payload, eventTime, receivedAt });
       const eventType = payload.event_type || "device_event";
+      if (options.deduplicateEventUuid && payload.event_uuid) {
+        return {
+          id: 707,
+          organizationId: organization?.id || null,
+          patientId: currentPatient?.id || null,
+          eventType,
+          eventUuid: payload.event_uuid,
+          sampleSeq: payload.sample_seq ?? null,
+          severity: payload.immobility_confirmed ? "critical" : "high",
+          evidenceStatus: eventType === "fall_detected" ? "linked" : "none",
+          evidenceTelemetryId: eventType === "fall_detected" ? 200 : null,
+          evidenceSampleCount: eventType === "fall_detected" ? 2 : 0,
+          evidenceWindowSeconds: eventType === "fall_detected" ? 3 : 0,
+          evidenceSummary: null,
+          deduplicated: true,
+          duplicateReason: "event_uuid",
+          device: {
+            id: device.id,
+            deviceUid: device.deviceUid,
+            deviceIdentifier: device.deviceIdentifier,
+            name: device.name,
+          },
+        };
+      }
       const evidenceStatus = eventType === "fall_detected"
         ? options.fallEvidenceStatus || "linked"
         : "none";
@@ -177,9 +201,10 @@ function buildHarness(options = {}) {
         createdAt: new Date().toISOString(),
       };
     },
-    shouldCreateAlert: (eventType) => ["fall_detected", "sos_pressed"].includes(eventType),
+    shouldCreateAlert: (eventType) =>
+      ["fall_detected", "sos_pressed", "manual_sos", "sensor_fault"].includes(eventType),
     shouldCreateAlertForEvent: (event) =>
-      event.eventType === "sos_pressed" ||
+      ["sos_pressed", "manual_sos", "sensor_fault"].includes(event.eventType) ||
       (event.eventType === "fall_detected" && ["linked", "partial"].includes(event.evidenceStatus)),
   };
   const fakeAlertService = {
@@ -326,6 +351,33 @@ test("fall_detected e sos_pressed geram evento, alerta e alert:new", async () =>
     assert.equal(calls.events.length, 2);
     assert.equal(calls.alerts.length, 2);
     assert.deepEqual(calls.emits.map((entry) => entry.eventName), ["alert:new", "alert:new"]);
+  });
+});
+
+test("evento critico duplicado por event_uuid nao cria alerta nem realtime duplicado", async () => {
+  await withHarness({ deduplicateEventUuid: true }, async ({ calls, handleMqttMessage }) => {
+    await handleMqttMessage({
+      topicInfo: topicInfo("events"),
+      payloadText: JSON.stringify({
+        device_id: "esp32_01",
+        event_type: "fall_detected",
+        event_uuid: "evt-repeat-001",
+        sample_seq: 77,
+        immobility_confirmed: true,
+        timestamp: Math.floor(Date.now() / 1000),
+      }),
+      io: {},
+    });
+
+    assert.equal(calls.events.length, 1);
+    assert.equal(calls.alerts.length, 0);
+    assert.equal(calls.emits.length, 0);
+    assert.ok(
+      calls.logs.some(
+        (entry) => entry.message === "MQTT event duplicado ignorado sem criar alerta." &&
+          entry.metadata?.eventUuid === "evt-repeat-001",
+      ),
+    );
   });
 });
 

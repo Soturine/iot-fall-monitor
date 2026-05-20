@@ -200,12 +200,15 @@ Hoje `shouldCreateAlert` continua retornando `true` para tipos candidatos a aler
 
 - `fall_detected`
 - `sos_pressed`
+- `manual_sos`
+- `sensor_fault`
 
 Regra de produto atual:
 
 - `fall_detected` com evidência `linked` ou `partial`: grava evento e cria alerta interno.
 - `fall_detected` sem telemetria recente suficiente: grava evento técnico com `evidenceStatus=none`, loga warning e não cria alerta automático.
-- `sos_pressed`: cria alerta mesmo sem telemetria, porque e acionamento manual.
+- `sos_pressed`/`manual_sos`: cria alerta mesmo sem telemetria, porque e acionamento manual.
+- `sensor_fault`: cria alerta técnico de alta prioridade quando o firmware ou integração futura publicar esse evento.
 - payload inválido ou sem device: não cria evento nem alerta.
 
 Severidade atual:
@@ -214,6 +217,8 @@ Severidade atual:
 - `fall_detected` sem imobilidade: `high`
 - `fall_detected` sem evidência: `medium`
 - `sos_pressed`: `high`
+- `manual_sos`: `high`
+- `sensor_fault`: `high`
 - evento desconhecido: `medium`
 
 Eventos comuns como `device_status`, `heartbeat` ou qualquer outro tipo desconhecido são gravados como evento quando chegam no canal `events`, mas não criam alerta.
@@ -241,7 +246,7 @@ O evento recebe:
 - `evidenceWindowSeconds`: intervalo entre primeira e última amostra vinculada
 - `evidenceSummary`: pico de aceleração, pico de giro, imobilidade confirmada, primeira e última amostra
 
-O payload bruto do firmware também fica preservado em `raw_payload_json`, incluindo `decision_source`, `algorithm_version`, `fall_reason`, `features`, `features_time_domain`, `features_frequency_domain`, thresholds e demais campos enviados.
+O payload bruto do firmware também fica preservado em `raw_payload_json`, incluindo `event_uuid`, `event_sequence`, `sample_seq`, `decision_source`, `algorithm_version`, `fall_reason`, `features`, `features_time_domain`, `features_frequency_domain`, thresholds e demais campos enviados.
 
 O `evidenceSummary` do backend continua sendo o resumo das amostras realmente persistidas em `telemetry_logs`, mas agora também incorpora um bloco `firmwareDecision` com a decisão local e as features enviadas. Isso evita duplicar a decisão: o firmware decide o alarme local/buzzer, enquanto o backend audita a decisão e relaciona as amostras persistidas.
 
@@ -265,7 +270,9 @@ ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)
 
 O indice unico `alerts.event_id` impede alerta duplicado para o mesmo evento persistido. Alem disso, na ingestão MQTT, `createAlertForEvent` pode reaproveitar um alerta de queda aberto/em atendimento para o mesmo device em uma janela curta de `20s`, reduzindo duplicidade quando o mesmo movimento gera pacotes próximos.
 
-Duplicatas MQTT sem identificador externo ainda podem virar eventos distintos em `events`; hoje não existe um `event_uid` no contrato do firmware. A deduplicacao curta age apenas sobre a fila de alertas, não apaga os eventos auditaveis.
+Na `v0.8.25`, eventos críticos reenviados com o mesmo `event_uuid` são deduplicados antes de inserir uma nova linha em `events`. Quando o backend encontra um evento existente para o mesmo `device_id` e `event_uuid`, ele registra log de duplicata e não chama `alertService`; assim não há novo alerta nem novo `alert:new`.
+
+Payloads antigos sem `event_uuid` continuam aceitos pelo fluxo legado. Nesses casos, a deduplicação curta de alertas ainda reduz duplicidade, mas eventos MQTT sem identificador externo podem continuar virando eventos distintos e auditáveis.
 
 Para `fall_detected`, a criação de alerta agora acontece somente depois de `recordEventFromMqtt` preencher a evidência. Eventos sem evidência permanecem auditaveis em `events`, mas não entram automaticamente na fila crítica.
 

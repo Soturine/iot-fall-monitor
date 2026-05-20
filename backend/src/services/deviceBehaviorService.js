@@ -192,7 +192,7 @@ function computeDeviceBehavior({
   );
   const recentSosEvent = findRecentEvent(
     recentEvents,
-    ["sos_pressed"],
+    ["sos_pressed", "manual_sos"],
     referenceNow,
     RECENT_SOS_WINDOW_MS,
   );

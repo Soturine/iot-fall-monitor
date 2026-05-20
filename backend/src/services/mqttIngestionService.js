@@ -334,11 +334,23 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
         assignmentHistoryId: currentScope.assignmentHistoryId,
         eventType: event.eventType,
         eventId: event.id,
+        eventUuid: event.eventUuid || null,
+        sampleSeq: event.sampleSeq ?? null,
+        deduplicated: Boolean(event.deduplicated),
         evidenceStatus: event.evidenceStatus,
         evidenceSampleCount: event.evidenceSampleCount,
         alertCandidate: shouldCreateAlert(event.eventType),
         correlationId,
       });
+
+      if (event.deduplicated) {
+        return {
+          channel: "events_duplicate",
+          deviceLog,
+          event,
+          alert: null,
+        };
+      }
 
       if (shouldCreateAlertForEvent(event)) {
         const alert = await createAlertForEvent(event, connection, {
@@ -450,12 +462,30 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
       return;
     }
 
+    if (result.channel === "events_duplicate") {
+      logger.info("MQTT event duplicado ignorado sem criar alerta.", {
+        topic: topicInfo.topic,
+        correlationId,
+        device: result.deviceLog,
+        eventId: result.event.id,
+        eventType: result.event.eventType,
+        eventUuid: result.event.eventUuid || null,
+        duplicateReason: result.event.duplicateReason || "event_uuid",
+        alertCreated: false,
+        realtimeEvent: null,
+        durationMs: elapsedMsSince(messageStartedAt),
+      });
+      return;
+    }
+
     logger.info("MQTT event processado.", {
       topic: topicInfo.topic,
       correlationId,
       device: result.deviceLog,
       eventId: result.event.id,
       eventType: result.event.eventType,
+      eventUuid: result.event.eventUuid || null,
+      sampleSeq: result.event.sampleSeq ?? null,
       evidenceStatus: result.event.evidenceStatus,
       evidenceSampleCount: result.event.evidenceSampleCount,
       alertId: result.alert?.id || null,

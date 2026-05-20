@@ -44,6 +44,17 @@ function nowSeconds() {
   return Math.floor(Date.now() / 1000);
 }
 
+let eventSequence = 0;
+
+function nextEventMetadata(options, eventType) {
+  eventSequence += 1;
+  return {
+    event_uuid: `${options.deviceUid}-${eventType}-${Date.now()}-${eventSequence}`,
+    event_sequence: eventSequence,
+    sample_seq: options.count,
+  };
+}
+
 function buildStatus(options) {
   return {
     device_id: options.deviceId,
@@ -99,12 +110,16 @@ function buildTelemetry(options, index) {
 
 function buildEvent(options) {
   const fallDetected = options.eventType === "fall_detected";
+  const eventMetadata = nextEventMetadata(options, options.eventType);
 
   return {
     device_id: options.deviceId,
     device_uid: options.deviceUid,
     event_type: options.eventType,
-    severity: options.eventType === "fall_detected" ? "high" : "medium",
+    ...eventMetadata,
+    severity: ["fall_detected", "sos_pressed", "manual_sos", "sensor_fault"].includes(options.eventType)
+      ? "high"
+      : "medium",
     immobility_confirmed: false,
     accel_magnitude: 2.8,
     gyro_magnitude: 180,
@@ -144,11 +159,12 @@ function buildEvent(options) {
   };
 }
 
-function publishJson(client, topic, payload) {
+function publishJson(client, topic, payload, options = {}) {
   const text = JSON.stringify(payload);
+  const qos = options.qos ?? 0;
 
   return new Promise((resolve, reject) => {
-    client.publish(topic, text, { qos: 0, retain: false }, (error) => {
+    client.publish(topic, text, { qos, retain: false }, (error) => {
       if (error) {
         reject(error);
         return;
@@ -158,9 +174,11 @@ function publishJson(client, topic, payload) {
         timestamp: new Date().toISOString(),
         event: "published",
         topic,
+        qos,
         bytes: Buffer.byteLength(text, "utf8"),
         device_id: payload.device_id,
         event_type: payload.event_type || null,
+        event_uuid: payload.event_uuid || null,
       }));
       resolve();
     });
@@ -211,7 +229,12 @@ async function run() {
   }
 
   if (options.eventType) {
-    await publishJson(client, topicFor(options.deviceId, "events"), buildEvent(options));
+    await publishJson(
+      client,
+      topicFor(options.deviceId, "events"),
+      buildEvent(options),
+      { qos: 1 },
+    );
   }
 
   client.end();

@@ -16,6 +16,7 @@ const FALL_EVIDENCE_WINDOW_AFTER_MS = 3_000;
 const FALL_EVIDENCE_MAX_SAMPLES = 30;
 const FALL_EVIDENCE_LINKED_MIN_SAMPLES = 2;
 const TELEMETRY_REQUIRED_NUMERIC_FIELDS = ["ax", "ay", "az", "gx", "gy", "gz"];
+const ALERT_EVENT_TYPES = new Set(["fall_detected", "sos_pressed", "manual_sos", "sensor_fault"]);
 
 function toNullableNumber(value) {
   if (value == null || value === "") {
@@ -94,6 +95,8 @@ function deriveSeverity(eventType, payload) {
         ? "critical"
         : "high";
     case "sos_pressed":
+    case "manual_sos":
+    case "sensor_fault":
       return "high";
     default:
       return "medium";
@@ -112,13 +115,17 @@ function deriveMessage(eventType, payload) {
         : "Queda detectada.";
     case "sos_pressed":
       return "Botão SOS acionado manualmente.";
+    case "manual_sos":
+      return "SOS manual acionado pelo dispositivo.";
+    case "sensor_fault":
+      return "Falha crítica de sensor reportada pelo dispositivo.";
     default:
       return "Evento recebido do dispositivo.";
   }
 }
 
 function shouldCreateAlert(eventType) {
-  return ["fall_detected", "sos_pressed"].includes(eventType);
+  return ALERT_EVENT_TYPES.has(eventType);
 }
 
 function hasTelemetryEvidence(event) {
@@ -239,6 +246,32 @@ function buildTelemetryEvidence(rows, eventTime, immobilityConfirmed = false) {
   };
 }
 
+function normalizeEventUuid(payload = {}) {
+  if (!isPlainObject(payload)) {
+    return null;
+  }
+
+  const value = payload.event_uuid ?? payload.eventUuid;
+  if (value == null) {
+    return null;
+  }
+
+  const text = String(value).trim();
+  if (!text || text.length > 160) {
+    return null;
+  }
+
+  return text;
+}
+
+function extractSampleSeq(payload = {}) {
+  if (!isPlainObject(payload)) {
+    return null;
+  }
+
+  return toNullableNumber(payload.sample_seq ?? payload.sampleSeq);
+}
+
 function buildFirmwareDecisionSummary(payload = {}) {
   const features = isPlainObject(payload.features) ? payload.features : {};
   const featuresTimeDomain = isPlainObject(payload.features_time_domain)
@@ -265,6 +298,9 @@ function buildFirmwareDecisionSummary(payload = {}) {
   }
 
   return {
+    eventUuid: normalizeEventUuid(payload),
+    sampleSeq: extractSampleSeq(payload),
+    eventSequence: toNullableNumber(payload.event_sequence),
     decisionSource,
     algorithmVersion,
     detected: toNullableBoolean(payload.detected),
@@ -388,6 +424,7 @@ async function insertEvidenceLinks(eventId, evidence, executor = null) {
 }
 
 function mapEventRow(row) {
+  const rawPayloadJson = parseMaybeJson(row.raw_payload_json);
   const patient = row.patientId || row.patient_id
     ? {
         id: Number(row.patientId || row.patient_id),
@@ -418,8 +455,12 @@ function mapEventRow(row) {
     evidenceSampleCount: evidenceSampleCount == null ? 0 : Number(evidenceSampleCount),
     evidenceWindowSeconds: toNullableNumber(evidenceWindowSeconds),
     evidenceSummary: parseMaybeJson(evidenceSummaryJson),
+    eventUuid: normalizeEventUuid(rawPayloadJson),
+    sampleSeq: extractSampleSeq(rawPayloadJson),
+    eventSequence: toNullableNumber(rawPayloadJson?.event_sequence),
+    deduplicated: Boolean(row.deduplicated),
     eventTime: toIso(row.event_time),
-    rawPayloadJson: parseMaybeJson(row.raw_payload_json),
+    rawPayloadJson,
     createdAt: toIso(row.created_at),
     device: {
       id: Number(row.deviceId || row.device_id),
@@ -436,6 +477,38 @@ function mapEventRow(row) {
         }
       : null,
   };
+}
+
+async function findExistingEventByUuid({ device, eventUuid }, executor = null) {
+  if (!eventUuid) {
+    return null;
+  }
+
+  const row = await one(
+    executor,
+    `
+      SELECT
+        e.*,
+        d.id AS deviceId,
+        d.device_uid AS deviceUid,
+        d.device_identifier AS deviceIdentifier,
+        d.name AS deviceName,
+        p.full_name AS patientName,
+        a.id AS alertId,
+        a.status AS alertStatus
+      FROM events e
+      INNER JOIN devices d ON d.id = e.device_id
+      LEFT JOIN patients p ON p.id = e.patient_id
+      LEFT JOIN alerts a ON a.event_id = e.id
+      WHERE e.device_id = ?
+        AND JSON_UNQUOTE(JSON_EXTRACT(e.raw_payload_json, '$.event_uuid')) = ?
+      ORDER BY e.id ASC
+      LIMIT 1
+    `,
+    [device.id, eventUuid],
+  );
+
+  return row ? mapEventRow(row) : null;
 }
 
 function mapTelemetryRow(row) {
@@ -516,6 +589,33 @@ async function recordEventFromMqtt({
   const intensity = toNullableNumber(payload.intensity ?? payload.accel_magnitude);
   const immobility = toBoolean(payload.immobility ?? payload.immobility_confirmed);
   const eventTime = resolveMqttPersistenceTime(payload, receivedAt, eventTimeOverride);
+  const eventUuid = normalizeEventUuid(payload);
+
+  if (eventUuid) {
+    const existingEvent = await findExistingEventByUuid({ device, eventUuid }, executor);
+
+    if (existingEvent) {
+      logger.info("Evento MQTT duplicado ignorado por event_uuid.", {
+        correlationId,
+        eventUuid,
+        duplicateOfEventId: existingEvent.id,
+        eventType: existingEvent.eventType,
+        deviceId: device.id,
+        deviceIdentifier: device.deviceIdentifier,
+        deviceUid: device.deviceUid,
+        organizationId: existingEvent.organizationId,
+        patientId: existingEvent.patientId,
+        durationMs: elapsedMsSince(startedAt),
+      });
+
+      return {
+        ...existingEvent,
+        deduplicated: true,
+        duplicateReason: "event_uuid",
+      };
+    }
+  }
+
   const evidence = eventType === "fall_detected"
     ? await resolveFallTelemetryEvidence({ device, eventTime, immobility }, executor)
     : buildEmptyEvidence(immobility);
@@ -593,6 +693,8 @@ async function recordEventFromMqtt({
     correlationId,
     eventId: event.id,
     eventType: event.eventType,
+    eventUuid: event.eventUuid,
+    sampleSeq: event.sampleSeq,
     deviceId: device.id,
     deviceIdentifier: device.deviceIdentifier,
     deviceUid: device.deviceUid,
@@ -826,6 +928,7 @@ module.exports = {
   listDeviceEvents,
   listEvents,
   mapTelemetryRow,
+  normalizeEventUuid,
   recordEventFromMqtt,
   recordTelemetryFromMqtt,
   resolveFallTelemetryEvidence,

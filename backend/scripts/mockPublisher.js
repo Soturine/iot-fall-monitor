@@ -22,14 +22,18 @@ const client = mqtt.connect(brokerUrl, {
 
 let temperatureSeed = 27;
 let accelSeed = 1.0;
+let eventSequence = 0;
 
 function nowUnix() {
   return Math.floor(Date.now() / 1000);
 }
 
-function publish(channel, payload) {
+function publish(channel, payload, options = {}) {
   const topic = `${topicBase}/${deviceId}/${channel}`;
-  client.publish(topic, JSON.stringify(payload));
+  client.publish(topic, JSON.stringify(payload), {
+    qos: options.qos ?? 0,
+    retain: false,
+  });
   console.log(`[mockPublisher] ${topic}`, payload);
 }
 
@@ -96,11 +100,16 @@ function publishAlert() {
   const fallDetected = Math.random() > 0.4;
   const accelMagnitude = fallDetected ? randomBetween(2.8, 5.4, 2) : randomBetween(0.9, 1.4, 2);
   const gyroMagnitude = fallDetected ? randomBetween(130, 260, 2) : randomBetween(12, 40, 2);
+  eventSequence += 1;
+  const eventType = fallDetected ? "fall_detected" : "sos_pressed";
 
   publish("events", {
     device_uid: deviceUid,
     device_id: deviceId,
-    event_type: fallDetected ? "fall_detected" : "sos_pressed",
+    event_type: eventType,
+    event_uuid: `${deviceUid}-${eventType}-${Date.now()}-${eventSequence}`,
+    event_sequence: eventSequence,
+    sample_seq: eventSequence,
     timestamp: nowUnix(),
     accel_magnitude: accelMagnitude,
     gyro_magnitude: gyroMagnitude,
@@ -143,7 +152,7 @@ function publishAlert() {
     message: fallDetected
       ? "Queda simulada com possível imobilidade."
       : "SOS manual simulado.",
-  });
+  }, { qos: 1 });
 }
 
 client.on("connect", () => {

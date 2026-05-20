@@ -276,7 +276,14 @@ Na ingestão:
 - `device_status.last_seen_at` agora usa a hora de recebimento do MQTT no backend, porque receber status/telemetria já prova presença recente do ESP32
 - timestamps MQTT em telemetria/eventos só são usados quando parecem Unix time plausível e próximos do recebimento; se o ESP32 estiver sem NTP ou com clock stale, o backend persiste a hora de recebimento para evitar device falsamente stale/offline
 - `fall_detected` busca telemetria recente do mesmo device em uma janela de `-10s/+3s`; sem evidência, o evento fica auditavel, mas não cria alerta automático de queda
-- `sos_pressed` segue criando alerta sem telemetria, porque e acionamento manual
+- `sos_pressed` e `manual_sos` seguem criando alerta sem telemetria, porque são acionamentos manuais
+- `sensor_fault`, quando publicado pelo firmware, é tratado como evento crítico auditável
+
+### Confiabilidade de eventos críticos
+
+A partir da v0.8.25, eventos críticos MQTT podem trazer `event_uuid`, `event_sequence` e `sample_seq`. Quando `event_uuid` está presente, o backend deduplica o evento antes de criar alertas ou emitir `alert:new`, preservando `raw_payload_json` e `evidence_summary_json` para auditoria.
+
+O contrato legado continua aceito: payloads antigos sem `event_uuid` seguem o fluxo anterior e ainda contam com a janela curta de deduplicação de alertas. A fila local do firmware é em RAM, então reenvios cobrem reconexões MQTT, mas não sobrevivem a perda de energia; persistência em SPIFFS/LittleFS fica como evolução futura.
 
 ## Rotas REST principais
 

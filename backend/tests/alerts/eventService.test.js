@@ -10,7 +10,7 @@ const {
   validateTelemetryPayload,
 } = require("../../src/services/eventService");
 
-test("deriveSeverity classifica eventos criticos de queda e SOS", () => {
+test("deriveSeverity classifica eventos criticos de queda, SOS e sensor", () => {
   assert.equal(
     deriveSeverity("fall_detected", { immobility_confirmed: true }),
     "critical",
@@ -20,6 +20,8 @@ test("deriveSeverity classifica eventos criticos de queda e SOS", () => {
     "high",
   );
   assert.equal(deriveSeverity("sos_pressed", {}), "high");
+  assert.equal(deriveSeverity("manual_sos", {}), "high");
+  assert.equal(deriveSeverity("sensor_fault", {}), "high");
   assert.equal(deriveSeverity("unknown_event", {}), "medium");
 });
 
@@ -27,9 +29,11 @@ test("deriveSeverity preserva severidade explicita do payload", () => {
   assert.equal(deriveSeverity("fall_detected", { severity: "low" }), "low");
 });
 
-test("shouldCreateAlert cria alerta apenas para queda e SOS", () => {
+test("shouldCreateAlert cria alerta apenas para eventos criticos", () => {
   assert.equal(shouldCreateAlert("fall_detected"), true);
   assert.equal(shouldCreateAlert("sos_pressed"), true);
+  assert.equal(shouldCreateAlert("manual_sos"), true);
+  assert.equal(shouldCreateAlert("sensor_fault"), true);
   assert.equal(shouldCreateAlert("device_status"), false);
   assert.equal(shouldCreateAlert("heartbeat"), false);
 });
@@ -49,6 +53,14 @@ test("shouldCreateAlertForEvent exige evidencia para queda e preserva SOS manual
   );
   assert.equal(
     shouldCreateAlertForEvent({ eventType: "sos_pressed", evidenceStatus: "none" }),
+    true,
+  );
+  assert.equal(
+    shouldCreateAlertForEvent({ eventType: "manual_sos", evidenceStatus: "none" }),
+    true,
+  );
+  assert.equal(
+    shouldCreateAlertForEvent({ eventType: "sensor_fault", evidenceStatus: "none" }),
     true,
   );
 });

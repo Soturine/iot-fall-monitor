@@ -378,22 +378,44 @@ Isso evita o estado ruim de "Wi-Fi ok, mas broker quebrado sem caminho claro de 
 
 Com `SETUP_PORTAL_ALWAYS_ON = true`, falhas repetidas de MQTT deixam o portal já disponível para correcao, mas não desconectam o MQTT nem interrompem sensor, status/eventos e tentativas normais. Com a flag em `false`, o fallback antigo para `SETUP_MODE` permanece.
 
-## Persistencia leve de eventos criticos
+## Confiabilidade de eventos criticos MQTT
 
-O `EventBuffer` em RAM continua existindo como antes, mas agora o firmware também salva um snapshot pequeno dos eventos criticos pendentes em `NVS`.
+A partir da `v0.8.25`, o firmware diferencia telemetria periódica de eventos críticos. `telemetry` continua leve e sem fila obrigatória; eventos do canal `events`, como `fall_detected` e SOS manual, recebem identificadores rastreáveis e podem ser reenviados depois de queda temporária do MQTT.
 
 Regras atuais:
 
-- apenas eventos criticos do canal `events` entram nesse snapshot
-- `telemetry` continua fora do `EventBuffer`
-- o limite persistido e pequeno (`PERSISTED_EVENT_BUFFER_CAPACITY`)
-- o objetivo e reduzir perda após reboot rapido, sem transformar o ESP32 em um journal pesado
+- cada evento crítico recebe `event_uuid`, `event_sequence` e `sample_seq`
+- apenas eventos críticos do canal `events` entram no `EventBuffer`
+- `status` e `telemetry` não viram histórico local nem competem com alertas no buffer
+- quando o publish falha ou o MQTT está desconectado, o payload completo do evento entra em fila circular em RAM
+- quando o MQTT reconecta, `flushBufferedEvents()` reenvia eventos pendentes e só remove o item depois de `publish` aceito pelo cliente MQTT
+- se o buffer lotar, o firmware preserva o evento mais recente e descarta o mais antigo, registrando `event dropped by buffer limit`
+- a build também pode salvar um snapshot pequeno em `NVS` quando `EVENT_BUFFER_PERSISTENCE_ENABLED=true`
 
 Limites importantes:
 
-- esse snapshot não substitui persistência completa
-- status periódico continua priorizando simplicidade e não vira histórico local completo
-- ainda existe risco de perda em falhas muito abruptas entre evento e snapshot
+- a garantia principal é a fila em RAM; ela não deve ser tratada como persistência durável contra perda de energia
+- o snapshot em `NVS` reduz perda em alguns reboots, mas não substitui um journal completo
+- `SPIFFS`/`LittleFS` ficam como evolução futura para persistência durável de eventos críticos
+- o `PubSubClient` usado no firmware publica em QoS 0; clientes Node de teste podem usar QoS 1 quando o broker suportar
+
+Fluxo resumido:
+
+```mermaid
+flowchart TD
+  A[ESP32 detecta evento critico] --> B[gera event_uuid e sample_seq]
+  B --> C{MQTT publish aceito?}
+  C -->|sim| D[event publish ok]
+  C -->|nao| E[event queued em RAM]
+  E --> F[MQTT reconecta]
+  F --> G[flush do EventBuffer]
+  G --> H[backend recebe events]
+  H --> I{event_uuid ja existe?}
+  I -->|nao| J[eventService grava evento]
+  J --> K[alertService cria alerta quando regra permitir]
+  K --> L[Socket.IO atualiza dashboard]
+  I -->|sim| M[backend ignora duplicata sem novo alerta]
+```
 
 ## MQTT/TLS preparado, mas opt-in
 
@@ -585,6 +607,9 @@ Todos os payloads são `JSON` em `snake_case`.
   "device_uid": "esp32-a1b2c3d4e5f6",
   "device_id": "esp32_01",
   "event_type": "fall_detected",
+  "event_uuid": "esp32-a1b2c3d4e5f6-fall_detected-1760000000-12345-7",
+  "event_sequence": 7,
+  "sample_seq": 341,
   "timestamp": 1760000000,
   "accel_magnitude": 3.74,
   "gyro_magnitude": 182.5,
@@ -748,7 +773,7 @@ constexpr unsigned long REQUIRED_IMMOBILITY_MS = 1800;
 | `sensor_mpu6050` | `include/sensor_mpu6050.h`, `src/sensor_mpu6050.cpp` | leitura do sensor e calculo das magnitudes |
 | `fall_detector` | `include/fall_detector.h`, `src/fall_detector.cpp` | máquina de estados da queda |
 | `mqtt_client` | `include/mqtt_client.h`, `src/mqtt_client.cpp` | publicação MQTT |
-| `event_buffer` | `include/event_buffer.h`, `src/event_buffer.cpp` | reenvio local de `events` e `status` |
+| `event_buffer` | `include/event_buffer.h`, `src/event_buffer.cpp` | fila circular local para reenvio de eventos criticos do canal `events` |
 | `fall_feature_extractor` | `include/fall_feature_extractor.h`, `src/fall_feature_extractor.cpp` | features experimentais em janela circular para evidência/calibração |
 | `buzzer_led` | `include/buzzer_led.h`, `src/buzzer_led.cpp` | sinalizacao sonora/visual e pulso do motion test |
 | `main` | `src/main.cpp` | integracao do loop principal |

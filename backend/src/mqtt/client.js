@@ -58,7 +58,11 @@ function createMqttBridge({ io }) {
       topics,
     });
 
-    client.subscribe(topics, (error) => {
+    const subscriptions = Object.fromEntries(
+      topics.map((topic) => [topic, { qos: 1 }]),
+    );
+
+    client.subscribe(subscriptions, (error) => {
       if (error) {
         logger.error("Falha ao assinar tópicos MQTT.", {
           message: error.message,
@@ -69,6 +73,7 @@ function createMqttBridge({ io }) {
       logger.info("Topicos MQTT assinados com sucesso.", {
         topicCount: topics.length,
         topics,
+        qos: 1,
       });
     });
   });

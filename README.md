@@ -6,11 +6,15 @@ O objetivo do repositório é integrar hardware embarcado, ingestão de eventos,
 
 ## Baseline Atual
 
-Baseline atual do repositório: `v0.8.24`.
+Baseline atual do repositório: `v0.8.25`.
 
-A baseline `v0.8.24` consolida a telemetria MQTT mais confiável e o diagnóstico do `MPU6050`, separando com clareza "dispositivo online por status" de "telemetria ativa com amostra válida". Ela mantém o frontend premium/redesign, acrescenta `FallFeatureExtractor` com features no domínio do tempo, preserva evidência estruturada para `fall_detected` e deixa um placeholder experimental para FFT/Fourier sem substituir a decisão principal atual.
+A baseline `v0.8.25` adiciona confiabilidade incremental para eventos críticos MQTT. Telemetria continua sendo dado periódico e pode tolerar perda eventual; eventos como `fall_detected`, SOS manual (`sos_pressed`/`manual_sos`) e `sensor_fault` passam a ter rastreabilidade com `event_uuid`, `event_sequence` e `sample_seq`.
 
-Esta baseline também prepara a calibração futura por SOS, com documentação de sessões, amostras, feature sets e perfis por paciente/dispositivo. Para a experiência local prevista nesta fase, o projeto está estabilizado para `Node.js 20+`.
+O firmware mantém uma fila circular local em RAM para eventos críticos do canal `events`, tenta reenviar no flush após reconexão MQTT e registra logs claros de publish, fila, flush e descarte por limite. O backend deduplica eventos reenviados por `event_uuid`, preservando compatibilidade com payloads antigos sem esse campo.
+
+Limitação importante: a garantia principal é a fila em RAM, que não deve ser tratada como persistência durável contra perda de energia. A build mantém um snapshot pequeno e opcional em `NVS`, mas `SPIFFS`/`LittleFS` permanecem como evolução futura para um journal mais robusto.
+
+A baseline mantém o frontend premium/redesign, telemetria MQTT mais confiável, diagnóstico do `MPU6050`, `FallFeatureExtractor`, evidência estruturada para `fall_detected` e o placeholder experimental de FFT/Fourier sem substituir a decisão principal atual. Para a experiência local prevista nesta fase, o projeto está estabilizado para `Node.js 20+`.
 
 ## Visão Geral
 
@@ -38,6 +42,7 @@ O modelo atual deixou de ser um painel global único e passou a trabalhar com or
 - reconciliação segura entre `device_uid` real do ESP32 e cadastros legados `legacy:{device_id}` já pareados
 - lock leve por device na ingestão MQTT para reduzir corrida entre status/eventos/telemetria simultâneos
 - alertas idempotentes por evento MQTT persistido
+- confiabilidade de eventos críticos MQTT com `event_uuid`, `sample_seq`, fila local e deduplicação no backend
 - vínculo técnico entre queda detectada e janela de telemetria relacionada
 - evidência estruturada do firmware para `fall_detected`, com versão do algoritmo, janela, picos, imobilidade e features no domínio do tempo
 - base experimental para FFT/Fourier e calibração futura por classes de movimento, sem trocar a decisão principal atual

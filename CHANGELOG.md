@@ -7,6 +7,30 @@
 - testar classificação de movimentos com múltiplas runs por classe
 - validar o sistema com ESP32 real, MPU6050, backend, MQTT e dashboard em cenário ponta a ponta
 
+## [v0.8.25] - 2026-05-20
+### Adicionado
+- confiabilidade de eventos críticos MQTT para diferenciar telemetria periódica de eventos que precisam de rastreabilidade
+- `event_uuid`, `event_sequence` e `sample_seq` nos payloads críticos do firmware
+- fila circular local em RAM para eventos críticos do canal `events`, com flush automático quando o MQTT reconecta
+- logs de `event publish ok`, `event publish failed`, `event queued`, `event flushed` e descarte por limite do buffer
+- deduplicação no backend por `event_uuid` quando o campo estiver disponível no `raw_payload_json`
+- suporte backend para tratar `manual_sos` e `sensor_fault` como eventos críticos compatíveis
+- documentação do fluxo de entrega, reenvio e deduplicação com diagrama Mermaid
+
+### Alterado
+- versão alinhada para `0.8.25` em `package.json`, `backend/package.json`, `frontend/package.json`, `backend/package-lock.json` e `frontend/package-lock.json`
+- `status` e `telemetry` continuam leves; apenas eventos críticos entram na fila local de reenvio
+- scripts MQTT de teste passam a publicar eventos críticos com `event_uuid` e QoS 1 quando o cliente/broker suportar
+- README e docs técnicos explicam a política de confiabilidade por criticidade
+
+### Corrigido
+- reenvio do mesmo evento crítico com o mesmo `event_uuid` não cria novo evento, alerta ou `alert:new` duplicado
+
+### Limitações conhecidas
+- a garantia principal do firmware é a fila em RAM; o snapshot pequeno em `NVS` reduz perda em alguns reboots, mas não substitui persistência durável
+- `PubSubClient` no firmware permanece publicando em QoS 0; QoS 1 fica documentado e usado nos scripts Node quando suportado
+- persistência completa em `SPIFFS`/`LittleFS` continua como evolução futura
+
 ## [v0.8.24] - 2026-05-19
 ### Adicionado
 - firmware passa a usar `FallFeatureExtractor` com janela circular de 64 amostras para extrair features no domínio do tempo
