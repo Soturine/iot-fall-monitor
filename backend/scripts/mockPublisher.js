@@ -51,6 +51,14 @@ function publishStatus() {
     wifi_rssi: -1 * Math.floor(randomBetween(47, 76, 0)),
     firmware_version: "1.0.0",
     buffered_events: 0,
+    sensor_ready: true,
+    sensor_valid: true,
+    sensor_read_ok: true,
+    sensor_sample_age_ms: 0,
+    sensor_failures: 0,
+    i2c_error_count: 0,
+    i2c_recovery_count: 0,
+    i2c_last_error: "none",
   });
 }
 
@@ -73,6 +81,14 @@ function publishTelemetry() {
     pitch_deg: randomBetween(-12, 12, 2),
     roll_deg: randomBetween(-18, 18, 2),
     temperature: temperatureSeed,
+    sensor_ready: true,
+    sensor_valid: true,
+    sensor_read_ok: true,
+    sensor_sample_age_ms: 0,
+    sensor_failures: 0,
+    i2c_error_count: 0,
+    i2c_recovery_count: 0,
+    i2c_last_error: "none",
   });
 }
 

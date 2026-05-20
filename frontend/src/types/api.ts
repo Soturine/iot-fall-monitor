@@ -43,6 +43,19 @@ export interface DeviceStatus {
   wifiRssi: number | null;
   batteryPercent: number | null;
   firmwareVersion: string | null;
+  sensorReady: boolean | null;
+  sensorValid: boolean | null;
+  sensorReadOk: boolean | null;
+  sensorSampleAgeMs: number | null;
+  sensorFailures: number | null;
+  i2cErrorCount: number | null;
+  i2cRecoveryCount: number | null;
+  i2cLastError: string | null;
+  lastStatusTopic: string | null;
+  lastTelemetryTopic: string | null;
+  lastEventTopic: string | null;
+  lastTelemetryAt: string | null;
+  lastEventAt: string | null;
   lastSeenAt: string | null;
   updatedAt: string | null;
 }

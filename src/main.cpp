@@ -105,9 +105,10 @@ const DeviceSettings::DeviceConfig& runtimeConfig() {
 String buildEventPayload(const char* eventType,
                          float accelMagnitudeG,
                          float gyroMagnitudeDegPerSec,
-                         bool immobilityConfirmed) {
+                         bool immobilityConfirmed,
+                         const FallAlert* fallAlert = nullptr) {
   // Mantem o formato do payload centralizado em um unico ponto.
-  StaticJsonDocument<384> doc;
+  StaticJsonDocument<896> doc;
   doc["device_uid"] = DeviceSettings::technicalDeviceUid();
   doc["device_id"] = DeviceSettings::effectiveDeviceId(runtimeConfig());
   doc["event_type"] = eventType;
@@ -117,6 +118,29 @@ String buildEventPayload(const char* eventType,
   doc["immobility_confirmed"] = immobilityConfirmed;
   doc["battery_level"] = batteryLevelPercent();
   doc["battery_percent"] = batteryLevelPercent();
+
+  if (fallAlert != nullptr) {
+    doc["decision_source"] = "firmware";
+    doc["fall_reason"] = fallAlert->reason;
+    doc["analysis_window_ms"] = fallAlert->analysisWindowMs;
+    doc["samples_considered"] = fallAlert->samplesConsidered;
+
+    JsonObject features = doc.createNestedObject("features");
+    features["reason"] = fallAlert->reason;
+    features["peak_accel_magnitude_g"] = fallAlert->accelMagnitudeG;
+    features["peak_gyro_magnitude_dps"] = fallAlert->gyroMagnitudeDegPerSec;
+    features["orientation_delta_deg"] = fallAlert->orientationDeltaDeg;
+    features["immobility_confirmed"] = fallAlert->immobilityConfirmed;
+    features["immobility_duration_ms"] = fallAlert->immobilityDurationMs;
+    features["analysis_window_ms"] = fallAlert->analysisWindowMs;
+    features["samples_considered"] = fallAlert->samplesConsidered;
+
+    JsonObject thresholds = doc.createNestedObject("thresholds");
+    thresholds["impact_accel_g"] = AppConfig::IMPACT_THRESHOLD_G;
+    thresholds["impact_gyro_dps"] = AppConfig::IMPACT_GYRO_THRESHOLD_DPS;
+    thresholds["orientation_change_deg"] = AppConfig::ORIENTATION_CHANGE_THRESHOLD_DEG;
+    thresholds["required_immobility_ms"] = AppConfig::REQUIRED_IMMOBILITY_MS;
+  }
 
   if (doc.overflowed()) {
     AppLog::warn("[event] payload JSON overflowed before serialization.");
@@ -306,13 +330,23 @@ IndicatorState computeIndicatorState() {
 void publishFallAlert(const FallAlert& alert) {
   const String topic = DeviceSettings::buildTopic(runtimeConfig(), "events");
   const String payload = buildEventPayload(
-      "fall_detected", alert.accelMagnitudeG, alert.gyroMagnitudeDegPerSec, true);
+      "fall_detected",
+      alert.accelMagnitudeG,
+      alert.gyroMagnitudeDegPerSec,
+      true,
+      &alert);
   const bool published = queueOrPublish(topic, payload);
   if (AppConfig::FIRMWARE_MQTT_DIAGNOSTIC_ENABLED) {
-    AppLog::warnf("[event] publish %s topic=%s type=fall_detected bytes=%u\n",
+    AppLog::warnf("[event] publish %s topic=%s type=fall_detected bytes=%u reason=%s samples=%u window_ms=%lu peak_accel=%.2f peak_gyro=%.2f orientation_delta=%.1f\n",
                   published ? "ok" : "queued",
                   topic.c_str(),
-                  static_cast<unsigned>(payload.length()));
+                  static_cast<unsigned>(payload.length()),
+                  alert.reason,
+                  alert.samplesConsidered,
+                  alert.analysisWindowMs,
+                  alert.accelMagnitudeG,
+                  alert.gyroMagnitudeDegPerSec,
+                  alert.orientationDeltaDeg);
   }
   indicator.triggerAlarm();
 }
@@ -344,17 +378,20 @@ void publishPeriodicStatus() {
   const bool published = queueOrPublish(topic, payload);
   if (AppConfig::FIRMWARE_MQTT_DIAGNOSTIC_ENABLED) {
     const bool sensorSampleFresh = hasFreshSensorSample(millis());
-    AppLog::infof("[status] publish %s topic=%s bytes=%u mqtt_connected=%u sensor_valid=%u\n",
+    AppLog::infof("[status] publish %s topic=%s bytes=%u mqtt_connected=%u sensor_ready=%u sensor_valid=%u sensor_read_ok=%u\n",
                   published ? "ok" : "queued",
                   topic.c_str(),
                   static_cast<unsigned>(payload.length()),
                   mqttClient.isConnected() ? 1U : 0U,
-                  sensorSampleFresh ? 1U : 0U);
+                  sensorReady ? 1U : 0U,
+                  sensorSampleFresh ? 1U : 0U,
+                  lastSensorReadSucceeded ? 1U : 0U);
   }
 }
 
 void logTelemetrySkipped(const char* reason, unsigned long nowMs) {
-  if (!AppConfig::FIRMWARE_MQTT_DIAGNOSTIC_ENABLED) {
+  if (!AppConfig::FIRMWARE_MQTT_DIAGNOSTIC_ENABLED &&
+      !AppConfig::FIRMWARE_TELEMETRY_DIAGNOSTIC_ENABLED) {
     return;
   }
 
@@ -365,11 +402,16 @@ void logTelemetrySkipped(const char* reason, unsigned long nowMs) {
   }
 
   lastTelemetrySkipLogAtMs = nowMs;
-  AppLog::warnf("[telemetry] skipped reason=%s mqtt_connected=%u sensor_ready=%u sensor_valid=%u failures=%lu i2c_errors=%lu recoveries=%lu last_error=%s\n",
+  const String topic = DeviceSettings::buildTopic(runtimeConfig(), "telemetry");
+  AppLog::warnf("[telemetry] skipped reason=%s topic=%s mqtt_connected=%u sensor_ready=%u latest_valid=%u sensor_valid=%u sensor_read_ok=%u sample_age_ms=%lu failures=%lu i2c_errors=%lu recoveries=%lu last_error=%s\n",
                 reason,
+                topic.c_str(),
                 mqttClient.isConnected() ? 1U : 0U,
                 sensorReady ? 1U : 0U,
+                latestReading.valid ? 1U : 0U,
                 hasFreshSensorSample(nowMs) ? 1U : 0U,
+                lastSensorReadSucceeded ? 1U : 0U,
+                latestSensorSampleAgeMs(nowMs),
                 sensor.consecutiveFailureCount(),
                 sensor.totalI2cErrorCount(),
                 sensor.i2cRecoveryCount(),
@@ -382,8 +424,18 @@ void publishPeriodicTelemetry(unsigned long nowMs) {
     return;
   }
 
-  if (!latestReading.valid && !sensorReady) {
-    logTelemetrySkipped("sensor_no_valid_sample", nowMs);
+  if (!sensorReady) {
+    logTelemetrySkipped("sensor_not_ready", nowMs);
+    return;
+  }
+
+  if (!latestReading.valid) {
+    logTelemetrySkipped("no_valid_sample", nowMs);
+    return;
+  }
+
+  if (!hasFreshSensorSample(nowMs)) {
+    logTelemetrySkipped("stale_sample", nowMs);
     return;
   }
 
@@ -392,32 +444,23 @@ void publishPeriodicTelemetry(unsigned long nowMs) {
   const String payload = buildTelemetryPayload();
   const bool published = mqttClient.publish(topic, payload, false);
 
-  if (AppConfig::FIRMWARE_MQTT_DIAGNOSTIC_ENABLED) {
+  if (AppConfig::FIRMWARE_MQTT_DIAGNOSTIC_ENABLED ||
+      AppConfig::FIRMWARE_TELEMETRY_DIAGNOSTIC_ENABLED) {
     const unsigned long sampleAgeMs = latestSensorSampleAgeMs(nowMs);
     const bool sensorSampleFresh = hasFreshSensorSample(nowMs);
     if (published) {
-      if (sensorSampleFresh) {
-        AppLog::infof("[telemetry] publish ok topic=%s bytes=%u sample_age_ms=%lu sensor_valid=1 sensor_read_ok=%u i2c_errors=%lu recoveries=%lu accel_magnitude=%.2f gyro_magnitude=%.2f\n",
-                      topic.c_str(),
-                      static_cast<unsigned>(payload.length()),
-                      sampleAgeMs,
-                      lastSensorReadSucceeded ? 1U : 0U,
-                      sensor.totalI2cErrorCount(),
-                      sensor.i2cRecoveryCount(),
-                      latestReading.accelMagnitudeG,
-                      latestReading.gyroMagnitudeDegPerSec);
-      } else {
-        AppLog::infof("[telemetry] publish ok topic=%s bytes=%u sample_age_ms=%lu sensor_valid=0 sensor_read_ok=%u i2c_errors=%lu recoveries=%lu last_error=%s\n",
-                      topic.c_str(),
-                      static_cast<unsigned>(payload.length()),
-                      sampleAgeMs,
-                      lastSensorReadSucceeded ? 1U : 0U,
-                      sensor.totalI2cErrorCount(),
-                      sensor.i2cRecoveryCount(),
-                      sensor.lastI2cError());
-      }
+      AppLog::infof("[telemetry] publish ok topic=%s bytes=%u sample_age_ms=%lu sensor_valid=%u sensor_read_ok=%u i2c_errors=%lu recoveries=%lu accel_magnitude=%.2f gyro_magnitude=%.2f\n",
+                    topic.c_str(),
+                    static_cast<unsigned>(payload.length()),
+                    sampleAgeMs,
+                    sensorSampleFresh ? 1U : 0U,
+                    lastSensorReadSucceeded ? 1U : 0U,
+                    sensor.totalI2cErrorCount(),
+                    sensor.i2cRecoveryCount(),
+                    latestReading.accelMagnitudeG,
+                    latestReading.gyroMagnitudeDegPerSec);
     } else {
-      AppLog::warnf("[telemetry] publish failed topic=%s bytes=%u mqtt_state=%d sample_age_ms=%lu sensor_valid=%u\n",
+      AppLog::warnf("[telemetry] skipped reason=publish_failed topic=%s bytes=%u mqtt_state=%d sample_age_ms=%lu sensor_valid=%u\n",
                     topic.c_str(),
                     static_cast<unsigned>(payload.length()),
                     mqttClient.currentStateCode(),
@@ -546,7 +589,8 @@ void logMqttRuntimeContextIfNeeded() {
 }
 
 void logSensorReadOkIfDue(const SensorReading& reading, unsigned long nowMs) {
-  if (!AppConfig::FIRMWARE_SENSOR_HEALTH_LOG_ENABLED) {
+  if (!AppConfig::FIRMWARE_SENSOR_HEALTH_LOG_ENABLED &&
+      !AppConfig::FIRMWARE_SENSOR_DIAGNOSTIC_ENABLED) {
     return;
   }
 
@@ -572,7 +616,8 @@ void logSensorReadOkIfDue(const SensorReading& reading, unsigned long nowMs) {
 }
 
 void logSensorReadFailedIfDue(unsigned long nowMs) {
-  if (!AppConfig::FIRMWARE_SENSOR_HEALTH_LOG_ENABLED) {
+  if (!AppConfig::FIRMWARE_SENSOR_HEALTH_LOG_ENABLED &&
+      !AppConfig::FIRMWARE_SENSOR_DIAGNOSTIC_ENABLED) {
     return;
   }
 
@@ -607,14 +652,19 @@ void logLoopHealthIfDue(unsigned long nowMs) {
       (nowMs - lastTelemetrySentAtMs) >= AppConfig::TELEMETRY_REPORT_INTERVAL_MS;
   const unsigned long sampleAgeMs = latestSensorSampleAgeMs(nowMs);
   const bool sensorSampleFresh = hasFreshSensorSample(nowMs);
-  AppLog::infof("[loop] maintenance_portal_active=%u state=%s wifi_connected=%u mqtt_connected=%u telemetry_due=%u sensor_valid=%u sample_age_ms=%lu i2c_errors=%lu recoveries=%lu\n",
+  const String telemetryTopic = DeviceSettings::buildTopic(runtimeConfig(), "telemetry");
+  AppLog::infof("[loop] maintenance_portal_active=%u state=%s wifi_connected=%u mqtt_connected=%u telemetry_due=%u sensor_ready=%u latest_valid=%u sensor_valid=%u sensor_read_ok=%u sample_age_ms=%lu telemetry_topic=%s i2c_errors=%lu recoveries=%lu\n",
                 setupPortal.isRunning() && !connectivityManager.isSetupMode() ? 1U : 0U,
                 connectivityManager.stateLabel().c_str(),
                 connectivityManager.isWifiConnected() ? 1U : 0U,
                 mqttClient.isConnected() ? 1U : 0U,
                 telemetryDue ? 1U : 0U,
+                sensorReady ? 1U : 0U,
+                latestReading.valid ? 1U : 0U,
                 sensorSampleFresh ? 1U : 0U,
+                lastSensorReadSucceeded ? 1U : 0U,
                 sampleAgeMs,
+                telemetryTopic.c_str(),
                 sensor.totalI2cErrorCount(),
                 sensor.i2cRecoveryCount());
 }
@@ -739,6 +789,15 @@ void setup() {
 
   sensorReady = sensor.begin();
   if (sensorReady) {
+    AppLog::infof("[boot] sensor_begin_ok address=0x%02X who_am_i=0x%02X accel=+-%ug gyro=+-%udps accel_lsb_per_g=%.0f gyro_lsb_per_dps=%.1f calibrated=%u calibration_status=%s sensorReady=1\n",
+                  sensor.activeAddress(),
+                  sensor.whoAmI(),
+                  static_cast<unsigned>(sensor.accelRangeG()),
+                  static_cast<unsigned>(sensor.gyroRangeDegPerSec()),
+                  sensor.accelLsbPerG(),
+                  sensor.gyroLsbPerDegPerSec(),
+                  sensor.accelCalibrationApplied() ? 1U : 0U,
+                  sensor.calibrationStatus());
     AppLog::info("IMU inicializada com sucesso.");
     if (AppConfig::MOTION_TEST_MODE_ENABLED) {
       AppLog::info("Modo de teste MPU6050 + buzzer habilitado.");
@@ -746,8 +805,13 @@ void setup() {
       AppLog::info("Modo de teste MPU6050 + buzzer desabilitado por padrao.");
     }
   } else {
+    AppLog::errorf("[boot] sensor_begin_failed address=0x%02X who_am_i=0x%02X sensorReady=0 last_error=%s\n",
+                   sensor.activeAddress(),
+                   sensor.whoAmI(),
+                   sensor.lastI2cError());
     AppLog::error("Falha ao inicializar a IMU.");
   }
+  AppLog::infof("[boot] sensorReady final=%u\n", sensorReady ? 1U : 0U);
 
   connectivityManager.begin();
   restoreBufferedEventsFromStore();

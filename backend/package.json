@@ -26,7 +26,8 @@
     "stress:alerts": "npm run stress:dry",
     "stress:cleanup": "node scripts/stress/cleanupStressData.js",
     "db:init": "node scripts/initDb.js",
-    "db:migrate:evidence": "node scripts/migrateEvidenceSchema.js"
+    "db:migrate:evidence": "node scripts/migrateEvidenceSchema.js",
+    "db:migrate:sensor-diagnostics": "node scripts/migrateSensorDiagnosticsSchema.js"
   },
   "keywords": [
     "esp32",

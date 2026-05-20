@@ -115,6 +115,16 @@ INSERT INTO device_status (
   wifi_rssi,
   battery_percent,
   firmware_version,
+  sensor_ready,
+  sensor_valid,
+  sensor_read_ok,
+  sensor_sample_age_ms,
+  sensor_failures,
+  i2c_error_count,
+  i2c_recovery_count,
+  i2c_last_error,
+  last_status_topic,
+  last_telemetry_topic,
   last_seen_at
 )
 VALUES (
@@ -126,6 +136,16 @@ VALUES (
   -58,
   86,
   '1.0.0',
+  1,
+  1,
+  1,
+  0,
+  0,
+  0,
+  0,
+  'none',
+  'queda/devices/esp32_01/status',
+  'queda/devices/esp32_01/telemetry',
   UTC_TIMESTAMP()
 );
 

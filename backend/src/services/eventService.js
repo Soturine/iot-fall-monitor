@@ -15,6 +15,7 @@ const FALL_EVIDENCE_WINDOW_BEFORE_MS = 10_000;
 const FALL_EVIDENCE_WINDOW_AFTER_MS = 3_000;
 const FALL_EVIDENCE_MAX_SAMPLES = 30;
 const FALL_EVIDENCE_LINKED_MIN_SAMPLES = 2;
+const TELEMETRY_REQUIRED_NUMERIC_FIELDS = ["ax", "ay", "az", "gx", "gy", "gz"];
 
 function toNullableNumber(value) {
   if (value == null || value === "") {
@@ -28,6 +29,25 @@ function toNullableNumber(value) {
 function toFiniteNumber(value, fallback = 0) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function validateTelemetryPayload(payload = {}) {
+  const missingFields = TELEMETRY_REQUIRED_NUMERIC_FIELDS.filter(
+    (field) => toNullableNumber(payload[field]) == null,
+  );
+  const sensorValid =
+    payload.sensor_valid === undefined ? true : toBoolean(payload.sensor_valid);
+
+  return {
+    valid: sensorValid && missingFields.length === 0,
+    missingFields,
+    sensorValid,
+    reason: !sensorValid
+      ? "sensor_invalid"
+      : missingFields.length
+        ? "missing_sensor_axes"
+        : null,
+  };
 }
 
 function toIso(value) {
@@ -509,6 +529,15 @@ async function recordTelemetryFromMqtt({
   receivedAt = null,
 }, executor = null) {
   const startedAt = process.hrtime.bigint();
+  const validation = validateTelemetryPayload(payload);
+
+  if (!validation.valid) {
+    const error = new Error("Telemetry MQTT sem amostra valida do sensor.");
+    error.code = "INVALID_TELEMETRY_SAMPLE";
+    error.details = validation;
+    throw error;
+  }
+
   const createdAt = resolveMqttPersistenceTime(payload, receivedAt, createdAtOverride);
 
   const result = await execute(
@@ -703,4 +732,5 @@ module.exports = {
   resolveFallTelemetryEvidence,
   shouldCreateAlert,
   shouldCreateAlertForEvent,
+  validateTelemetryPayload,
 };

@@ -105,7 +105,7 @@ O erro serial `requestFrom(): i2cWriteReadNonStop returned Error -1` costuma apa
 - `I2C_READ_RETRY_COUNT = 3`
 - `SENSOR_I2C_RECOVERY_FAILURE_THRESHOLD = 8`
 
-Quando houver falhas consecutivas, o firmware registra um resumo throttled, reinicia o barramento I2C, reconfigura o MPU6050 e nao recalibra em loop. Se o recovery falhar, a ultima amostra valida fica preservada por uma janela curta e a telemetria continua saindo com `sensor_valid=false` quando a amostra estiver stale.
+Quando houver falhas consecutivas, o firmware registra um resumo throttled, reinicia o barramento I2C, reconfigura o MPU6050 e nao recalibra em loop. Se o recovery falhar, a ultima amostra valida fica preservada por uma janela curta. O status MQTT continua levando diagnostico do sensor; a telemetria periodica so e publicada quando houver amostra valida e fresca.
 
 Checklist fisico antes de investigar software:
 
@@ -125,6 +125,8 @@ O firmware agora usa um gating simples de logs em [include/app_config.h](../incl
 - `FIRMWARE_I2C_DEBUG_ENABLED`
 - `FIRMWARE_CONNECTIVITY_DEBUG_ENABLED`
 - `FIRMWARE_EVENT_BUFFER_DEBUG_ENABLED`
+- `FIRMWARE_SENSOR_DIAGNOSTIC_ENABLED`
+- `FIRMWARE_TELEMETRY_DIAGNOSTIC_ENABLED`
 - `SERIAL_SENSOR_DEBUG_ENABLED`
 - `MOTION_TEST_SERIAL_DEBUG_ENABLED`
 
@@ -135,7 +137,9 @@ Na pratica:
 - com `FIRMWARE_CONNECTIVITY_DEBUG_ENABLED = true`, o firmware registra host/porta/clientId MQTT efetivos, topicos de `status`, `telemetry` e `events`, e resultado de publish sem expor senha
 - os logs de saude do sensor mostram faixa efetiva, `lsb_per_g`, raw AX/AY/AZ/GX/GY/GZ, conversao em `g`/`deg/s`, calibracao e magnitude publicada
 - no boot, procure `ready=1 calibrated=0 reason=...` quando a calibracao for pulada; isso ainda e operacional e deve publicar telemetria
+- no boot, procure `[boot] sensor_begin_ok ... sensorReady=1` ou `[boot] sensor_begin_failed ... sensorReady=0`
 - falhas I2C repetidas aparecem como resumo, por exemplo `[sensor] i2c errors summary ...`, e recovery aparece como `[sensor] i2c recovery start`, `[sensor] i2c bus restarted` e `[sensor] recovery ok`
+- quando a telemetria nao for publicada, procure `[telemetry] skipped reason=...`; os motivos esperados sao `mqtt_disconnected`, `sensor_not_ready`, `no_valid_sample`, `stale_sample` e `publish_failed`
 - o `MOTION TEST` continua com flags proprias para bancada, mas agora fica desabilitado por padrao para nao misturar teste de bancada com alarme real
 
 ## Identidade do device e pairing
@@ -272,7 +276,7 @@ O payload real tambem carrega campos tecnicos extras ignorados por clientes anti
 - `i2c_recovery_count`
 - `i2c_last_error`
 
-Esses campos ajudam a diferenciar "ESP32 vivo publicando com ultima amostra conhecida" de "sensor sem leitura valida".
+Esses campos ajudam a diferenciar "ESP32 vivo publicando status" de "sensor sem leitura valida". Payloads diagnosticos sem eixos reais nao devem ser tratados como telemetria real pelo backend.
 
 Para confirmar publicacao real em bancada, rode no notebook:
 
@@ -306,8 +310,8 @@ npm run mqtt:watch --prefix backend
    - `[sensor] calibration ok ...` ou `calibration skipped reason=...`
    - `[sensor] ready=1 calibrated=...`
    - `[sensor] read ok ...`
-   - `[telemetry] publish ok ...` repetindo a cada `TELEMETRY_REPORT_INTERVAL_MS`
-6. Confirme que nao aparece repetidamente `[telemetry] skipped reason=sensor_no_valid_sample ... sensor_ready=0`.
+   - `[telemetry] publish ok ...` repetindo a cada `TELEMETRY_REPORT_INTERVAL_MS` quando houver amostra fresca
+6. Confirme que nao aparece repetidamente `[telemetry] skipped reason=sensor_not_ready`, `no_valid_sample` ou `stale_sample`.
 7. Deixe o ESP32 parado sobre a mesa e confirme `[sensor] read ok ... magnitude=...` perto de `1.00 g`.
 8. Confirme que o Serial nao fica inundado por erro I2C; falhas repetidas devem virar resumo e recovery.
 9. Se ocorrer recovery, procure `[sensor] recovery ok`; se aparecer `recovery failed`, revise o checklist fisico.
@@ -316,8 +320,8 @@ npm run mqtt:watch --prefix backend
 12. Mexa o sensor rapidamente e confirme que a aceleracao sobe temporariamente.
 13. Deixe parado novamente e confirme retorno para perto de `1 g`.
 14. Se aparecer `[telemetry] skipped reason=mqtt_disconnected`, o problema esta no link MQTT/reconnect.
-15. Se aparecer `[telemetry] skipped reason=sensor_no_valid_sample` com `sensor_ready=1`, o problema esta em leitura raw temporaria/I2C apos o boot.
-16. Se aparecer `[telemetry] skipped reason=sensor_no_valid_sample` com `sensor_ready=0`, o firmware nao encontrou o MPU6050 ou nao conseguiu leitura raw basica no boot.
+15. Se aparecer `[telemetry] skipped reason=no_valid_sample` ou `stale_sample` com `sensor_ready=1`, o problema esta em leitura raw temporaria/I2C apos o boot.
+16. Se aparecer `[telemetry] skipped reason=sensor_not_ready`, o firmware nao encontrou o MPU6050 ou nao conseguiu leitura raw basica no boot.
 17. Se o Serial mostrar `publish ok` mas o `mqtt:watch` nao receber, verifique host/porta, broker efetivo, clientId e rede.
 
 ## Buzzer e motion test

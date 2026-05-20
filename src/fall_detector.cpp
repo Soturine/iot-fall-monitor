@@ -23,19 +23,24 @@ FallAlert FallDetector::update(const SensorReading& reading) {
         // Congela a referencia de postura para comparar a mudanca apos o impacto.
         state_ = State::WaitingForOrientationChange;
         stateStartedAtMs_ = nowMs;
+        candidateStartedAtMs_ = nowMs;
         immobileAccumulatedMs_ = 0;
+        samplesConsidered_ = 1;
         referencePitchDeg_ = baselinePitchDeg_;
         referenceRollDeg_ = baselineRollDeg_;
         peakAccelMagnitudeG_ = reading.accelMagnitudeG;
         peakGyroMagnitudeDegPerSec_ = reading.gyroMagnitudeDegPerSec;
+        peakOrientationDeltaDeg_ = 0.0f;
       }
       break;
 
     case State::WaitingForOrientationChange:
       // Guarda os maiores picos para incluir no payload final.
+      ++samplesConsidered_;
       peakAccelMagnitudeG_ = fmaxf(peakAccelMagnitudeG_, reading.accelMagnitudeG);
       peakGyroMagnitudeDegPerSec_ =
           fmaxf(peakGyroMagnitudeDegPerSec_, reading.gyroMagnitudeDegPerSec);
+      peakOrientationDeltaDeg_ = fmaxf(peakOrientationDeltaDeg_, orientationDeltaDeg(reading));
 
       if (orientationDeltaDeg(reading) >= AppConfig::ORIENTATION_CHANGE_THRESHOLD_DEG) {
         state_ = State::WaitingForImmobility;
@@ -48,9 +53,11 @@ FallAlert FallDetector::update(const SensorReading& reading) {
 
     case State::WaitingForImmobility:
       // Uma queda real tende a terminar em um curto periodo de pouca movimentacao.
+      ++samplesConsidered_;
       peakAccelMagnitudeG_ = fmaxf(peakAccelMagnitudeG_, reading.accelMagnitudeG);
       peakGyroMagnitudeDegPerSec_ =
           fmaxf(peakGyroMagnitudeDegPerSec_, reading.gyroMagnitudeDegPerSec);
+      peakOrientationDeltaDeg_ = fmaxf(peakOrientationDeltaDeg_, orientationDeltaDeg(reading));
 
       if (isImmobile(reading)) {
         immobileAccumulatedMs_ += sampleDeltaMs;
@@ -63,6 +70,13 @@ FallAlert FallDetector::update(const SensorReading& reading) {
         alert.immobilityConfirmed = true;
         alert.accelMagnitudeG = peakAccelMagnitudeG_;
         alert.gyroMagnitudeDegPerSec = peakGyroMagnitudeDegPerSec_;
+        alert.orientationDeltaDeg = peakOrientationDeltaDeg_;
+        alert.immobilityDurationMs = immobileAccumulatedMs_;
+        alert.analysisWindowMs =
+            candidateStartedAtMs_ == 0U || nowMs < candidateStartedAtMs_
+                ? 0U
+                : nowMs - candidateStartedAtMs_;
+        alert.samplesConsidered = samplesConsidered_;
         alert.timestampMs = nowMs;
         reset();
       } else if ((nowMs - stateStartedAtMs_) > AppConfig::IMMOBILITY_WINDOW_MS) {
@@ -81,6 +95,9 @@ void FallDetector::reset() {
   immobileAccumulatedMs_ = 0;
   peakAccelMagnitudeG_ = 0.0f;
   peakGyroMagnitudeDegPerSec_ = 0.0f;
+  peakOrientationDeltaDeg_ = 0.0f;
+  candidateStartedAtMs_ = 0;
+  samplesConsidered_ = 0;
 }
 
 bool FallDetector::hasPendingCandidate() const {

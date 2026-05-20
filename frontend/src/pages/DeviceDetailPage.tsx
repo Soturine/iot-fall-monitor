@@ -31,6 +31,9 @@ import type {
   TelemetryRealtimeEvent,
 } from "../types/api";
 
+const MQTT_TOPIC_BASE = "queda/devices";
+const TELEMETRY_STALE_AFTER_MS = 30000;
+
 type EvidenceCarrier = Pick<
   EventRecord,
   | "evidenceStatus"
@@ -90,6 +93,166 @@ function EvidenceSummary({ event }: { event: EvidenceCarrier }) {
           {formatEvidenceNumber(event.evidenceSummary?.maxGyroMagnitude)}
         </p>
       )}
+    </div>
+  );
+}
+
+function formatBooleanDiagnostic(value: boolean | null | undefined) {
+  if (value === true) {
+    return "sim";
+  }
+
+  if (value === false) {
+    return "nao";
+  }
+
+  return "--";
+}
+
+function formatNumberDiagnostic(value: number | null | undefined, suffix = "") {
+  return typeof value === "number" && Number.isFinite(value)
+    ? `${value}${suffix}`
+    : "--";
+}
+
+function formatTopicValue(value: string | null | undefined) {
+  return value || "--";
+}
+
+function ageMs(value?: string | null) {
+  if (!value) {
+    return null;
+  }
+
+  const timestamp = new Date(value).getTime();
+  if (!Number.isFinite(timestamp)) {
+    return null;
+  }
+
+  return Date.now() - timestamp;
+}
+
+function expectedTopic(deviceIdentifier: string, channel: "status" | "telemetry" | "events") {
+  return `${MQTT_TOPIC_BASE}/${deviceIdentifier}/${channel}`;
+}
+
+function classifyCurrentState(
+  detail: DeviceDetailResponse,
+  latestTelemetry: DeviceDetailResponse["recentTelemetry"][number] | undefined,
+) {
+  const status = detail.device.status;
+  const telemetryAt = status.lastTelemetryAt || latestTelemetry?.createdAt || null;
+  const telemetryAgeMs = ageMs(telemetryAt);
+  const telemetryStale =
+    telemetryAgeMs == null || telemetryAgeMs > TELEMETRY_STALE_AFTER_MS;
+
+  if (status.online && status.sensorReady === false) {
+    return {
+      label: "Sensor sem leitura valida",
+      tone: "danger",
+      reason: "O device esta online, mas o firmware marcou sensor_ready=0.",
+    };
+  }
+
+  if (status.online && status.sensorValid === false) {
+    return {
+      label: "Sensor sem leitura valida",
+      tone: "warning",
+      reason: "O status MQTT chegou, mas a ultima amostra do MPU6050 nao esta valida.",
+    };
+  }
+
+  if (status.online && !latestTelemetry) {
+    return {
+      label: "Dispositivo online sem telemetry",
+      tone: "warning",
+      reason: "Ha status recente, mas ainda nao ha amostra valida em telemetry_logs.",
+    };
+  }
+
+  if (latestTelemetry && telemetryStale) {
+    return {
+      label: "Telemetria desatualizada",
+      tone: "warning",
+      reason: "A ultima amostra existe, mas esta fora da janela esperada para bancada.",
+    };
+  }
+
+  if (!latestTelemetry || detail.recentTelemetry.length < 4) {
+    return {
+      label: "Sem telemetria suficiente",
+      tone: "neutral",
+      reason: "A classificacao precisa de mais amostras recentes para ganhar estabilidade.",
+    };
+  }
+
+  if (detail.device.behavior.state === "queda_confirmada") {
+    return {
+      label: "Queda confirmada",
+      tone: "danger",
+      reason: detail.device.behavior.reason,
+    };
+  }
+
+  if (detail.device.behavior.state === "queda_suspeita") {
+    return {
+      label: "Possivel queda",
+      tone: "warning",
+      reason: detail.device.behavior.reason,
+    };
+  }
+
+  if (detail.device.behavior.state === "em_movimento") {
+    const accelDelta =
+      typeof latestTelemetry.accelMagnitude === "number"
+        ? Math.abs(latestTelemetry.accelMagnitude - 1)
+        : 0;
+    const gyroMagnitude = latestTelemetry.gyroMagnitude || 0;
+    const intense = accelDelta >= 0.45 || gyroMagnitude >= 80;
+
+    return {
+      label: intense ? "Movimento intenso" : "Movimento leve",
+      tone: "info",
+      reason: detail.device.behavior.reason,
+    };
+  }
+
+  if (["em_reposo", "deitado", "sentado"].includes(detail.device.behavior.state)) {
+    return {
+      label: "Repouso provavel",
+      tone: "success",
+      reason: detail.device.behavior.reason,
+    };
+  }
+
+  return {
+    label: "Sem telemetria suficiente",
+    tone: "neutral",
+    reason: detail.device.behavior.reason,
+  };
+}
+
+function DiagnosticMetric({
+  label,
+  value,
+  mono = false,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
+  return (
+    <div className="rounded-2xl border border-surface-100 bg-white p-3">
+      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-surface-500">
+        {label}
+      </p>
+      <p
+        className={`mt-1 break-words text-sm font-semibold text-surface-900 ${
+          mono ? "font-mono text-xs" : ""
+        }`}
+      >
+        {value}
+      </p>
     </div>
   );
 }
@@ -194,6 +357,18 @@ export function DeviceDetailPage() {
   }
 
   const latestTelemetry = detail.recentTelemetry.at(-1);
+  const latestEvent = detail.recentEvents[0];
+  const currentState = classifyCurrentState(detail, latestTelemetry);
+  const statusTopic = expectedTopic(detail.device.deviceIdentifier, "status");
+  const telemetryTopic = expectedTopic(detail.device.deviceIdentifier, "telemetry");
+  const eventsTopic = expectedTopic(detail.device.deviceIdentifier, "events");
+  const lastTelemetryAt = detail.device.status.lastTelemetryAt || latestTelemetry?.createdAt || null;
+  const lastEventAt = detail.device.status.lastEventAt || latestEvent?.eventTime || null;
+  const telemetryAge = ageMs(lastTelemetryAt);
+  const telemetryIsStale =
+    telemetryAge == null || telemetryAge > TELEMETRY_STALE_AFTER_MS;
+  const onlineWithoutTelemetry = detail.device.status.online && !latestTelemetry;
+  const onlineWithStaleTelemetry = detail.device.status.online && telemetryIsStale;
   const activeAlerts = detail.recentAlerts.filter((alert) =>
     ["open", "acknowledged"].includes(alert.status),
   );
@@ -309,6 +484,119 @@ export function DeviceDetailPage() {
         </p>
       </Card>
 
+      <Card>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.28em] text-surface-500">
+              Diagnostico de telemetria
+            </p>
+            <h3 className="mt-2 font-display text-2xl text-surface-900">
+              Status MQTT separado de amostra valida do sensor
+            </h3>
+            <p className="mt-2 max-w-3xl text-sm text-surface-600">
+              O estado online vem de status/contato MQTT. O grafico so anda quando o backend
+              recebe telemetry com eixos reais do MPU6050.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Badge tone={detail.device.status.online ? "success" : "warning"} dot>
+              {detail.device.status.online ? "Device online" : "Device offline"}
+            </Badge>
+            <Badge tone={isConnected ? "success" : "warning"} dot>
+              {isConnected ? "Socket conectado" : "Socket desconectado"}
+            </Badge>
+            <Badge tone={currentState.tone as never}>{currentState.label}</Badge>
+          </div>
+        </div>
+
+        {(onlineWithoutTelemetry || onlineWithStaleTelemetry || detail.device.status.sensorValid === false) ? (
+          <div className="mt-5 grid gap-3">
+            {onlineWithoutTelemetry || onlineWithStaleTelemetry ? (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
+                Dispositivo online, mas sem telemetria recente. Verifique se o ESP32 esta
+                publicando no topico telemetry, se o MPU6050 esta gerando leitura valida e
+                se o broker/IP esta correto.
+              </div>
+            ) : null}
+            {detail.device.status.sensorValid === false ? (
+              <div className="rounded-2xl border border-danger-100 bg-danger-50 px-4 py-3 text-sm font-medium text-danger-700">
+                O ultimo status informou sensor_valid=0. O problema mais provavel esta no
+                MPU6050, barramento I2C ou idade da ultima amostra.
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <DiagnosticMetric
+            label="Ultimo status"
+            value={formatRelativeTime(detail.device.status.lastSeenAt)}
+          />
+          <DiagnosticMetric
+            label="Ultima telemetria"
+            value={lastTelemetryAt ? formatRelativeTime(lastTelemetryAt) : "Sem amostra real"}
+          />
+          <DiagnosticMetric
+            label="Ultimo evento"
+            value={lastEventAt ? formatRelativeTime(lastEventAt) : "Sem evento recente"}
+          />
+          <DiagnosticMetric
+            label="Socket painel"
+            value={humanizeRealtimePhase(connectionPhase)}
+          />
+        </div>
+
+        <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <DiagnosticMetric label="Topico status esperado" value={statusTopic} mono />
+          <DiagnosticMetric label="Topico telemetry esperado" value={telemetryTopic} mono />
+          <DiagnosticMetric label="Topico events esperado" value={eventsTopic} mono />
+          <DiagnosticMetric
+            label="Status observado"
+            value={formatTopicValue(detail.device.status.lastStatusTopic)}
+            mono
+          />
+          <DiagnosticMetric
+            label="Telemetry observado"
+            value={formatTopicValue(detail.device.status.lastTelemetryTopic)}
+            mono
+          />
+          <DiagnosticMetric
+            label="Events observado"
+            value={formatTopicValue(detail.device.status.lastEventTopic)}
+            mono
+          />
+        </div>
+
+        <div className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <DiagnosticMetric label="device_uid" value={detail.device.deviceUid} mono />
+          <DiagnosticMetric label="device_identifier" value={detail.device.deviceIdentifier} mono />
+          <DiagnosticMetric
+            label="sensor_ready"
+            value={formatBooleanDiagnostic(detail.device.status.sensorReady)}
+          />
+          <DiagnosticMetric
+            label="sensor_valid"
+            value={formatBooleanDiagnostic(detail.device.status.sensorValid)}
+          />
+          <DiagnosticMetric
+            label="sensor_read_ok"
+            value={formatBooleanDiagnostic(detail.device.status.sensorReadOk)}
+          />
+          <DiagnosticMetric
+            label="sample_age_ms"
+            value={formatNumberDiagnostic(detail.device.status.sensorSampleAgeMs)}
+          />
+          <DiagnosticMetric
+            label="i2c_last_error"
+            value={detail.device.status.i2cLastError || "--"}
+          />
+          <DiagnosticMetric
+            label="i2c counters"
+            value={`${formatNumberDiagnostic(detail.device.status.i2cErrorCount)} erros / ${formatNumberDiagnostic(detail.device.status.i2cRecoveryCount)} recoveries`}
+          />
+        </div>
+      </Card>
+
       <section className="grid gap-6 xl:grid-cols-[1.35fr_0.95fr]">
         <Card>
           <div className="flex items-center justify-between gap-3">
@@ -340,13 +628,13 @@ export function DeviceDetailPage() {
                 Estado atual
               </p>
               <p className="mt-2 text-sm font-semibold text-surface-900">
-                {humanizeDeviceBehaviorState(detail.device.behavior.state)}
+                {currentState.label}
               </p>
               <p className="mt-1 text-xs text-surface-600">
                 Confianca {humanizeDeviceBehaviorConfidence(detail.device.behavior.confidence)} -
                 heuristica experimental
               </p>
-              <p className="mt-2 text-xs text-surface-500">{detail.device.behavior.reason}</p>
+              <p className="mt-2 text-xs text-surface-500">{currentState.reason}</p>
             </div>
             <div className="rounded-[24px] bg-surface-50 p-4">
               <p className="text-xs font-bold uppercase tracking-[0.24em] text-surface-500">

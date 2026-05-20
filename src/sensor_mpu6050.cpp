@@ -38,6 +38,9 @@ constexpr uint8_t kRegisterIoAttempts = 3;
 constexpr float kDefaultAccelLsbPerG = 4096.0f;
 constexpr float kDefaultGyroLsbPerDegPerSec = 65.5f;
 constexpr const char* kI2cErrorNone = "none";
+constexpr const char* kI2cErrorWhoAmIReadFailed = "who_am_i_read_failed";
+constexpr const char* kI2cErrorWhoAmIIncompatible = "who_am_i_incompatible";
+constexpr const char* kI2cErrorRawReadFailed = "raw_read_failed";
 constexpr const char* kI2cErrorReadFailed = "i2c_read_failed";
 constexpr const char* kI2cErrorRecoveryFailed = "i2c_recovery_failed";
 
@@ -387,11 +390,13 @@ bool SensorMPU6050::begin(TwoWire& wire, uint8_t address) {
       printProbeDetails(*wire_, address_);
 
       if (!readRegisterWithRetry(*wire_, address_, kRegisterWhoAmI, whoAmI_, "WHO_AM_I")) {
+        lastI2cError_ = kI2cErrorWhoAmIReadFailed;
         AppLog::error("[sensor] ready=0 reason=who_am_i_read_failed");
         ready_ = false;
         return false;
       }
     } else {
+      lastI2cError_ = kI2cErrorWhoAmIReadFailed;
       AppLog::error("[sensor] ready=0 reason=who_am_i_read_failed");
       ready_ = false;
       return false;
@@ -399,6 +404,7 @@ bool SensorMPU6050::begin(TwoWire& wire, uint8_t address) {
   }
 
   if (whoAmI_ != kMpu6050WhoAmIValue && whoAmI_ != kMpu6500WhoAmIValue) {
+    lastI2cError_ = kI2cErrorWhoAmIIncompatible;
     AppLog::errorf("[sensor] ready=0 reason=who_am_i_incompatible value=0x%02X\n", whoAmI_);
     ready_ = false;
     return false;
@@ -422,6 +428,7 @@ bool SensorMPU6050::begin(TwoWire& wire, uint8_t address) {
   int16_t rawGyroZ = 0;
 
   if (!readRawSample(rawAccelX, rawAccelY, rawAccelZ, rawGyroX, rawGyroY, rawGyroZ)) {
+    lastI2cError_ = kI2cErrorRawReadFailed;
     AppLog::error("[sensor] ready=0 reason=raw_read_failed_after_begin");
     ready_ = false;
     return false;
@@ -851,6 +858,38 @@ unsigned long SensorMPU6050::i2cRecoveryCount() const {
 
 const char* SensorMPU6050::lastI2cError() const {
   return lastI2cError_;
+}
+
+uint8_t SensorMPU6050::activeAddress() const {
+  return address_;
+}
+
+uint8_t SensorMPU6050::whoAmI() const {
+  return whoAmI_;
+}
+
+uint8_t SensorMPU6050::accelRangeG() const {
+  return accelRangeG_;
+}
+
+uint16_t SensorMPU6050::gyroRangeDegPerSec() const {
+  return gyroRangeDegPerSec_;
+}
+
+float SensorMPU6050::accelLsbPerG() const {
+  return accelLsbPerG_;
+}
+
+float SensorMPU6050::gyroLsbPerDegPerSec() const {
+  return gyroLsbPerDegPerSec_;
+}
+
+bool SensorMPU6050::accelCalibrationApplied() const {
+  return accelCalibrationApplied_;
+}
+
+const char* SensorMPU6050::calibrationStatus() const {
+  return calibrationStatus_;
 }
 
 void SensorMPU6050::logI2cErrorSummaryIfDue(unsigned long nowMs) {

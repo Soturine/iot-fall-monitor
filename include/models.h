@@ -28,6 +28,11 @@ struct FallAlert {
   bool immobilityConfirmed = false;
   float accelMagnitudeG = 0.0f;
   float gyroMagnitudeDegPerSec = 0.0f;
+  float orientationDeltaDeg = 0.0f;
+  unsigned long analysisWindowMs = 0;
+  unsigned long immobilityDurationMs = 0;
+  unsigned int samplesConsidered = 0;
+  const char* reason = "impact_orientation_immobility";
   unsigned long timestampMs = 0;
 };
 

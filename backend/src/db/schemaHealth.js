@@ -6,6 +6,19 @@ const REQUIRED_RUNTIME_SCHEMA = [
   { tableName: "events", columnName: "evidence_sample_count" },
   { tableName: "events", columnName: "evidence_window_seconds" },
   { tableName: "events", columnName: "evidence_summary_json" },
+  { tableName: "device_status", columnName: "sensor_ready" },
+  { tableName: "device_status", columnName: "sensor_valid" },
+  { tableName: "device_status", columnName: "sensor_read_ok" },
+  { tableName: "device_status", columnName: "sensor_sample_age_ms" },
+  { tableName: "device_status", columnName: "sensor_failures" },
+  { tableName: "device_status", columnName: "i2c_error_count" },
+  { tableName: "device_status", columnName: "i2c_recovery_count" },
+  { tableName: "device_status", columnName: "i2c_last_error" },
+  { tableName: "device_status", columnName: "last_status_topic" },
+  { tableName: "device_status", columnName: "last_telemetry_topic" },
+  { tableName: "device_status", columnName: "last_event_topic" },
+  { tableName: "device_status", columnName: "last_telemetry_at" },
+  { tableName: "device_status", columnName: "last_event_at" },
 ];
 
 async function tableExists(tableName) {

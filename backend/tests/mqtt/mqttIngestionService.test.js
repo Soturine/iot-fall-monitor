@@ -111,6 +111,27 @@ function buildHarness(options = {}) {
     },
   };
   const fakeEventService = {
+    validateTelemetryPayload: (payload) => {
+      const requiredFields = ["ax", "ay", "az", "gx", "gy", "gz"];
+      const missingFields = requiredFields.filter((field) => {
+        const parsed = Number(payload[field]);
+        return !Number.isFinite(parsed);
+      });
+      const sensorValid = payload.sensor_valid === undefined
+        ? true
+        : payload.sensor_valid === true || payload.sensor_valid === 1 || payload.sensor_valid === "true";
+
+      return {
+        valid: sensorValid && missingFields.length === 0,
+        missingFields,
+        sensorValid,
+        reason: !sensorValid
+          ? "sensor_invalid"
+          : missingFields.length
+            ? "missing_sensor_axes"
+            : null,
+      };
+    },
     recordEventFromMqtt: async ({ payload, eventTime, receivedAt }) => {
       calls.events.push({ payload, eventTime, receivedAt });
       const eventType = payload.event_type || "device_event";
@@ -271,6 +292,9 @@ test("telemetry grava amostra, atualiza status e emite telemetry:new", async () 
         ax: 0.04,
         ay: -0.02,
         az: 0.98,
+        gx: 5.2,
+        gy: -1.1,
+        gz: 3.6,
         accel_magnitude: 0.98,
         gyro_magnitude: 6.4,
       }),
@@ -340,6 +364,9 @@ test("timestamp absurdo usa fallback do backend e loga diagnostico", async () =>
         ax: 0,
         ay: 0,
         az: 1,
+        gx: 0,
+        gy: 0,
+        gz: 0,
       }),
       io: {},
     });
@@ -365,6 +392,9 @@ test("timestamp plausivel mas stale nao derruba status realtime para offline", a
         ax: 0,
         ay: 0,
         az: 1,
+        gx: 0,
+        gy: 0,
+        gz: 0,
       }),
       io: {},
     });
@@ -394,6 +424,9 @@ test("device sem organizacao nao vaza realtime tenant indevido", async () => {
         ax: 0,
         ay: 0,
         az: 1,
+        gx: 0,
+        gy: 0,
+        gz: 0,
       }),
       io: {},
     });
@@ -402,6 +435,35 @@ test("device sem organizacao nao vaza realtime tenant indevido", async () => {
     assert.ok(
       calls.logs.some(
         (entry) => entry.metadata?.reason === "device_without_organization_scope",
+      ),
+    );
+  });
+});
+
+test("telemetry sem amostra valida atualiza status mas nao grava telemetry_logs", async () => {
+  await withHarness({}, async ({ calls, handleMqttMessage }) => {
+    await handleMqttMessage({
+      topicInfo: topicInfo("telemetry"),
+      payloadText: JSON.stringify({
+        device_id: "esp32_01",
+        device_uid: "legacy:esp32_01",
+        timestamp: Math.floor(Date.now() / 1000),
+        sensor_ready: true,
+        sensor_valid: false,
+        sensor_read_ok: false,
+        sensor_sample_age_ms: 0,
+        i2c_last_error: "raw_read_failed",
+      }),
+      io: {},
+    });
+
+    assert.equal(calls.telemetry.length, 0);
+    assert.equal(calls.status.length, 1);
+    assert.equal(calls.emits.length, 1);
+    assert.equal(calls.emits[0].eventName, "device:status");
+    assert.ok(
+      calls.logs.some(
+        (entry) => entry.metadata?.validation?.reason === "sensor_invalid",
       ),
     );
   });

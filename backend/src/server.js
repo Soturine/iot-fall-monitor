@@ -16,7 +16,7 @@ async function startServer() {
   if (!schemaHealth.ok) {
     logger.error("Schema do banco parece desatualizado para o fluxo atual.", {
       missing: schemaHealth.missing,
-      recommendation: "Execute npm run db:migrate:evidence --prefix backend e reinicie o backend.",
+      recommendation: "Execute npm run db:migrate:evidence --prefix backend, depois npm run db:migrate:sensor-diagnostics --prefix backend, e reinicie o backend.",
     });
   }
 

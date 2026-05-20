@@ -381,6 +381,7 @@ Importante:
 - `npm run mqtt:publish:test`: publica status/telemetria de teste no contrato esperado pelo backend
 - `npm run db:init`: aplica schema e seed usando `mysql2` e o `backend/.env`
 - `npm run db:migrate:evidence`: aplica colunas/tabela de evidencia sem resetar dados existentes
+- `npm run db:migrate:sensor-diagnostics`: aplica colunas de diagnostico do sensor em `device_status` sem resetar dados existentes
 
 O smoke test da raiz passou a validar tambem `GET /api/organization` e `GET /api/patients`, usando o `activeOrganizationId` retornado no login para montar o header `X-Organization-Id`.
 

@@ -168,13 +168,14 @@ npm run test:mqtt --prefix backend
 npm run stress:dry --prefix backend
 npm run stress:real --prefix backend
 npm run db:migrate:evidence --prefix backend
+npm run db:migrate:sensor-diagnostics --prefix backend
 npm run mqtt:watch --prefix backend
 npm run mqtt:publish:test --prefix backend
 ```
 
 `stress:dry` usa mocks locais para regressão rápida. `stress:real` valida backend `/health`, broker MQTT e MySQL de desenvolvimento antes de publicar MQTT real. Os logs ficam em `backend/logs/stress/` (`*.jsonl`, `summary-*.json`, `failures-*.json`, `report-*.md`) e sao ignorados pelo Git.
 
-`db:migrate:evidence` aplica apenas a migração idempotente das colunas/tabela de evidência sem resetar dados. `mqtt:watch` assina os tópicos reais `queda/devices/+/status`, `telemetry` e `events` para confirmar se o ESP32 está publicando. `mqtt:publish:test` publica status e telemetria válidos no mesmo contrato do firmware, útil para testar backend/dashboard sem hardware.
+`db:migrate:evidence` aplica apenas a migração idempotente das colunas/tabela de evidência sem resetar dados. `db:migrate:sensor-diagnostics` adiciona os campos de saúde do sensor em `device_status` sem reset destrutivo. `mqtt:watch` assina os tópicos reais `queda/devices/+/status`, `telemetry` e `events` para confirmar se o ESP32 está publicando. `mqtt:publish:test` publica status e telemetria válidos no mesmo contrato do firmware, útil para testar backend/dashboard sem hardware.
 
 Para validar telemetria real do ESP32, deixe `mqtt:watch` aberto, reinicie a placa e acompanhe o Serial Monitor. O funcionamento esperado mostra `[mqtt] connected`, `[sensor] read ok`, `[telemetry] publish ok` repetindo no intervalo configurado e linhas novas em `queda/devices/esp32_01/telemetry`. Telemetria simulada vem do `clientId` de teste e serve para validar backend/frontend; telemetria real deve vir do `clientId` configurado no ESP32, como `esp32_01_client`.
 
@@ -182,7 +183,7 @@ No frontend, o grafico principal de `Sinais recentes do sensor` mostra `Acelerac
 
 Para validar a escala fisica do MPU6050, deixe o ESP32 parado sobre a mesa ao reiniciar. O Serial Monitor deve mostrar a faixa efetiva (`accel=+-2g`, `+-4g`, `+-8g` ou `+-16g`), o divisor `lsb_per_g` usado e leituras convertidas com `accel_magnitude` perto de `1.00 g` em repouso. Se aparecer algo perto de `4 g`, ha erro de escala ou movimento durante a calibracao.
 
-Se a calibracao ou o readback de escala falhar, o firmware deve continuar publicando telemetria com fallback: procure `ready=1`, `calibrated=0` e `continuing_without_offsets` no Serial Monitor. `sensor_no_valid_sample` com `sensor_ready=0` deve ocorrer apenas se o MPU6050 nao for encontrado ou se a leitura raw I2C falhar.
+Se a calibracao ou o readback de escala falhar, o firmware deve continuar operando com fallback: procure `ready=1`, `calibrated=0` e `continuing_without_offsets` no Serial Monitor. Se nao houver amostra valida, o `status` continua saindo com diagnostico e a telemetria e pulada com motivo claro, como `sensor_not_ready`, `no_valid_sample` ou `stale_sample`.
 
 Se aparecer erro repetido do Wire como `i2cWriteReadNonStop returned Error -1`, valide primeiro o hardware do barramento: GND comum, VCC correto no modulo, SDA/SCL nos pinos configurados, fios curtos, contato da protoboard e alimentacao estavel. A build atual usa `I2C_CLOCK_HZ = 100000`, `I2C_USE_REPEATED_START = false`, retry curto e recovery do barramento para reduzir falhas transitórias sem travar Wi-Fi/MQTT.
 
@@ -340,6 +341,7 @@ O frontend exibe esse status de forma discreta no dashboard, na lista de disposi
 - [docs/integration.md](docs/integration.md): integração entre firmware, backend, banco, MQTT, pareamento e tempo real.
 - [docs/alerting-architecture.md](docs/alerting-architecture.md): fluxo real de queda/SOS, persistencia, realtime, testes e stress.
 - [docs/firmware-hardware.md](docs/firmware-hardware.md): hardware, pinagem, portal local, payloads, calibração, buzzer e bancada.
+- [docs/fall-calibration-roadmap.md](docs/fall-calibration-roadmap.md): proposta segura para FFT, labels de movimento e calibração futura por SOS.
 - [docs/quickstart-windows.md](docs/quickstart-windows.md): guia operacional para Windows.
 - [docs/commit-guidelines.md](docs/commit-guidelines.md): padrão de commits do repositório.
 - [docs/release-rules.md](docs/release-rules.md): regras de changelog e versionamento.

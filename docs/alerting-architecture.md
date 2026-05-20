@@ -91,7 +91,7 @@ Campos usados:
 }
 ```
 
-Telemetria atualiza `device_status`, grava `telemetry_logs` e emite `telemetry:new`. Ela nao cria alerta por si so.
+Telemetria valida atualiza `device_status`, grava `telemetry_logs` e emite `telemetry:new`. Para ser considerada amostra real, o payload precisa trazer `ax`, `ay`, `az`, `gx`, `gy` e `gz` numericos e nao pode vir com `sensor_valid=false`. Payload diagnostico sem amostra real atualiza apenas a saude do device e nao cria linha em `telemetry_logs`.
 Para queda, essas amostras tambem viram evidencia tecnica consultavel quando o evento `fall_detected` chega perto no tempo.
 
 ### Events
@@ -105,6 +105,17 @@ Para queda, essas amostras tambem viram evidencia tecnica consultavel quando o e
   "accel_magnitude": 3.74,
   "gyro_magnitude": 182.5,
   "immobility_confirmed": true,
+  "decision_source": "firmware",
+  "fall_reason": "impact_orientation_immobility",
+  "features": {
+    "peak_accel_magnitude_g": 3.74,
+    "peak_gyro_magnitude_dps": 182.5,
+    "orientation_delta_deg": 58.2,
+    "immobility_confirmed": true,
+    "immobility_duration_ms": 2100,
+    "analysis_window_ms": 3600,
+    "samples_considered": 72
+  },
   "battery_level": 86
 }
 ```
@@ -199,6 +210,8 @@ O evento recebe:
 - `evidenceSampleCount`: quantidade de amostras relacionadas
 - `evidenceWindowSeconds`: intervalo entre primeira e ultima amostra vinculada
 - `evidenceSummary`: pico de aceleracao, pico de giro, imobilidade confirmada, primeira e ultima amostra
+
+O payload bruto do firmware tambem fica preservado em `raw_payload_json`, incluindo `decision_source`, `fall_reason`, `features`, thresholds e demais campos enviados. O `evidenceSummary` do backend continua sendo o resumo das amostras realmente persistidas em `telemetry_logs`, evitando duplicar a decisao do firmware.
 
 A tabela `event_telemetry_evidence` guarda as amostras relacionadas com `relative_ms` e `role` (`nearest`, `peak`, `before_peak`, `after_peak`). Isso mantem compatibilidade com eventos antigos: se nao houver evidencia, os campos ficam nulos/default e a API devolve `evidenceStatus=none`.
 

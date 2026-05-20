@@ -32,8 +32,11 @@ class FallDetector {
   float referenceRollDeg_ = 0.0f;
   float peakAccelMagnitudeG_ = 0.0f;
   float peakGyroMagnitudeDegPerSec_ = 0.0f;
+  float peakOrientationDeltaDeg_ = 0.0f;
 
   unsigned long stateStartedAtMs_ = 0;
+  unsigned long candidateStartedAtMs_ = 0;
   unsigned long lastSampleAtMs_ = 0;
   unsigned long immobileAccumulatedMs_ = 0;
+  unsigned int samplesConsidered_ = 0;
 };

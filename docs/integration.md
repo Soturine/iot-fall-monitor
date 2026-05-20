@@ -134,7 +134,7 @@ O firmware converte raw do MPU6050 usando a faixa efetiva lida em `ACCEL_CONFIG`
 
 Falhas de readback ou calibracao nao devem interromper o contrato MQTT: o firmware usa fallback de escala, segue sem offsets quando necessario e publica telemetria se a leitura raw I2C estiver funcionando.
 
-Falhas transitórias de I2C tambem nao devem derrubar Wi-Fi/MQTT. O firmware publica diagnosticos extras nos payloads reais (`sensor_ready`, `sensor_valid`, `sensor_read_ok`, `sensor_sample_age_ms`, `sensor_failures`, `i2c_error_count`, `i2c_recovery_count`, `i2c_last_error`). Quando a ultima amostra fica velha demais, a telemetria pode sair com `sensor_valid=false` e sem valores numericos novos do sensor; o backend aceita esses campos extras e clientes antigos podem ignora-los.
+Falhas transitórias de I2C tambem nao devem derrubar Wi-Fi/MQTT. O firmware publica diagnosticos extras em `status` e, quando houver amostra real, tambem em `telemetry` (`sensor_ready`, `sensor_valid`, `sensor_read_ok`, `sensor_sample_age_ms`, `sensor_failures`, `i2c_error_count`, `i2c_recovery_count`, `i2c_last_error`). Quando a ultima amostra fica velha demais, o firmware mantem `status` com diagnostico e pula `telemetry`; o backend tambem rejeita payloads de `telemetry` sem eixos reais para nao criar `telemetry_logs` invalidos.
 
 ### Visualizacao da telemetria no frontend
 

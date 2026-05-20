@@ -52,6 +52,14 @@ function buildStatus(options) {
     wifi_rssi: -58,
     battery_percent: 86,
     firmware_version: "mqtt-publish-test",
+    sensor_ready: true,
+    sensor_valid: true,
+    sensor_read_ok: true,
+    sensor_sample_age_ms: 0,
+    sensor_failures: 0,
+    i2c_error_count: 0,
+    i2c_recovery_count: 0,
+    i2c_last_error: "none",
     timestamp: nowSeconds(),
   };
 }
@@ -77,6 +85,14 @@ function buildTelemetry(options, index) {
     roll_deg: -0.8,
     wifi_rssi: -58,
     battery_percent: 86,
+    sensor_ready: true,
+    sensor_valid: true,
+    sensor_read_ok: true,
+    sensor_sample_age_ms: 0,
+    sensor_failures: 0,
+    i2c_error_count: 0,
+    i2c_recovery_count: 0,
+    i2c_last_error: "none",
     timestamp: nowSeconds(),
   };
 }

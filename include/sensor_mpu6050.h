@@ -17,6 +17,14 @@ class SensorMPU6050 {
   unsigned long totalI2cErrorCount() const;
   unsigned long i2cRecoveryCount() const;
   const char* lastI2cError() const;
+  uint8_t activeAddress() const;
+  uint8_t whoAmI() const;
+  uint8_t accelRangeG() const;
+  uint16_t gyroRangeDegPerSec() const;
+  float accelLsbPerG() const;
+  float gyroLsbPerDegPerSec() const;
+  bool accelCalibrationApplied() const;
+  const char* calibrationStatus() const;
 
  private:
   void applyLowPass(float rawAccelX,

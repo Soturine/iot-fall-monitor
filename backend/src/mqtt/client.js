@@ -31,6 +31,8 @@ function buildClientOptions() {
     reconnectPeriod: env.mqtt.reconnectPeriodMs,
     connectTimeout: env.mqtt.connectTimeoutMs,
     keepalive: env.mqtt.keepaliveSeconds,
+    reschedulePings: true,
+    resubscribe: true,
     clean: true,
   };
 
@@ -108,6 +110,15 @@ function createMqttBridge({ io }) {
 
   client.on("offline", () => {
     logger.warn("Cliente MQTT ficou offline.");
+  });
+
+  client.on("close", () => {
+    logger.warn("Conexao MQTT do backend fechada.", {
+      brokerUrl: env.mqtt.brokerUrl,
+      clientId: env.mqtt.clientId,
+      reconnectPeriodMs: env.mqtt.reconnectPeriodMs,
+      keepaliveSeconds: env.mqtt.keepaliveSeconds,
+    });
   });
 
   client.on("error", (error) => {

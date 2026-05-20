@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+### Alterado
+- firmware passa a publicar `telemetry` periodica somente quando ha amostra valida e fresca do MPU6050; status continua carregando diagnostico do sensor
+- backend passa a rejeitar payloads `telemetry` sem eixos reais (`ax`, `ay`, `az`, `gx`, `gy`, `gz`) ou com `sensor_valid=false`, sem criar `telemetry_logs` invalidos
+- detalhe do dispositivo passa a mostrar diagnostico de telemetria, topicos esperados/observados, saude do sensor e alerta de device online sem telemetria recente
+
+### Adicionado
+- migracao idempotente `npm run db:migrate:sensor-diagnostics --prefix backend` para colunas de saude do sensor em `device_status`
+- payload `fall_detected` do firmware agora inclui features estruturadas da decisao local, preservadas em `raw_payload_json`
+
 ## [v0.8.22] - 2026-05-14
 ### Corrigido
 - leitura I2C do MPU6050 ficou mais tolerante a falhas transitórias no ESP32 real, evitando que erros `i2cWriteReadNonStop returned Error -1` inundem o Serial Monitor ou interrompam telemetria MQTT

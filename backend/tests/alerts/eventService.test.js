@@ -6,6 +6,7 @@ const {
   deriveSeverity,
   shouldCreateAlert,
   shouldCreateAlertForEvent,
+  validateTelemetryPayload,
 } = require("../../src/services/eventService");
 
 test("deriveSeverity classifica eventos criticos de queda e SOS", () => {
@@ -93,4 +94,35 @@ test("buildTelemetryEvidence marca queda sem amostras como none", () => {
   assert.equal(evidence.status, "none");
   assert.equal(evidence.telemetryId, null);
   assert.equal(evidence.sampleCount, 0);
+});
+
+test("validateTelemetryPayload exige eixos reais e sensor valido", () => {
+  assert.equal(
+    validateTelemetryPayload({
+      ax: 0,
+      ay: 0,
+      az: 1,
+      gx: 0,
+      gy: 0,
+      gz: 0,
+      sensor_valid: true,
+    }).valid,
+    true,
+  );
+
+  const missingAxes = validateTelemetryPayload({ ax: 0, ay: 0, az: 1 });
+  assert.equal(missingAxes.valid, false);
+  assert.equal(missingAxes.reason, "missing_sensor_axes");
+
+  const invalidSensor = validateTelemetryPayload({
+    ax: 0,
+    ay: 0,
+    az: 1,
+    gx: 0,
+    gy: 0,
+    gz: 0,
+    sensor_valid: false,
+  });
+  assert.equal(invalidSensor.valid, false);
+  assert.equal(invalidSensor.reason, "sensor_invalid");
 });

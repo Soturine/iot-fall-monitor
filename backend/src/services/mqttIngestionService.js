@@ -16,6 +16,7 @@ const {
   recordTelemetryFromMqtt,
   shouldCreateAlert,
   shouldCreateAlertForEvent,
+  validateTelemetryPayload,
 } = require("./eventService");
 const { createAlertForEvent } = require("./alertService");
 const { emitScopedEvent } = require("../socket/scopedEmitter");
@@ -30,13 +31,44 @@ function toNullableNumber(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function buildStatusUpdateFromPayload(payload, receivedAt) {
+function buildStatusUpdateFromPayload(payload, receivedAt, diagnostics = {}) {
   return {
     online: payload.online === undefined ? true : toBoolean(payload.online),
     wifiRssi: toNullableNumber(payload.wifi_rssi),
     batteryPercent: toNullableNumber(payload.battery_percent ?? payload.battery_level),
     firmwareVersion: payload.firmware_version ? String(payload.firmware_version) : null,
     lastSeenAt: receivedAt,
+    sensorReady: payload.sensor_ready,
+    sensorValid: payload.sensor_valid,
+    sensorReadOk: payload.sensor_read_ok,
+    sensorSampleAgeMs: toNullableNumber(payload.sensor_sample_age_ms),
+    sensorFailures: toNullableNumber(payload.sensor_failures),
+    i2cErrorCount: toNullableNumber(payload.i2c_error_count),
+    i2cRecoveryCount: toNullableNumber(payload.i2c_recovery_count),
+    i2cLastError: payload.i2c_last_error ? String(payload.i2c_last_error) : null,
+    lastStatusTopic: diagnostics.lastStatusTopic || null,
+    lastTelemetryTopic: diagnostics.lastTelemetryTopic || null,
+    lastEventTopic: diagnostics.lastEventTopic || null,
+    lastTelemetryAt: diagnostics.lastTelemetryAt || null,
+    lastEventAt: diagnostics.lastEventAt || null,
+  };
+}
+
+function buildTelemetryLogSummary(payload) {
+  return {
+    ax: toNullableNumber(payload.ax),
+    ay: toNullableNumber(payload.ay),
+    az: toNullableNumber(payload.az),
+    gx: toNullableNumber(payload.gx),
+    gy: toNullableNumber(payload.gy),
+    gz: toNullableNumber(payload.gz),
+    accelMagnitude: toNullableNumber(payload.accel_magnitude),
+    gyroMagnitude: toNullableNumber(payload.gyro_magnitude),
+    sensorReady: payload.sensor_ready === undefined ? null : toBoolean(payload.sensor_ready),
+    sensorValid: payload.sensor_valid === undefined ? null : toBoolean(payload.sensor_valid),
+    sensorReadOk: payload.sensor_read_ok === undefined ? null : toBoolean(payload.sensor_read_ok),
+    sampleAgeMs: toNullableNumber(payload.sensor_sample_age_ms),
+    i2cLastError: payload.i2c_last_error ? String(payload.i2c_last_error) : null,
   };
 }
 
@@ -162,9 +194,27 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
       };
 
       if (topicInfo.channel === "status") {
+        logger.info("MQTT status recebido com escopo resolvido.", {
+          topic: topicInfo.topic,
+          topicDeviceIdentifier: topicInfo.deviceIdentifier,
+          payloadDeviceId: deviceIdentifier,
+          payloadDeviceUid: deviceUid || null,
+          organizationId: currentScope.organizationId,
+          patientId: currentScope.patientId,
+          assignmentHistoryId: currentScope.assignmentHistoryId,
+          sensorReady: payload.sensor_ready === undefined ? null : toBoolean(payload.sensor_ready),
+          sensorValid: payload.sensor_valid === undefined ? null : toBoolean(payload.sensor_valid),
+          sensorReadOk: payload.sensor_read_ok === undefined ? null : toBoolean(payload.sensor_read_ok),
+          sampleAgeMs: toNullableNumber(payload.sensor_sample_age_ms),
+          i2cLastError: payload.i2c_last_error || null,
+          correlationId,
+        });
+
         const status = await upsertDeviceStatus(
           device.id,
-          buildStatusUpdateFromPayload(payload, receivedAt),
+          buildStatusUpdateFromPayload(payload, receivedAt, {
+            lastStatusTopic: topicInfo.topic,
+          }),
           currentScope,
           connection,
         );
@@ -177,9 +227,45 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
       }
 
       if (topicInfo.channel === "telemetry") {
+        const telemetryValidation = validateTelemetryPayload(payload);
+
+        logger.info("MQTT telemetry recebida com escopo resolvido.", {
+          topic: topicInfo.topic,
+          topicDeviceIdentifier: topicInfo.deviceIdentifier,
+          payloadDeviceId: deviceIdentifier,
+          payloadDeviceUid: deviceUid || null,
+          organizationId: currentScope.organizationId,
+          patientId: currentScope.patientId,
+          assignmentHistoryId: currentScope.assignmentHistoryId,
+          validation: telemetryValidation,
+          sample: buildTelemetryLogSummary(payload),
+          correlationId,
+        });
+
+        if (!telemetryValidation.valid) {
+          const status = await upsertDeviceStatus(
+            device.id,
+            buildStatusUpdateFromPayload(payload, receivedAt, {
+              lastTelemetryTopic: topicInfo.topic,
+            }),
+            currentScope,
+            connection,
+          );
+
+          return {
+            channel: "telemetry_skipped",
+            deviceLog,
+            status,
+            validation: telemetryValidation,
+          };
+        }
+
         const statusUpdate = await upsertDeviceStatus(
           device.id,
-          buildStatusUpdateFromPayload(payload, receivedAt),
+          buildStatusUpdateFromPayload(payload, receivedAt, {
+            lastTelemetryTopic: topicInfo.topic,
+            lastTelemetryAt: receivedAt,
+          }),
           currentScope,
           connection,
           { returnSnapshot: false },
@@ -219,6 +305,8 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
         {
           online: true,
           lastSeenAt: receivedAt,
+          lastEventTopic: topicInfo.topic,
+          lastEventAt: receivedAt,
         },
         currentScope,
         connection,
@@ -235,6 +323,22 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
         },
         connection,
       );
+
+      logger.info("MQTT event recebido com escopo resolvido.", {
+        topic: topicInfo.topic,
+        topicDeviceIdentifier: topicInfo.deviceIdentifier,
+        payloadDeviceId: deviceIdentifier,
+        payloadDeviceUid: deviceUid || null,
+        organizationId: currentScope.organizationId,
+        patientId: currentScope.patientId,
+        assignmentHistoryId: currentScope.assignmentHistoryId,
+        eventType: event.eventType,
+        eventId: event.id,
+        evidenceStatus: event.evidenceStatus,
+        evidenceSampleCount: event.evidenceSampleCount,
+        alertCandidate: shouldCreateAlert(event.eventType),
+        correlationId,
+      });
 
       if (shouldCreateAlertForEvent(event)) {
         const alert = await createAlertForEvent(event, connection, { correlationId });
@@ -293,6 +397,22 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
       return;
     }
 
+    if (result.channel === "telemetry_skipped") {
+      logger.warn("MQTT telemetry ignorada sem gravar telemetry_logs.", {
+        topic: topicInfo.topic,
+        correlationId,
+        device: result.deviceLog,
+        validation: result.validation,
+        realtimeEvent: "device:status",
+        durationMs: elapsedMsSince(messageStartedAt),
+      });
+      emitScopedEvent(io, "device:status", result.status, {
+        organizationId: result.status.organization?.id || null,
+        patientId: result.status.currentPatient?.id || null,
+      }, { correlationId });
+      return;
+    }
+
     if (result.channel === "telemetry") {
       logger.info("MQTT telemetry processada.", {
         topic: topicInfo.topic,
@@ -300,6 +420,13 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
         device: result.deviceLog,
         telemetryId: result.telemetry.id,
         createdAt: result.telemetry.createdAt,
+        ax: result.telemetry.ax,
+        ay: result.telemetry.ay,
+        az: result.telemetry.az,
+        gx: result.telemetry.gx,
+        gy: result.telemetry.gy,
+        gz: result.telemetry.gz,
+        wroteTelemetryLog: true,
         realtimeEvent: "telemetry:new",
         durationMs: elapsedMsSince(messageStartedAt),
       });
@@ -329,6 +456,7 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
       evidenceStatus: result.event.evidenceStatus,
       evidenceSampleCount: result.event.evidenceSampleCount,
       alertId: result.alert?.id || null,
+      alertCreated: Boolean(result.alert),
       realtimeEvent: result.alert ? "alert:new" : null,
       durationMs: elapsedMsSince(messageStartedAt),
     });

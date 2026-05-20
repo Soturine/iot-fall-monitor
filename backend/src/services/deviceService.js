@@ -16,6 +16,22 @@ function toNullableNumber(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function toNullableBoolean(value) {
+  if (value == null || value === "") {
+    return null;
+  }
+
+  return toBoolean(value);
+}
+
+function toNullableString(value, maxLength = 255) {
+  if (value == null || value === "") {
+    return null;
+  }
+
+  return String(value).slice(0, maxLength);
+}
+
 function toIso(value) {
   if (!value) {
     return null;
@@ -90,6 +106,19 @@ function mapDeviceRow(row) {
       wifiRssi: row.wifiRssi ?? row.wifi_rssi ?? null,
       batteryPercent: row.batteryPercent ?? row.battery_percent ?? null,
       firmwareVersion: row.firmwareVersion || row.firmware_version || null,
+      sensorReady: toNullableBoolean(row.sensorReady ?? row.sensor_ready),
+      sensorValid: toNullableBoolean(row.sensorValid ?? row.sensor_valid),
+      sensorReadOk: toNullableBoolean(row.sensorReadOk ?? row.sensor_read_ok),
+      sensorSampleAgeMs: toNullableNumber(row.sensorSampleAgeMs ?? row.sensor_sample_age_ms),
+      sensorFailures: toNullableNumber(row.sensorFailures ?? row.sensor_failures),
+      i2cErrorCount: toNullableNumber(row.i2cErrorCount ?? row.i2c_error_count),
+      i2cRecoveryCount: toNullableNumber(row.i2cRecoveryCount ?? row.i2c_recovery_count),
+      i2cLastError: row.i2cLastError ?? row.i2c_last_error ?? null,
+      lastStatusTopic: row.lastStatusTopic ?? row.last_status_topic ?? null,
+      lastTelemetryTopic: row.lastTelemetryTopic ?? row.last_telemetry_topic ?? null,
+      lastEventTopic: row.lastEventTopic ?? row.last_event_topic ?? null,
+      lastTelemetryAt: toIso(row.lastTelemetryAt || row.last_telemetry_at),
+      lastEventAt: toIso(row.lastEventAt || row.last_event_at),
       lastSeenAt: toIso(row.lastSeenAt || row.last_seen_at),
       updatedAt: toIso(row.statusUpdatedAt || row.status_updated_at),
     },
@@ -463,6 +492,19 @@ async function getDeviceStatusSnapshot(deviceId, executor = null) {
         ds.wifi_rssi AS wifiRssi,
         ds.battery_percent AS batteryPercent,
         ds.firmware_version AS firmwareVersion,
+        ds.sensor_ready AS sensorReady,
+        ds.sensor_valid AS sensorValid,
+        ds.sensor_read_ok AS sensorReadOk,
+        ds.sensor_sample_age_ms AS sensorSampleAgeMs,
+        ds.sensor_failures AS sensorFailures,
+        ds.i2c_error_count AS i2cErrorCount,
+        ds.i2c_recovery_count AS i2cRecoveryCount,
+        ds.i2c_last_error AS i2cLastError,
+        ds.last_status_topic AS lastStatusTopic,
+        ds.last_telemetry_topic AS lastTelemetryTopic,
+        ds.last_event_topic AS lastEventTopic,
+        ds.last_telemetry_at AS lastTelemetryAt,
+        ds.last_event_at AS lastEventAt,
         ds.last_seen_at AS lastSeenAt,
         ds.updated_at AS statusUpdatedAt,
         (
@@ -1079,6 +1121,19 @@ async function upsertDeviceStatus(deviceId, fields, scope = null, executor = nul
     wifiRssi: toNullableNumber(fields.wifiRssi),
     batteryPercent: toNullableNumber(fields.batteryPercent),
     firmwareVersion: fields.firmwareVersion ? String(fields.firmwareVersion) : null,
+    sensorReady: toNullableBoolean(fields.sensorReady),
+    sensorValid: toNullableBoolean(fields.sensorValid),
+    sensorReadOk: toNullableBoolean(fields.sensorReadOk),
+    sensorSampleAgeMs: toNullableNumber(fields.sensorSampleAgeMs),
+    sensorFailures: toNullableNumber(fields.sensorFailures),
+    i2cErrorCount: toNullableNumber(fields.i2cErrorCount),
+    i2cRecoveryCount: toNullableNumber(fields.i2cRecoveryCount),
+    i2cLastError: toNullableString(fields.i2cLastError, 120),
+    lastStatusTopic: toNullableString(fields.lastStatusTopic),
+    lastTelemetryTopic: toNullableString(fields.lastTelemetryTopic),
+    lastEventTopic: toNullableString(fields.lastEventTopic),
+    lastTelemetryAt: fields.lastTelemetryAt || null,
+    lastEventAt: fields.lastEventAt || null,
     lastSeenAt: fields.lastSeenAt || null,
   };
 
@@ -1096,10 +1151,23 @@ async function upsertDeviceStatus(deviceId, fields, scope = null, executor = nul
         wifi_rssi,
         battery_percent,
         firmware_version,
+        sensor_ready,
+        sensor_valid,
+        sensor_read_ok,
+        sensor_sample_age_ms,
+        sensor_failures,
+        i2c_error_count,
+        i2c_recovery_count,
+        i2c_last_error,
+        last_status_topic,
+        last_telemetry_topic,
+        last_event_topic,
+        last_telemetry_at,
+        last_event_at,
         last_seen_at,
         updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())
       ON DUPLICATE KEY UPDATE
         organization_id = VALUES(organization_id),
         patient_id = VALUES(patient_id),
@@ -1108,6 +1176,19 @@ async function upsertDeviceStatus(deviceId, fields, scope = null, executor = nul
         wifi_rssi = COALESCE(VALUES(wifi_rssi), wifi_rssi),
         battery_percent = COALESCE(VALUES(battery_percent), battery_percent),
         firmware_version = COALESCE(VALUES(firmware_version), firmware_version),
+        sensor_ready = COALESCE(VALUES(sensor_ready), sensor_ready),
+        sensor_valid = COALESCE(VALUES(sensor_valid), sensor_valid),
+        sensor_read_ok = COALESCE(VALUES(sensor_read_ok), sensor_read_ok),
+        sensor_sample_age_ms = COALESCE(VALUES(sensor_sample_age_ms), sensor_sample_age_ms),
+        sensor_failures = COALESCE(VALUES(sensor_failures), sensor_failures),
+        i2c_error_count = COALESCE(VALUES(i2c_error_count), i2c_error_count),
+        i2c_recovery_count = COALESCE(VALUES(i2c_recovery_count), i2c_recovery_count),
+        i2c_last_error = COALESCE(VALUES(i2c_last_error), i2c_last_error),
+        last_status_topic = COALESCE(VALUES(last_status_topic), last_status_topic),
+        last_telemetry_topic = COALESCE(VALUES(last_telemetry_topic), last_telemetry_topic),
+        last_event_topic = COALESCE(VALUES(last_event_topic), last_event_topic),
+        last_telemetry_at = COALESCE(VALUES(last_telemetry_at), last_telemetry_at),
+        last_event_at = COALESCE(VALUES(last_event_at), last_event_at),
         last_seen_at = COALESCE(VALUES(last_seen_at), last_seen_at),
         updated_at = UTC_TIMESTAMP()
     `,
@@ -1120,6 +1201,19 @@ async function upsertDeviceStatus(deviceId, fields, scope = null, executor = nul
       status.wifiRssi,
       status.batteryPercent,
       status.firmwareVersion,
+      status.sensorReady,
+      status.sensorValid,
+      status.sensorReadOk,
+      status.sensorSampleAgeMs,
+      status.sensorFailures,
+      status.i2cErrorCount,
+      status.i2cRecoveryCount,
+      status.i2cLastError,
+      status.lastStatusTopic,
+      status.lastTelemetryTopic,
+      status.lastEventTopic,
+      status.lastTelemetryAt,
+      status.lastEventAt,
       status.lastSeenAt,
     ],
   );
@@ -1141,6 +1235,58 @@ async function upsertDeviceStatus(deviceId, fields, scope = null, executor = nul
 
     if (status.firmwareVersion) {
       statusPatch.firmwareVersion = status.firmwareVersion;
+    }
+
+    if (status.sensorReady != null) {
+      statusPatch.sensorReady = status.sensorReady;
+    }
+
+    if (status.sensorValid != null) {
+      statusPatch.sensorValid = status.sensorValid;
+    }
+
+    if (status.sensorReadOk != null) {
+      statusPatch.sensorReadOk = status.sensorReadOk;
+    }
+
+    if (status.sensorSampleAgeMs != null) {
+      statusPatch.sensorSampleAgeMs = status.sensorSampleAgeMs;
+    }
+
+    if (status.sensorFailures != null) {
+      statusPatch.sensorFailures = status.sensorFailures;
+    }
+
+    if (status.i2cErrorCount != null) {
+      statusPatch.i2cErrorCount = status.i2cErrorCount;
+    }
+
+    if (status.i2cRecoveryCount != null) {
+      statusPatch.i2cRecoveryCount = status.i2cRecoveryCount;
+    }
+
+    if (status.i2cLastError) {
+      statusPatch.i2cLastError = status.i2cLastError;
+    }
+
+    if (status.lastStatusTopic) {
+      statusPatch.lastStatusTopic = status.lastStatusTopic;
+    }
+
+    if (status.lastTelemetryTopic) {
+      statusPatch.lastTelemetryTopic = status.lastTelemetryTopic;
+    }
+
+    if (status.lastEventTopic) {
+      statusPatch.lastEventTopic = status.lastEventTopic;
+    }
+
+    if (status.lastTelemetryAt) {
+      statusPatch.lastTelemetryAt = toIso(status.lastTelemetryAt);
+    }
+
+    if (status.lastEventAt) {
+      statusPatch.lastEventAt = toIso(status.lastEventAt);
     }
 
     return {
@@ -1224,6 +1370,19 @@ async function listDevices(filters = {}, accessContext) {
         ds.wifi_rssi AS wifiRssi,
         ds.battery_percent AS batteryPercent,
         ds.firmware_version AS firmwareVersion,
+        ds.sensor_ready AS sensorReady,
+        ds.sensor_valid AS sensorValid,
+        ds.sensor_read_ok AS sensorReadOk,
+        ds.sensor_sample_age_ms AS sensorSampleAgeMs,
+        ds.sensor_failures AS sensorFailures,
+        ds.i2c_error_count AS i2cErrorCount,
+        ds.i2c_recovery_count AS i2cRecoveryCount,
+        ds.i2c_last_error AS i2cLastError,
+        ds.last_status_topic AS lastStatusTopic,
+        ds.last_telemetry_topic AS lastTelemetryTopic,
+        ds.last_event_topic AS lastEventTopic,
+        ds.last_telemetry_at AS lastTelemetryAt,
+        ds.last_event_at AS lastEventAt,
         ds.last_seen_at AS lastSeenAt,
         ds.updated_at AS statusUpdatedAt,
         (
@@ -1634,6 +1793,19 @@ async function markDevicesOffline(cutoffDate) {
         ds.wifi_rssi AS wifiRssi,
         ds.battery_percent AS batteryPercent,
         ds.firmware_version AS firmwareVersion,
+        ds.sensor_ready AS sensorReady,
+        ds.sensor_valid AS sensorValid,
+        ds.sensor_read_ok AS sensorReadOk,
+        ds.sensor_sample_age_ms AS sensorSampleAgeMs,
+        ds.sensor_failures AS sensorFailures,
+        ds.i2c_error_count AS i2cErrorCount,
+        ds.i2c_recovery_count AS i2cRecoveryCount,
+        ds.i2c_last_error AS i2cLastError,
+        ds.last_status_topic AS lastStatusTopic,
+        ds.last_telemetry_topic AS lastTelemetryTopic,
+        ds.last_event_topic AS lastEventTopic,
+        ds.last_telemetry_at AS lastTelemetryAt,
+        ds.last_event_at AS lastEventAt,
         ds.last_seen_at AS lastSeenAt,
         ds.updated_at AS statusUpdatedAt,
         (
