@@ -1,21 +1,29 @@
 # Changelog
 
 ## [Unreleased]
-### Adicionado
-- estrutura `docs/assets/screenshots/` e `docs/assets/gifs/` para organizar capturas reais do dashboard, detalhe de dispositivo, alertas, login/cadastro, pacientes e portal ESP32
-
-### Documentação
-- README preparado para uma seção de capturas reais da interface web `v0.8.25`, sem inserir links quebrados enquanto os arquivos ainda não existem
-- docs técnicos passam a indicar onde screenshots/GIFs reais devem ser armazenados e referenciados
-- `docs/assets/README.md` documenta nomes esperados, checklist de captura e regra explícita contra imagens simuladas
-
 ### Pendente / Faltando
-- capturar screenshots reais da interface web `v0.8.25` com o projeto rodando
 - capturar GIF real do fluxo ESP32/evento -> MQTT -> backend -> dashboard atualizando
+- capturar tela real de detalhe do dispositivo com telemetria quando houver device visível no ambiente local
 - ativar FFT como decisão real somente após calibração e validação com dados reais
 - implementar sessões completas de calibração por SOS
 - testar classificação de movimentos com múltiplas runs por classe
 - validar o sistema com ESP32 real, MPU6050, backend, MQTT e dashboard em cenário ponta a ponta
+
+## [v0.8.26] - 2026-05-20
+### Adicionado
+- screenshots reais da interface web em `docs/assets/screenshots`, capturados do frontend rodando localmente
+- documentação visual real de login, dashboard, pacientes, dispositivos, alertas e organização
+- estrutura de assets visuais preservada para futuros screenshots de detalhe do dispositivo, telemetria e portal ESP32
+
+### Documentação
+- README.md passa a exibir capturas reais da interface web `v0.8.26`
+- docs técnicos passam a referenciar assets visuais reais quando disponíveis
+- `docs/assets/README.md` passa a listar os screenshots `v0.8.26` já capturados e as capturas ainda pendentes
+
+### Limitações conhecidas
+- GIF real do fluxo ESP32/evento -> MQTT -> backend -> dashboard só deve ser incluído se for capturado de forma real
+- captura de detalhe do dispositivo com telemetria depende de ambiente local com device visível para a organização ativa
+- capturas dependem do ambiente local com backend, frontend e banco funcionando
 
 ## [v0.8.25] - 2026-05-20
 ### Adicionado

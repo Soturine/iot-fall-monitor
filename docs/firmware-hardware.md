@@ -175,7 +175,7 @@ O portal local do ESP32 agora cobre:
 - botoes `Testar backend` e `Testar MQTT`
 - visualização do perfil resumido do paciente sincronizado
 
-Capturas reais do portal devem ser salvas em [assets](assets/README.md), especialmente `assets/screenshots/esp32-portal-v0.8.25.png` quando a tela for capturada do ESP32 rodando. Não há link direto neste documento enquanto a imagem real não existir no repositório.
+Capturas reais do portal devem ser salvas em [assets](assets/README.md), especialmente `assets/screenshots/esp32-portal-v0.8.26.png` quando a tela for capturada do ESP32 rodando. Não há link direto neste documento enquanto a imagem real não existir no repositório.
 
 Fluxo oficial:
 

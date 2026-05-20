@@ -25,9 +25,9 @@ O alerta atual e interno ao sistema: ele persiste em MySQL e aparece em realtime
 
 ## Registro visual do fluxo
 
-Screenshots e GIFs reais do fluxo de alertas devem ser armazenados em [assets](assets/README.md). Para a `v0.8.25`, a estrutura espera `screenshots/alerts-v0.8.25.png` e, quando houver captura real ponta a ponta, `gifs/realtime-alert-flow-v0.8.25.gif`.
+Screenshots e GIFs reais do fluxo de alertas devem ser armazenados em [assets](assets/README.md). A `v0.8.26` adicionou a captura real [alerts-v0.8.26.png](assets/screenshots/alerts-v0.8.26.png), feita com o frontend rodando localmente.
 
-Não há imagem referenciada aqui enquanto esses arquivos não forem capturados e versionados.
+O GIF ponta a ponta `gifs/realtime-alert-flow-v0.8.26.gif` ainda não foi capturado. Ele só deve ser adicionado quando mostrar um fluxo real de evento, backend e dashboard atualizando.
 
 ## Topicos MQTT
 

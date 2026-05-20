@@ -130,7 +130,15 @@ flowchart TD
 
 ### Assets visuais
 
-Capturas reais da integração web/MQTT devem ficar em [assets](assets/README.md). A pasta já reserva nomes para dashboard, detalhe do dispositivo, alertas e GIF do fluxo ESP32/evento -> MQTT -> backend -> dashboard. Enquanto esses arquivos não existirem no repositório, os docs não devem criar links de imagem.
+Capturas reais da integração web/MQTT ficam em [assets](assets/README.md). A `v0.8.26` adicionou screenshots reais de login, dashboard, pacientes, dispositivos, alertas e organização.
+
+Imagens disponíveis:
+
+- [dashboard-v0.8.26.png](assets/screenshots/dashboard-v0.8.26.png)
+- [devices-v0.8.26.png](assets/screenshots/devices-v0.8.26.png)
+- [alerts-v0.8.26.png](assets/screenshots/alerts-v0.8.26.png)
+
+O GIF do fluxo ESP32/evento -> MQTT -> backend -> dashboard ainda deve ser capturado de forma real antes de ser referenciado.
 
 ### `status`
 

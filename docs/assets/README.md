@@ -7,20 +7,27 @@ Esta pasta guarda capturas reais do projeto Queda rodando localmente ou em hardw
 - `screenshots/`: imagens estáticas reais da interface web e do portal do ESP32.
 - `gifs/`: GIFs reais de fluxos em tempo real, quando capturados.
 
-## Screenshots esperados
+## Screenshots capturados na v0.8.26
+
+Os arquivos abaixo foram capturados do projeto rodando localmente:
+
+- `screenshots/login-v0.8.26.png`: login/cadastro.
+- `screenshots/dashboard-v0.8.26.png`: dashboard multi-tenant em estado real do backend local.
+- `screenshots/patients-v0.8.26.png`: pacientes e vínculo com dispositivo.
+- `screenshots/devices-v0.8.26.png`: inventário de dispositivos e estado vazio real do escopo atual.
+- `screenshots/alerts-v0.8.26.png`: tela de alertas e histórico.
+- `screenshots/organization-v0.8.26.png`: organização ativa, membros e permissões.
+
+## Screenshots pendentes
 
 Use estes nomes quando as telas forem capturadas:
 
-- `screenshots/dashboard-v0.8.25.png`: dashboard multi-tenant com status geral.
-- `screenshots/device-detail-telemetry-v0.8.25.png`: detalhe do dispositivo com telemetria real ou diagnóstico real.
-- `screenshots/alerts-v0.8.25.png`: tela de alertas e histórico.
-- `screenshots/login-v0.8.25.png`: login/cadastro.
-- `screenshots/patients-v0.8.25.png`: pacientes e vínculo com dispositivo.
-- `screenshots/esp32-portal-v0.8.25.png`: portal local real do ESP32.
+- `screenshots/device-detail-telemetry-v0.8.26.png`: detalhe do dispositivo com telemetria real ou diagnóstico real.
+- `screenshots/esp32-portal-v0.8.26.png`: portal local real do ESP32.
 
 ## GIF esperado
 
-- `gifs/realtime-alert-flow-v0.8.25.gif`: fluxo real ESP32/evento -> MQTT -> backend -> dashboard atualizando.
+- `gifs/realtime-alert-flow-v0.8.26.gif`: fluxo real ESP32/evento -> MQTT -> backend -> dashboard atualizando.
 
 ## Checklist para capturar
 
@@ -33,4 +40,4 @@ Use estes nomes quando as telas forem capturadas:
 
 ## Estado atual
 
-Nesta rodada, a estrutura foi criada sem screenshots ou GIFs, porque não havia capturas reais disponíveis no repositório e nenhuma captura automática confiável foi executada.
+Na `v0.8.26`, foram adicionados screenshots reais da interface web. O GIF realtime, o detalhe do dispositivo com telemetria e o portal ESP32 continuam pendentes porque exigem execução local com device visível, hardware ou evento real.

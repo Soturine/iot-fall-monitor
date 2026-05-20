@@ -6,9 +6,11 @@ O objetivo do repositório é integrar hardware embarcado, ingestão de eventos,
 
 ## Baseline Atual
 
-Baseline atual do repositório: `v0.8.25`.
+Baseline atual do repositório: `v0.8.26`.
 
-A baseline `v0.8.25` adiciona confiabilidade incremental para eventos críticos MQTT. Telemetria continua sendo dado periódico e pode tolerar perda eventual; eventos como `fall_detected`, SOS manual (`sos_pressed`/`manual_sos`) e `sensor_fault` passam a ter rastreabilidade com `event_uuid`, `event_sequence` e `sample_seq`.
+A baseline `v0.8.26` adiciona documentação visual real da interface web, com screenshots capturados do projeto rodando localmente em `docs/assets/screenshots`.
+
+A baseline anterior `v0.8.25` adiciona confiabilidade incremental para eventos críticos MQTT. Telemetria continua sendo dado periódico e pode tolerar perda eventual; eventos como `fall_detected`, SOS manual (`sos_pressed`/`manual_sos`) e `sensor_fault` passam a ter rastreabilidade com `event_uuid`, `event_sequence` e `sample_seq`.
 
 O firmware mantém uma fila circular local em RAM para eventos críticos do canal `events`, tenta reenviar no flush após reconexão MQTT e registra logs claros de publish, fila, flush e descarte por limite. O backend deduplica eventos reenviados por `event_uuid`, preservando compatibilidade com payloads antigos sem esse campo.
 
@@ -65,11 +67,45 @@ O modelo atual deixou de ser um painel global único e passou a trabalhar com or
 
 ## Capturas de Tela
 
-A estrutura para capturas reais da interface `v0.8.25` está preparada em [docs/assets](docs/assets/README.md). Ainda não há screenshots ou GIFs reais versionados nesta rodada, então o README não referencia imagens inexistentes.
+As imagens abaixo são capturas reais da interface `v0.8.26` com backend e frontend rodando localmente. A organização de assets e a lista de capturas pendentes ficam em [docs/assets](docs/assets/README.md).
 
-Quando forem capturadas com o projeto rodando, as imagens devem ser salvas em `docs/assets/screenshots/` com nomes como `dashboard-v0.8.25.png`, `device-detail-telemetry-v0.8.25.png`, `alerts-v0.8.25.png`, `login-v0.8.25.png`, `patients-v0.8.25.png` e `esp32-portal-v0.8.25.png`. O GIF real do fluxo ESP32/evento -> MQTT -> backend -> dashboard deve usar `docs/assets/gifs/realtime-alert-flow-v0.8.25.gif`.
+### Login
 
-Não use mockups ou imagens simuladas como se fossem screenshots reais. Ao adicionar uma captura, atualize esta seção com Markdown simples e uma legenda curta explicando o que a tela demonstra.
+![Login v0.8.26](docs/assets/screenshots/login-v0.8.26.png)
+
+Tela inicial com acesso protegido, criação de conta e credenciais demo do ambiente local.
+
+### Dashboard
+
+![Dashboard v0.8.26](docs/assets/screenshots/dashboard-v0.8.26.png)
+
+Visão multi-tenant do painel principal com status do socket e estado real retornado pelo backend local.
+
+### Pacientes
+
+![Pacientes v0.8.26](docs/assets/screenshots/patients-v0.8.26.png)
+
+Cadastro assistencial com paciente demo, vínculo de device e informações clínicas básicas.
+
+### Dispositivos
+
+![Dispositivos v0.8.26](docs/assets/screenshots/devices-v0.8.26.png)
+
+Inventário de dispositivos, filtros de status e estado vazio real quando não há devices visíveis no escopo atual.
+
+### Alertas
+
+![Alertas v0.8.26](docs/assets/screenshots/alerts-v0.8.26.png)
+
+Tela de alertas e histórico com filtros operacionais e estado real do ambiente local.
+
+### Organização
+
+![Organização v0.8.26](docs/assets/screenshots/organization-v0.8.26.png)
+
+Gestão de organização ativa, membros e permissões do tenant demo.
+
+Capturas de detalhe do dispositivo com telemetria, portal ESP32 e GIF realtime ainda dependem de uma execução local com device visível, hardware ou evento real. Não use mockups ou imagens simuladas como se fossem screenshots reais.
 
 ## Arquitetura
 
