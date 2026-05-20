@@ -6,11 +6,11 @@ O objetivo do repositório é integrar hardware embarcado, ingestão de eventos,
 
 ## Baseline Atual
 
-Baseline atual do repositório: `v0.8.22`.
+Baseline atual do repositório: `v0.8.24`.
 
-A baseline `v0.8.22` estabiliza a leitura I2C do MPU6050 em bancada: o firmware prefere leituras com STOP condition a `100 kHz`, adiciona retry/recovery controlado e continua publicando diagnostico MQTT quando a ultima amostra do sensor fica stale.
+A baseline `v0.8.24` consolida a telemetria MQTT mais confiável e o diagnóstico do `MPU6050`, separando com clareza "dispositivo online por status" de "telemetria ativa com amostra válida". Ela mantém o frontend premium/redesign, acrescenta `FallFeatureExtractor` com features no domínio do tempo, preserva evidência estruturada para `fall_detected` e deixa um placeholder experimental para FFT/Fourier sem substituir a decisão principal atual.
 
-Para a experiência local prevista nesta fase, o projeto está estabilizado para `Node.js 20+`.
+Esta baseline também prepara a calibração futura por SOS, com documentação de sessões, amostras, feature sets e perfis por paciente/dispositivo. Para a experiência local prevista nesta fase, o projeto está estabilizado para `Node.js 20+`.
 
 ## Visão Geral
 
@@ -46,7 +46,7 @@ O modelo atual deixou de ser um painel global único e passou a trabalhar com or
 - suite de stress dry-run para rajadas de telemetria, quedas, payloads ruins e concorrência
 - alertas de queda e imobilidade
 - telemetria em tempo real no dashboard
-- grafico de telemetria com eixo Y normalizado, unidades e tooltip tecnico para aceleracao, giroscopio e eixos do sensor
+- gráfico de telemetria com eixo Y normalizado, unidades e tooltip técnico para aceleração, giroscópio e eixos do sensor
 - atualização do navegador via `Socket.IO`
 - portal local do ESP32 para Wi-Fi, MQTT, backend e pareamento
 - opção de AP/portal de manutenção sempre ativo em bancada, sem bloquear telemetria MQTT
@@ -159,7 +159,7 @@ npm run dev:smoke
 npm run dev:stop
 ```
 
-Testes tecnicos do backend:
+Testes técnicos do backend:
 
 ```powershell
 npm run check --prefix backend
@@ -176,19 +176,19 @@ npm run mqtt:watch --prefix backend
 npm run mqtt:publish:test --prefix backend
 ```
 
-`stress:dry` usa mocks locais para regressão rápida. `stress:real` valida backend `/health`, broker MQTT e MySQL de desenvolvimento antes de publicar MQTT real. Os logs ficam em `backend/logs/stress/` (`*.jsonl`, `summary-*.json`, `failures-*.json`, `report-*.md`) e sao ignorados pelo Git.
+`stress:dry` usa mocks locais para regressão rápida. `stress:real` valida backend `/health`, broker MQTT e MySQL de desenvolvimento antes de publicar MQTT real. Os logs ficam em `backend/logs/stress/` (`*.jsonl`, `summary-*.json`, `failures-*.json`, `report-*.md`) e são ignorados pelo Git.
 
 `db:migrate:evidence` aplica apenas a migração idempotente das colunas/tabela de evidência sem resetar dados. `db:migrate:sensor-diagnostics` adiciona os campos de saúde do sensor em `device_status` sem reset destrutivo. `mqtt:watch` assina os tópicos reais `queda/devices/+/status`, `telemetry` e `events` para confirmar se o ESP32 está publicando. `mqtt:publish:test` publica status e telemetria válidos no mesmo contrato do firmware, útil para testar backend/dashboard sem hardware.
 
 Para validar telemetria real do ESP32, deixe `mqtt:watch` aberto, reinicie a placa e acompanhe o Serial Monitor. O funcionamento esperado mostra `[mqtt] connected`, `[sensor] read ok`, `[telemetry] publish ok` repetindo no intervalo configurado e linhas novas em `queda/devices/esp32_01/telemetry`. Telemetria simulada vem do `clientId` de teste e serve para validar backend/frontend; telemetria real deve vir do `clientId` configurado no ESP32, como `esp32_01_client`.
 
-No frontend, o grafico principal de `Sinais recentes do sensor` mostra `Aceleracao resultante (g)`. Valores invalidos, `NaN`, infinitos ou fora de escala operacional visual sao filtrados apenas no grafico; MQTT, backend, banco e payloads continuam preservados.
+No frontend, o gráfico principal de `Sinais recentes do sensor` mostra `Aceleração resultante (g)`. Valores inválidos, `NaN`, infinitos ou fora de escala operacional visual são filtrados apenas no gráfico; MQTT, backend, banco e payloads continuam preservados.
 
-Para validar a escala fisica do MPU6050, deixe o ESP32 parado sobre a mesa ao reiniciar. O Serial Monitor deve mostrar a faixa efetiva (`accel=+-2g`, `+-4g`, `+-8g` ou `+-16g`), o divisor `lsb_per_g` usado e leituras convertidas com `accel_magnitude` perto de `1.00 g` em repouso. Se aparecer algo perto de `4 g`, ha erro de escala ou movimento durante a calibracao.
+Para validar a escala física do MPU6050, deixe o ESP32 parado sobre a mesa ao reiniciar. O Serial Monitor deve mostrar a faixa efetiva (`accel=+-2g`, `+-4g`, `+-8g` ou `+-16g`), o divisor `lsb_per_g` usado e leituras convertidas com `accel_magnitude` perto de `1.00 g` em repouso. Se aparecer algo perto de `4 g`, há erro de escala ou movimento durante a calibração.
 
-Se a calibracao ou o readback de escala falhar, o firmware deve continuar operando com fallback: procure `ready=1`, `calibrated=0` e `continuing_without_offsets` no Serial Monitor. Se nao houver amostra valida, o `status` continua saindo com diagnostico e a telemetria e pulada com motivo claro, como `sensor_not_ready`, `no_valid_sample` ou `stale_sample`.
+Se a calibração ou o readback de escala falhar, o firmware deve continuar operando com fallback: procure `ready=1`, `calibrated=0` e `continuing_without_offsets` no Serial Monitor. Se não houver amostra válida, o `status` continua saindo com diagnóstico e a telemetria e pulada com motivo claro, como `sensor_not_ready`, `no_valid_sample` ou `stale_sample`.
 
-Se aparecer erro repetido do Wire como `i2cWriteReadNonStop returned Error -1`, valide primeiro o hardware do barramento: GND comum, VCC correto no modulo, SDA/SCL nos pinos configurados, fios curtos, contato da protoboard e alimentacao estavel. A build atual usa `I2C_CLOCK_HZ = 100000`, `I2C_USE_REPEATED_START = false`, retry curto e recovery do barramento para reduzir falhas transitórias sem travar Wi-Fi/MQTT.
+Se aparecer erro repetido do Wire como `i2cWriteReadNonStop returned Error -1`, valide primeiro o hardware do barramento: GND comum, VCC correto no módulo, SDA/SCL nos pinos configurados, fios curtos, contato da protoboard e alimentacao estável. A build atual usa `I2C_CLOCK_HZ = 100000`, `I2C_USE_REPEATED_START = false`, retry curto e recovery do barramento para reduzir falhas transitórias sem travar Wi-Fi/MQTT.
 
 O fluxo local esperado usa:
 
@@ -311,10 +311,10 @@ Esse status:
 
 Estados atuais:
 
-- `pre_calibracao`
+- pré-calibração
 - `desconhecido`
 - `sem_telemetria_suficiente`
-- `sensor_sem_leitura_valida`
+- sensor sem leitura válida
 - `telemetria_desatualizada`
 - `em_reposo`
 - `repouso_provavel`
@@ -327,8 +327,8 @@ Estados atuais:
 - `queda_suspeita`
 - `queda_confirmada`
 - `sos_manual`
-- `calibracao_pendente`
-- `em_calibracao`
+- calibração pendente
+- em calibração
 
 O frontend exibe esse status de forma discreta no dashboard, na lista de dispositivos e na página de detalhe do dispositivo. A interpretação deve ser tratada como apoio operacional experimental, não como avaliação médica.
 
@@ -352,7 +352,7 @@ O frontend exibe esse status de forma discreta no dashboard, na lista de disposi
 ## Documentação Complementar
 
 - [docs/integration.md](docs/integration.md): integração entre firmware, backend, banco, MQTT, pareamento e tempo real.
-- [docs/alerting-architecture.md](docs/alerting-architecture.md): fluxo real de queda/SOS, persistencia, realtime, testes e stress.
+- [docs/alerting-architecture.md](docs/alerting-architecture.md): fluxo real de queda/SOS, persistência, realtime, testes e stress.
 - [docs/firmware-hardware.md](docs/firmware-hardware.md): hardware, pinagem, portal local, payloads, calibração, buzzer e bancada.
 - [docs/fall-calibration-roadmap.md](docs/fall-calibration-roadmap.md): proposta segura para FFT, labels de movimento e calibração futura por SOS.
 - [docs/quickstart-windows.md](docs/quickstart-windows.md): guia operacional para Windows.

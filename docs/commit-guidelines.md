@@ -33,14 +33,14 @@ Corpo:
 - `Riscos/Pendencias:`
 
 ## Exemplos obrigatorios
-- `fix(pairing): corrige validacao de backend api base url no portal`
+- `fix(pairing): corrige validação de backend api base url no portal`
 - `fix(frontend): corrige fluxo de pairing no modal`
 - `refactor(firmware): modulariza setup portal sem alterar rotas`
-- `perf(backend): reduz ruido de logs do socket`
+- `perf(backend): reduz ruído de logs do socket`
 - `docs(infra): atualiza quickstart e regras de ambiente`
 
 ## Regras adicionais
 - commits pequenos e rastreaveis
-- evitar commit generico tipo "update" ou "ajustes"
-- separar mudanca funcional de mudanca documental quando fizer sentido
-- preferir um commit por escopo logico, se nao houver risco de fragmentar demais
+- evitar commit genérico tipo "update" ou "ajustes"
+- separar mudança funcional de mudança documental quando fizer sentido
+- preferir um commit por escopo logico, se não houver risco de fragmentar demais
