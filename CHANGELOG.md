@@ -1,19 +1,52 @@
 # Changelog
 
 ## [Unreleased]
-### Alterado
-- firmware passa a publicar `telemetry` periodica somente quando ha amostra valida e fresca do MPU6050; status continua carregando diagnostico do sensor
-- backend passa a rejeitar payloads `telemetry` sem eixos reais (`ax`, `ay`, `az`, `gx`, `gy`, `gz`) ou com `sensor_valid=false`, sem criar `telemetry_logs` invalidos
-- detalhe do dispositivo passa a mostrar diagnostico de telemetria, topicos esperados/observados, saude do sensor e alerta de device online sem telemetria recente
-- `fall_detected` passa a carregar decisao estruturada do firmware, features no dominio do tempo e placeholder de FFT experimental, mantendo a FSM atual como decisao principal
-- `deviceBehaviorService` passa a centralizar estados experimentais mais explicitos, como `sensor_sem_leitura_valida`, `telemetria_desatualizada`, `movimento_leve`, `movimento_intenso`, `sos_manual` e `calibracao_pendente`
-- o frontend de detalhe passa a exibir o estado atual vindo do backend e evidencias estruturadas da deteccao, sem assumir decisao clinica na tela
+### Pendente / Faltando
+- ativar FFT como decisão real somente após calibração e validação com dados reais
+- implementar sessões completas de calibração por SOS
+- testar classificação de movimentos com múltiplas runs por classe
+- validar o sistema com ESP32 real, MPU6050, backend, MQTT e dashboard em cenário ponta a ponta
 
+## [0.8.24] - 2026-05-19
 ### Adicionado
-- migracao idempotente `npm run db:migrate:sensor-diagnostics --prefix backend` para colunas de saude do sensor em `device_status`
-- payload `fall_detected` do firmware agora inclui features estruturadas da decisao local, preservadas em `raw_payload_json`
-- camada firmware `FallFeatureExtractor` para janela circular de amostras e features no dominio do tempo, com interface de FFT ainda desativada por flag
-- proposta tecnica expandida para calibracao futura por SOS, sessoes, amostras, feature sets e perfis por paciente/dispositivo
+- firmware passa a usar `FallFeatureExtractor` com janela circular de 64 amostras para extrair features no domínio do tempo
+- `fall_detected` passa a carregar evidência estruturada da decisão local, incluindo versão do algoritmo, confiança heurística, picos, imobilidade, janela de análise e features
+- placeholder documentado para FFT/Fourier experimental, ainda desativado como critério de decisão
+- base técnica expandida para calibração futura por SOS, sessões, amostras, feature sets e perfis por paciente/dispositivo
+- teste backend para `deviceBehaviorService`
+
+### Alterado
+- backend passa a preservar a decisão do firmware em `raw_payload_json` e `evidence_summary_json`
+- `deviceBehaviorService` passa a centralizar estados experimentais mais claros, como `sensor_sem_leitura_valida`, `telemetria_desatualizada`, `movimento_leve`, `movimento_intenso`, `sos_manual` e `calibracao_pendente`
+- frontend de detalhe do dispositivo passa a exibir estado atual vindo do backend e evidências estruturadas da detecção
+- documentação técnica foi atualizada para deixar claro que FFT/calibração estão preparadas, mas ainda não substituem a decisão atual
+
+### Corrigido
+- redução de duplicação curta de alertas de queda abertos ou em atendimento
+
+## [0.8.23] - 2026-05-19
+### Adicionado
+- nova identidade visual premium healthtech/IoT no frontend
+- imagens institucionais em `frontend/public/images`
+- cards, badges, botões, modais, estados vazios e loading states redesenhados
+- layout com sidebar renovada e visual responsivo
+- melhorias visuais nas telas de login, dashboard, pacientes, dispositivos, detalhe do dispositivo, alertas e organização
+- migration idempotente `npm run db:migrate:sensor-diagnostics --prefix backend`
+- campos de saúde/diagnóstico do sensor em `device_status`
+- evidência estruturada inicial para payload `fall_detected`
+
+### Alterado
+- `DeviceDetailPage` passa a diferenciar device online por `status` de telemetria realmente ativa
+- gráfico de telemetria recebeu polimento visual e integração melhor com o redesign
+- tela de detalhe do dispositivo passa a mostrar diagnóstico de telemetria, tópicos esperados/observados, saúde do sensor e alerta de device online sem telemetria recente
+- frontend mantém atualização por Socket.IO sem depender de reload manual quando chega `telemetry:new`
+- backend melhora logs e diagnóstico entre `status`, `telemetry` e `events`
+
+### Corrigido
+- firmware passa a publicar `telemetry` periódica somente quando existe amostra válida e fresca do MPU6050
+- backend passa a rejeitar payloads `telemetry` sem eixos reais ou com `sensor_valid=false`, evitando `telemetry_logs` inválidos
+- leitura I2C do MPU6050 ficou mais tolerante a falhas transitórias no ESP32 real
+- sistema deixa de sugerir gráfico bugado quando, na verdade, o device está online mas sem telemetria recente
 
 ## [v0.8.22] - 2026-05-14
 ### Corrigido
