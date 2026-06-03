@@ -8,6 +8,16 @@ import { Card } from "../components/ui/Card";
 import { EmptyState } from "../components/ui/EmptyState";
 import { LoadingState } from "../components/ui/LoadingState";
 import { useRealtime } from "../contexts/RealtimeContext";
+import {
+  TELEMETRY_STALE_AFTER_MS,
+  evidenceTone,
+  expectedTopic,
+  formatBooleanDiagnostic,
+  formatEvidenceNumber,
+  formatNumberDiagnostic,
+  formatTopicValue,
+  humanizeEvidenceStatus,
+} from "../lib/deviceDiagnostics";
 import { applyTelemetryPatchToDetail } from "../lib/deviceRealtime";
 import {
   deviceBehaviorTone,
@@ -31,9 +41,6 @@ import type {
   TelemetryRealtimeEvent,
 } from "../types/api";
 
-const MQTT_TOPIC_BASE = "queda/devices";
-const TELEMETRY_STALE_AFTER_MS = 30000;
-
 type EvidenceCarrier = Pick<
   EventRecord,
   | "eventType"
@@ -52,35 +59,6 @@ const ALERT_EVIDENCE_EVENT_TYPES = new Set([
 
 function hasAlertEvidence(event: Pick<EventRecord, "eventType"> | AlertRecord["event"]) {
   return ALERT_EVIDENCE_EVENT_TYPES.has(event.eventType);
-}
-
-function humanizeEvidenceStatus(status?: string) {
-  switch (status) {
-    case "linked":
-      return "vinculada";
-    case "partial":
-      return "parcial";
-    default:
-      return "insuficiente";
-  }
-}
-
-function evidenceTone(status?: string) {
-  if (status === "linked") {
-    return "success";
-  }
-
-  if (status === "partial") {
-    return "warning";
-  }
-
-  return "danger";
-}
-
-function formatEvidenceNumber(value: number | null | undefined) {
-  return typeof value === "number" && Number.isFinite(value)
-    ? value.toFixed(2)
-    : "--";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -325,28 +303,6 @@ function EvidenceSummary({ event }: { event: EvidenceCarrier }) {
   );
 }
 
-function formatBooleanDiagnostic(value: boolean | null | undefined) {
-  if (value === true) {
-    return "sim";
-  }
-
-  if (value === false) {
-    return "nao";
-  }
-
-  return "--";
-}
-
-function formatNumberDiagnostic(value: number | null | undefined, suffix = "") {
-  return typeof value === "number" && Number.isFinite(value)
-    ? `${value}${suffix}`
-    : "--";
-}
-
-function formatTopicValue(value: string | null | undefined) {
-  return value || "--";
-}
-
 function ageMs(value?: string | null) {
   if (!value) {
     return null;
@@ -358,10 +314,6 @@ function ageMs(value?: string | null) {
   }
 
   return Date.now() - timestamp;
-}
-
-function expectedTopic(deviceIdentifier: string, channel: "status" | "telemetry" | "events") {
-  return `${MQTT_TOPIC_BASE}/${deviceIdentifier}/${channel}`;
 }
 
 function classifyCurrentState(detail: DeviceDetailResponse) {
