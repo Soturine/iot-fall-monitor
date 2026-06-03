@@ -8,6 +8,8 @@
 #include "device_config.h"
 #include "mqtt_client.h"
 
+using BuzzerTestCallback = bool (*)(String* message);
+
 class SetupPortal {
  public:
   SetupPortal(ConfigStore& configStore, DeviceMqttClient& mqttClient);
@@ -26,6 +28,7 @@ class SetupPortal {
                    bool maintenanceMode = false);
   void update();
   bool consumeAlertTuningUpdate(DeviceSettings::AlertTuningConfig& alertTuning);
+  void setBuzzerTestCallback(BuzzerTestCallback callback);
 
   bool isRunning() const;
   IPAddress apIP() const;
@@ -48,6 +51,7 @@ class SetupPortal {
   void handleRestart();
   void handleTestBackend();
   void handleTestMqtt();
+  void handleTestBuzzer();
 
   String htmlEscape(const String& value) const;
   String flashStyle() const;
@@ -95,4 +99,5 @@ class SetupPortal {
   String mqttProbeMessage_;
   bool alertTuningUpdatePending_ = false;
   DeviceSettings::AlertTuningConfig pendingAlertTuning_;
+  BuzzerTestCallback buzzerTestCallback_ = nullptr;
 };

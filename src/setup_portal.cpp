@@ -244,6 +244,10 @@ bool SetupPortal::consumeAlertTuningUpdate(DeviceSettings::AlertTuningConfig& al
   return true;
 }
 
+void SetupPortal::setBuzzerTestCallback(BuzzerTestCallback callback) {
+  buzzerTestCallback_ = callback;
+}
+
 void SetupPortal::configureRoutes() {
   server_.on("/", HTTP_GET, [this]() { handleRoot(); });
   server_.on("/save", HTTP_POST, [this]() { handleSaveSettings(); });
@@ -253,6 +257,7 @@ void SetupPortal::configureRoutes() {
   server_.on("/restart", HTTP_POST, [this]() { handleRestart(); });
   server_.on("/test-backend", HTTP_POST, [this]() { handleTestBackend(); });
   server_.on("/test-mqtt", HTTP_POST, [this]() { handleTestMqtt(); });
+  server_.on("/test-buzzer", HTTP_POST, [this]() { handleTestBuzzer(); });
 
   server_.on("/generate_204", HTTP_ANY, [this]() { handleCaptiveProbe(); });
   server_.on("/gen_204", HTTP_ANY, [this]() { handleCaptiveProbe(); });
@@ -735,6 +740,24 @@ void SetupPortal::handleTestMqtt() {
   redirectToPortal();
 }
 
+void SetupPortal::handleTestBuzzer() {
+  if (buzzerTestCallback_ == nullptr) {
+    flashMessage_ = "Teste de buzzer indisponivel neste firmware.";
+    flashTone_ = "error";
+    redirectToPortal();
+    return;
+  }
+
+  String message;
+  const bool ok = buzzerTestCallback_(&message);
+  flashMessage_ = message.isEmpty()
+                      ? (ok ? "Pulso de teste do buzzer iniciado." :
+                              "Buzzer nao acionado. Verifique se esta habilitado.")
+                      : message;
+  flashTone_ = ok ? "success" : "warning";
+  redirectToPortal();
+}
+
 String SetupPortal::htmlEscape(const String& value) const {
   String escaped = value;
   escaped.replace("&", "&amp;");
@@ -1014,7 +1037,8 @@ void SetupPortal::appendAlertTuningCard(String& html) const {
   html += alert.buzzerEnabled ? " checked" : "";
   html += ">Habilitar buzzer local para alerta</label>";
   html += "<p class='muted'>Em demonstracao, valores baixos facilitam teste de bancada e podem gerar falsos positivos. Volte para normal apos validar o fluxo.</p>";
-  html += "<div class='row'><button class='primary' type='submit'>Salvar pre-calibracao</button></div></form>";
+  html += "<div class='row'><button class='primary' type='submit'>Salvar pre-calibracao</button>";
+  html += "<button class='secondary' formaction='/test-buzzer' formmethod='post' type='submit'>Testar buzzer</button></div></form>";
   html += "</div>";
 }
 

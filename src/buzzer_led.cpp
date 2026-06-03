@@ -23,6 +23,11 @@ void BuzzerLed::begin(uint8_t ledPin,
   }
 
   writeOutputs(false, false);
+  AppLog::infof("[buzzer] enabled=%u pin=%u active_high=%u led_enabled=%u\n",
+                buzzerEnabled_ ? 1U : 0U,
+                buzzerPin_,
+                buzzerActiveHigh_ ? 1U : 0U,
+                ledEnabled_ ? 1U : 0U);
 }
 
 void BuzzerLed::setBuzzerEnabled(bool enabled) {
@@ -41,41 +46,69 @@ void BuzzerLed::setBuzzerEnabled(bool enabled) {
     buzzerState_ = false;
   }
 
-  AppLog::infof("[buzzer] runtime enabled=%u\n", enabled ? 1U : 0U);
+  AppLog::infof("[buzzer] enabled=%u pin=%u active_high=%u source=runtime_config\n",
+                enabled ? 1U : 0U,
+                buzzerPin_,
+                buzzerActiveHigh_ ? 1U : 0U);
 }
 
 void BuzzerLed::setState(IndicatorState state) {
   state_ = state;
 }
 
-void BuzzerLed::triggerAlarm(uint8_t cycles) {
+void BuzzerLed::triggerAlarm(uint8_t cycles, const char* reason) {
   // Cada ciclo alterna LED e buzzer duas vezes para formar um padrao perceptivel.
   if (cycles == 0U) {
+    AppLog::warn("[buzzer] skipped reason=no_alert_event");
+    return;
+  }
+
+  if (!buzzerEnabled_) {
+    AppLog::warnf("[buzzer] skipped reason=disabled event=%s pin=%u\n",
+                  reason != nullptr ? reason : "alert",
+                  buzzerPin_);
     return;
   }
 
   alarmTogglesRemaining_ = cycles * 2U;
   lastAlarmToggleMs_ = 0;
   alarmActive_ = true;
+  alarmReason_ = reason != nullptr ? reason : "alert";
   pulseActive_ = false;
+  pulseReason_ = "none";
   pulseStartedAtMs_ = 0;
   pulseDurationMs_ = 0;
-  AppLog::warnf("[buzzer] alert pulse start cycles=%u buzzer_enabled=%u\n",
+  AppLog::warnf("[buzzer] alert pulse start reason=%s cycles=%u enabled=%u pin=%u active_high=%u\n",
+                alarmReason_,
                 cycles,
-                buzzerEnabled_ ? 1U : 0U);
+                buzzerEnabled_ ? 1U : 0U,
+                buzzerPin_,
+                buzzerActiveHigh_ ? 1U : 0U);
 }
 
-void BuzzerLed::triggerPulse(unsigned long durationMs) {
+void BuzzerLed::triggerPulse(unsigned long durationMs, const char* reason) {
   if (durationMs == 0U) {
+    AppLog::warn("[buzzer] skipped reason=no_alert_event");
+    return;
+  }
+
+  if (!buzzerEnabled_) {
+    AppLog::warnf("[buzzer] skipped reason=disabled event=%s pin=%u\n",
+                  reason != nullptr ? reason : "test",
+                  buzzerPin_);
     return;
   }
 
   pulseActive_ = true;
+  pulseReason_ = reason != nullptr ? reason : "test";
   pulseStartedAtMs_ = 0;
   pulseDurationMs_ = durationMs;
-  AppLog::warnf("[buzzer] test pulse start duration_ms=%lu buzzer_enabled=%u\n",
+  AppLog::warnf("[buzzer] test pulse start reason=%s duration_ms=%lu enabled=%u pin=%u active_high=%u\n",
+                pulseReason_,
                 durationMs,
-                buzzerEnabled_ ? 1U : 0U);
+                buzzerEnabled_ ? 1U : 0U,
+                buzzerPin_,
+                buzzerActiveHigh_ ? 1U : 0U);
 }
 
 void BuzzerLed::update() {
@@ -94,7 +127,8 @@ void BuzzerLed::update() {
       if (alarmTogglesRemaining_ == 0U && alarmActive_) {
         alarmActive_ = false;
         writeOutputs(ledState_, false);
-        AppLog::warn("[buzzer] alert pulse end");
+        AppLog::warnf("[buzzer] alert pulse end reason=%s\n", alarmReason_);
+        alarmReason_ = "none";
       }
     }
     return;
@@ -116,7 +150,8 @@ void BuzzerLed::update() {
     pulseStartedAtMs_ = 0;
     pulseDurationMs_ = 0;
     writeOutputs(ledState_, false);
-    AppLog::warn("[buzzer] test pulse end");
+    AppLog::warnf("[buzzer] test pulse end reason=%s\n", pulseReason_);
+    pulseReason_ = "none";
   }
 
   renderState(nowMs);

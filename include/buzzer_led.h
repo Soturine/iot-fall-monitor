@@ -19,8 +19,8 @@ class BuzzerLed {
              bool buzzerEnabled = true);
   void setBuzzerEnabled(bool enabled);
   void setState(IndicatorState state);
-  void triggerAlarm(uint8_t cycles = 6);
-  void triggerPulse(unsigned long durationMs);
+  void triggerAlarm(uint8_t cycles = 6, const char* reason = "alert");
+  void triggerPulse(unsigned long durationMs, const char* reason = "test");
   void update();
 
  private:
@@ -42,6 +42,8 @@ class BuzzerLed {
   unsigned long lastAlarmToggleMs_ = 0;
   bool alarmActive_ = false;
   bool pulseActive_ = false;
+  const char* alarmReason_ = "none";
+  const char* pulseReason_ = "none";
   unsigned long pulseStartedAtMs_ = 0;
   unsigned long pulseDurationMs_ = 0;
 };

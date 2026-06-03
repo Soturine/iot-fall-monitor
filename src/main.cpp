@@ -164,6 +164,25 @@ const DeviceSettings::DeviceConfig& runtimeConfig() {
   return connectivityManager.config();
 }
 
+bool handlePortalBuzzerTest(String* message) {
+  const bool enabled = runtimeConfig().alertTuning.buzzerEnabled;
+  indicator.setBuzzerEnabled(enabled);
+  AppLog::infof("[buzzer] portal test requested enabled=%u pin=%u active_high=%u\n",
+                enabled ? 1U : 0U,
+                AppConfig::BUZZER_PIN,
+                AppConfig::BUZZER_ACTIVE_HIGH ? 1U : 0U);
+
+  indicator.triggerPulse(220, "portal_test");
+
+  if (message != nullptr) {
+    *message = enabled
+                   ? "Pulso de teste do buzzer iniciado. Se nao ouvir som, confira pino, GND, tipo ativo/passivo e alimentacao."
+                   : "Buzzer desabilitado na pre-calibracao. Habilite o buzzer local, salve e teste novamente.";
+  }
+
+  return enabled;
+}
+
 void addTimeDomainFeatures(JsonObject features, const FallTimeDomainFeatures& timeFeatures) {
   features["available"] = timeFeatures.available;
   features["sample_count"] = timeFeatures.sampleCount;
@@ -669,15 +688,22 @@ IndicatorState computeIndicatorState() {
 }
 
 void triggerConfiguredAlertBuzzer(const char* eventType, uint8_t cycles) {
+  if (eventType == nullptr || eventType[0] == '\0' || cycles == 0U) {
+    AppLog::warn("[buzzer] skipped reason=no_alert_event");
+    return;
+  }
+
   if (!runtimeConfig().alertTuning.buzzerEnabled) {
     if (AppConfig::FIRMWARE_MQTT_DIAGNOSTIC_ENABLED) {
-      AppLog::infof("[buzzer] alert skipped reason=disabled type=%s\n", eventType);
+      AppLog::infof("[buzzer] skipped reason=disabled event=%s pin=%u\n",
+                    eventType,
+                    AppConfig::BUZZER_PIN);
     }
     return;
   }
 
   indicator.setBuzzerEnabled(true);
-  indicator.triggerAlarm(cycles);
+  indicator.triggerAlarm(cycles, eventType);
 }
 
 void publishThresholdAlertEvent(const char* eventType,
@@ -1001,7 +1027,7 @@ void logSensorReadOkIfDue(const SensorReading& reading, unsigned long nowMs) {
   }
 
   lastSensorHealthLogAtMs = nowMs;
-  AppLog::infof("[sensor] read ok raw ax=%d ay=%d az=%d gx=%d gy=%d gz=%d | g ax=%.2f ay=%.2f az=%.2f magnitude=%.2f gyro=%.2f\n",
+  AppLog::infof("[sensor] read ok raw ax=%d ay=%d az=%d gx=%d gy=%d gz=%d | g ax=%.2f ay=%.2f az=%.2f raw_magnitude_g=%.2f corrected_magnitude_g=%.2f filtered_magnitude_g=%.2f gyro=%.2f\n",
                 reading.rawAccelX,
                 reading.rawAccelY,
                 reading.rawAccelZ,
@@ -1011,6 +1037,8 @@ void logSensorReadOkIfDue(const SensorReading& reading, unsigned long nowMs) {
                 reading.accelXG,
                 reading.accelYG,
                 reading.accelZG,
+                reading.rawAccelMagnitudeG,
+                reading.correctedAccelMagnitudeG,
                 reading.accelMagnitudeG,
                 reading.gyroMagnitudeDegPerSec);
 }
@@ -1153,7 +1181,7 @@ void handleMotionTest(const SensorReading& reading, unsigned long nowMs) {
 
   lastMotionTestTriggerAtMs = nowMs;
   motionTestStableSinceAtMs = 0U;
-  indicator.triggerPulse(AppConfig::MOTION_TEST_BUZZER_DURATION_MS);
+  indicator.triggerPulse(AppConfig::MOTION_TEST_BUZZER_DURATION_MS, "motion_test");
 
   if (AppConfig::MOTION_TEST_SERIAL_DEBUG_ENABLED) {
     Serial.printf("[motion-test] Movimento brusco detectado | accel=%.2f g | gyro=%.1f dps | estrategia=%s\n",
@@ -1262,12 +1290,14 @@ void setup() {
   if (AppConfig::SOS_BUTTON_ENABLED) {
     sosButton.begin(AppConfig::SOS_BUTTON_PIN, true, AppConfig::SOS_HOLD_TIME_MS);
   }
+  setupPortal.setBuzzerTestCallback(handlePortalBuzzerTest);
 
   sensorReady = sensor.begin();
   if (sensorReady) {
-    AppLog::infof("[boot] sensor_begin_ok address=0x%02X who_am_i=0x%02X accel=+-%ug gyro=+-%udps accel_lsb_per_g=%.0f gyro_lsb_per_dps=%.1f calibrated=%u calibration_status=%s sensorReady=1\n",
+    AppLog::infof("[boot] sensor_begin_ok address=0x%02X who_am_i=0x%02X model=%s accel=+-%ug gyro=+-%udps accel_lsb_per_g=%.0f gyro_lsb_per_dps=%.1f calibrated=%u calibration_status=%s sensorReady=1\n",
                   sensor.activeAddress(),
                   sensor.whoAmI(),
+                  sensor.detectedModelName(),
                   static_cast<unsigned>(sensor.accelRangeG()),
                   static_cast<unsigned>(sensor.gyroRangeDegPerSec()),
                   sensor.accelLsbPerG(),
@@ -1291,6 +1321,12 @@ void setup() {
 
   connectivityManager.begin();
   indicator.setBuzzerEnabled(runtimeConfig().alertTuning.buzzerEnabled);
+  AppLog::infof("[buzzer] enabled=%u pin=%u active_high=%u alarm_only=%u source=portal_config\n",
+                runtimeConfig().alertTuning.buzzerEnabled ? 1U : 0U,
+                AppConfig::BUZZER_PIN,
+                AppConfig::BUZZER_ACTIVE_HIGH ? 1U : 0U,
+                AppConfig::BUZZER_ALARM_ONLY ? 1U : 0U);
+  indicator.triggerPulse(80, "boot_autotest");
   restoreBufferedEventsFromStore();
 
   lastStatusSentAtMs = millis();
