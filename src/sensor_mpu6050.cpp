@@ -1,6 +1,7 @@
 #include "sensor_mpu6050.h"
 
 #include <cmath>
+#include <cstring>
 
 #include "app_config.h"
 #include "app_logging.h"
@@ -10,6 +11,7 @@ namespace {
 constexpr float kRadiansToDegrees = 57.2957795f;
 constexpr uint8_t kMpu6050WhoAmIValue = 0x68;
 constexpr uint8_t kMpu6500WhoAmIValue = 0x70;
+constexpr uint8_t kMpu9250WhoAmIValue = 0x71;
 constexpr uint8_t kPrimaryAddress = 0x68;
 constexpr uint8_t kAlternateAddress = 0x69;
 
@@ -43,6 +45,7 @@ constexpr const char* kI2cErrorWhoAmIIncompatible = "who_am_i_incompatible";
 constexpr const char* kI2cErrorRawReadFailed = "raw_read_failed";
 constexpr const char* kI2cErrorReadFailed = "i2c_read_failed";
 constexpr const char* kI2cErrorRecoveryFailed = "i2c_recovery_failed";
+constexpr const char* kI2cErrorRawAllZero = "raw_all_zero";
 
 void scanI2CBus(TwoWire& wire) {
   AppLog::infof("[i2c] scan start sda=%u scl=%u clock=%luHz stop_mode=%u timeout_ms=%u\n",
@@ -313,10 +316,18 @@ const char* sensorNameFromWhoAmI(uint8_t whoAmI) {
     case kMpu6050WhoAmIValue:
       return "MPU6050";
     case kMpu6500WhoAmIValue:
-      return "MPU6500/MPU9250";
+      return "MPU6500";
+    case kMpu9250WhoAmIValue:
+      return "MPU9250";
     default:
       return "desconhecido";
   }
+}
+
+bool isCompatibleWhoAmI(uint8_t whoAmI) {
+  return whoAmI == kMpu6050WhoAmIValue ||
+         whoAmI == kMpu6500WhoAmIValue ||
+         whoAmI == kMpu9250WhoAmIValue;
 }
 
 void printProbeDetails(TwoWire& wire, uint8_t address) {
@@ -352,11 +363,13 @@ bool SensorMPU6050::begin(TwoWire& wire, uint8_t address) {
   wire_ = &wire;
   address_ = address;
   whoAmI_ = 0;
+  detectedModelName_ = "desconhecido";
   ready_ = false;
   reading_ = SensorReading();
   filterInitialized_ = false;
   lastReadSucceeded_ = false;
   accelCalibrationApplied_ = false;
+  scaleReadbackMismatchAccepted_ = false;
   calibrationStatus_ = "not_started";
   lastI2cError_ = kI2cErrorNone;
   consecutiveReadFailures_ = 0;
@@ -405,17 +418,19 @@ bool SensorMPU6050::begin(TwoWire& wire, uint8_t address) {
     }
   }
 
-  if (whoAmI_ != kMpu6050WhoAmIValue && whoAmI_ != kMpu6500WhoAmIValue) {
+  if (!isCompatibleWhoAmI(whoAmI_)) {
     lastI2cError_ = kI2cErrorWhoAmIIncompatible;
     AppLog::errorf("[sensor] ready=0 reason=who_am_i_incompatible value=0x%02X\n", whoAmI_);
     ready_ = false;
     return false;
   }
 
-  AppLog::infof("[sensor] probe ok address=0x%02X who_am_i=0x%02X [%s]\n",
+  detectedModelName_ = sensorNameFromWhoAmI(whoAmI_);
+
+  AppLog::infof("[sensor] probe ok address=0x%02X who_am_i=0x%02X model=%s\n",
                 address_,
                 whoAmI_,
-                sensorNameFromWhoAmI(whoAmI_));
+                detectedModelName_);
 
   const bool configured = configureSensor(true);
   if (!configured) {
@@ -430,7 +445,9 @@ bool SensorMPU6050::begin(TwoWire& wire, uint8_t address) {
   int16_t rawGyroZ = 0;
 
   if (!readRawSample(rawAccelX, rawAccelY, rawAccelZ, rawGyroX, rawGyroY, rawGyroZ)) {
-    lastI2cError_ = kI2cErrorRawReadFailed;
+    if (strcmp(lastI2cError_, kI2cErrorRawAllZero) != 0) {
+      lastI2cError_ = kI2cErrorRawReadFailed;
+    }
     AppLog::error("[sensor] ready=0 reason=raw_read_failed_after_begin");
     ready_ = false;
     return false;
@@ -439,7 +456,7 @@ bool SensorMPU6050::begin(TwoWire& wire, uint8_t address) {
   AppLog::infof("IMU compativel inicializado em 0x%02X com WHO_AM_I=0x%02X [%s].\n",
                 address_,
                 whoAmI_,
-                sensorNameFromWhoAmI(whoAmI_));
+                detectedModelName_);
 
   ready_ = true;
   lastReadSucceeded_ = true;
@@ -485,7 +502,7 @@ bool SensorMPU6050::configureSensor(bool runCalibration) {
   delay(10);
   configured = refreshScaleFromRegisters() && configured;
 
-  if (accelFsBits_ != kDesiredAccelFs || gyroFsBits_ != kDesiredGyroFs) {
+  if (runCalibration && (accelFsBits_ != kDesiredAccelFs || gyroFsBits_ != kDesiredGyroFs)) {
     AppLog::warn("[sensor] range readback diferente do desejado; tentando reconfigurar uma vez.");
     configured =
         writeRegisterWithRetry(*wire_, address_, kRegisterGyroConfig, kDesiredGyroFs, "GYRO_CONFIG") &&
@@ -495,6 +512,16 @@ bool SensorMPU6050::configureSensor(bool runCalibration) {
         configured;
     delay(10);
     configured = refreshScaleFromRegisters() && configured;
+  }
+
+  if (accelFsBits_ != kDesiredAccelFs || gyroFsBits_ != kDesiredGyroFs) {
+    scaleReadbackMismatchAccepted_ = true;
+    AppLog::warnf("[sensor] range effective accepted model=%s accel=+-%ug gyro=+-%udps reason=readback_mismatch_or_fixed_scale\n",
+                  detectedModelName_,
+                  static_cast<unsigned>(accelRangeG_),
+                  static_cast<unsigned>(gyroRangeDegPerSec_));
+  } else {
+    scaleReadbackMismatchAccepted_ = false;
   }
 
   if (runCalibration) {
@@ -763,6 +790,7 @@ bool SensorMPU6050::readRawSample(int16_t& accelX,
   }
 
   if (!readOk) {
+    lastI2cError_ = kI2cErrorReadFailed;
     return false;
   }
 
@@ -772,6 +800,12 @@ bool SensorMPU6050::readRawSample(int16_t& accelX,
   gyroX = joinBytes(rawData[8], rawData[9]);
   gyroY = joinBytes(rawData[10], rawData[11]);
   gyroZ = joinBytes(rawData[12], rawData[13]);
+
+  if (accelX == 0 && accelY == 0 && accelZ == 0 &&
+      gyroX == 0 && gyroY == 0 && gyroZ == 0) {
+    lastI2cError_ = kI2cErrorRawAllZero;
+    return false;
+  }
 
   return true;
 }
@@ -790,7 +824,9 @@ bool SensorMPU6050::update() {
 
   if (!readRawSample(rawAccelX, rawAccelY, rawAccelZ, rawGyroX, rawGyroY, rawGyroZ)) {
     lastReadSucceeded_ = false;
-    lastI2cError_ = kI2cErrorReadFailed;
+    if (strcmp(lastI2cError_, kI2cErrorRawAllZero) != 0) {
+      lastI2cError_ = kI2cErrorReadFailed;
+    }
     ++totalI2cErrors_;
     ++i2cErrorsSinceSummary_;
     ++i2cErrorsSinceRecovery_;
@@ -818,12 +854,21 @@ bool SensorMPU6050::update() {
   reading_.rawGyroY = rawGyroY;
   reading_.rawGyroZ = rawGyroZ;
 
+  const float rawAccelXG = static_cast<float>(rawAccelX) / accelLsbPerG_;
+  const float rawAccelYG = static_cast<float>(rawAccelY) / accelLsbPerG_;
+  const float rawAccelZG = static_cast<float>(rawAccelZ) / accelLsbPerG_;
   const float accelXG =
-      (static_cast<float>(rawAccelX) / accelLsbPerG_) - accelOffsetXG_;
+      rawAccelXG - accelOffsetXG_;
   const float accelYG =
-      (static_cast<float>(rawAccelY) / accelLsbPerG_) - accelOffsetYG_;
+      rawAccelYG - accelOffsetYG_;
   const float accelZG =
-      (static_cast<float>(rawAccelZ) / accelLsbPerG_) - accelOffsetZG_;
+      rawAccelZG - accelOffsetZG_;
+  reading_.rawAccelMagnitudeG =
+      sqrtf((rawAccelXG * rawAccelXG) +
+            (rawAccelYG * rawAccelYG) +
+            (rawAccelZG * rawAccelZG));
+  reading_.correctedAccelMagnitudeG =
+      sqrtf((accelXG * accelXG) + (accelYG * accelYG) + (accelZG * accelZG));
 
   const float gyroXDegPerSec = static_cast<float>(rawGyroX) / gyroLsbPerDegPerSec_;
   const float gyroYDegPerSec = static_cast<float>(rawGyroY) / gyroLsbPerDegPerSec_;
@@ -872,6 +917,10 @@ uint8_t SensorMPU6050::activeAddress() const {
 
 uint8_t SensorMPU6050::whoAmI() const {
   return whoAmI_;
+}
+
+const char* SensorMPU6050::detectedModelName() const {
+  return detectedModelName_;
 }
 
 uint8_t SensorMPU6050::accelRangeG() const {

@@ -19,6 +19,7 @@ class SensorMPU6050 {
   const char* lastI2cError() const;
   uint8_t activeAddress() const;
   uint8_t whoAmI() const;
+  const char* detectedModelName() const;
   uint8_t accelRangeG() const;
   uint16_t gyroRangeDegPerSec() const;
   float accelLsbPerG() const;
@@ -54,6 +55,7 @@ class SensorMPU6050 {
   TwoWire* wire_ = nullptr;
   uint8_t address_ = 0x68;
   uint8_t whoAmI_ = 0;
+  const char* detectedModelName_ = "desconhecido";
   uint8_t accelFsBits_ = 0x10;
   uint8_t gyroFsBits_ = 0x08;
   uint8_t accelRangeG_ = 8;
@@ -61,6 +63,7 @@ class SensorMPU6050 {
   float accelLsbPerG_ = 4096.0f;
   float gyroLsbPerDegPerSec_ = 65.5f;
   bool accelCalibrationApplied_ = false;
+  bool scaleReadbackMismatchAccepted_ = false;
   const char* calibrationStatus_ = "not_started";
   const char* lastI2cError_ = "none";
   unsigned long consecutiveReadFailures_ = 0;

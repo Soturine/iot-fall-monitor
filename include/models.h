@@ -16,6 +16,8 @@ struct SensorReading {
   float gyroXDegPerSec = 0.0f;
   float gyroYDegPerSec = 0.0f;
   float gyroZDegPerSec = 0.0f;
+  float rawAccelMagnitudeG = 0.0f;
+  float correctedAccelMagnitudeG = 0.0f;
   float accelMagnitudeG = 0.0f;
   float gyroMagnitudeDegPerSec = 0.0f;
   float pitchDeg = 0.0f;
