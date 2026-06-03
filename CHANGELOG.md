@@ -9,6 +9,22 @@
 - testar classificação de movimentos com múltiplas runs por classe
 - validar o sistema com ESP32 real, MPU6050, backend, MQTT e dashboard em cenário ponta a ponta
 
+## [v0.8.29] - 2026-06-03
+### Alterado
+- firmware centraliza campos comuns de payload (`device_uid`, `device_id`, bateria, rede, diagnóstico de sensor e leitura mais recente) sem mudar o contrato MQTT de `status`, `telemetry` ou `events`
+- backend centraliza normalizadores compartilhados (`toIso`, `toNullableNumber`, `toNullableBoolean`) em `utils/formatters`, reduzindo duplicação em serviços de eventos, alertas, devices e ingestão MQTT
+- frontend extrai helpers de diagnóstico/evidência do detalhe do dispositivo para `frontend/src/lib/deviceDiagnostics.ts`, preservando o visual premium e o fluxo realtime
+- versão alinhada para `0.8.29` em packages da raiz, backend, frontend e locks existentes
+
+### Documentação
+- `README.md` passa a documentar `v0.8.29` como baseline atual de qualidade incremental
+- auditoria de qualidade registra as refatorações aplicadas, a complexidade residual e os candidatos seguros para próximas versões
+
+### Limitações conhecidas
+- a lógica de alerta, telemetria e buzzer foi preservada; esta rodada não altera thresholds, contrato MQTT, API, Socket.IO ou schema
+- a modularização completa de `src/main.cpp`, `setup_portal.cpp`, `deviceService.js` e páginas grandes do frontend continua pendente para rodadas futuras
+- validação do botão físico/portal `Testar buzzer` depende do ESP32 real conectado e da configuração do buzzer no hardware
+
 ## [v0.8.28] - 2026-06-03
 ### Adicionado
 - suporte explícito a IMU `MPU6050`, `MPU6500` e `MPU9250` conforme `WHO_AM_I`

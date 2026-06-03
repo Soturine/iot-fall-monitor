@@ -6,9 +6,11 @@ O objetivo do repositório é integrar hardware embarcado, ingestão de eventos,
 
 ## Baseline Atual
 
-Baseline atual do repositório: `v0.8.28`.
+Baseline atual do repositório: `v0.8.29`.
 
-A baseline `v0.8.28` estabiliza a camada física da IMU no ESP32 novo com CP210x em `COM5`: o firmware identifica `MPU6050`, `MPU6500` e `MPU9250` por `WHO_AM_I`, aceita a faixa efetiva lida quando o chip permanece em `+-2g/+-250dps`, descarta leituras raw totalmente zeradas e registra magnitude raw/corrigida para diagnosticar se o repouso está perto de `1 g`.
+A baseline `v0.8.29` é uma rodada conservadora de qualidade de código e validação da documentação operacional. Ela preserva a lógica de alerta, telemetria, MQTT, Socket.IO e schema, mas reduz duplicações em pontos críticos: payloads comuns do firmware, normalizadores backend e helpers de diagnóstico do detalhe do dispositivo no frontend.
+
+A baseline anterior `v0.8.28` estabiliza a camada física da IMU no ESP32 novo com CP210x em `COM5`: o firmware identifica `MPU6050`, `MPU6500` e `MPU9250` por `WHO_AM_I`, aceita a faixa efetiva lida quando o chip permanece em `+-2g/+-250dps`, descarta leituras raw totalmente zeradas e registra magnitude raw/corrigida para diagnosticar se o repouso está perto de `1 g`.
 
 Esta baseline também deixa o buzzer auditável: o Serial Monitor mostra `enabled`, `pin`, `active_high`, razão do pulso, pulso de alerta iniciado/finalizado e skip por `disabled` ou `no_alert_event`. O portal ESP32 ganhou o botão `Testar buzzer`, usando o estado atual salvo da pré-calibração; se o buzzer estiver desabilitado, o log e o portal informam isso claramente.
 

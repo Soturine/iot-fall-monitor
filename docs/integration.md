@@ -106,6 +106,8 @@ Na `v0.8.27`, o firmware também pode publicar `fall_suspected` e `movement_dete
 
 Na `v0.8.28`, o contrato MQTT permanece o mesmo, mas a fronteira física da IMU ficou mais rígida: o firmware aceita `WHO_AM_I=0x68` (`MPU6050`), `0x70` (`MPU6500`) e `0x71` (`MPU9250`), usa a faixa efetiva lida em `ACCEL_CONFIG`/`GYRO_CONFIG`, preserva a última escala efetiva durante recoveries com readback falho, descarta amostra raw totalmente zerada e mantém `sensor_read_ok=false` quando a leitura falha. O buzzer continua sendo decisão local do firmware; alertas criados apenas no backend não acionam hardware sem um futuro comando MQTT de retorno para `queda/devices/{deviceId}/commands`.
 
+Na `v0.8.29`, o contrato MQTT continua inalterado. A mudança foi apenas interna: campos comuns de `status`, `telemetry` e `events` passaram a ser montados por helpers compartilhados no firmware para reduzir divergência entre payloads. Os nomes de campos, tópicos, canais Socket.IO e regras de persistência permanecem os mesmos.
+
 ### Confiabilidade por criticidade
 
 `telemetry` é periódica e pode tolerar perda eventual. Eventos críticos do canal `events`, como `fall_detected`, SOS manual e `sensor_fault`, precisam ser rastreáveis. Por isso, a `v0.8.25` adiciona:

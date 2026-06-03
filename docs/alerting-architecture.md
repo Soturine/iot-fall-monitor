@@ -266,6 +266,8 @@ O `evidenceSummary` do backend continua sendo o resumo das amostras realmente pe
 
 Na `v0.8.28`, o firmware também registra o motivo do buzzer (`reason=movement_detected`, `fall_suspected`, `fall_detected`, `sos_pressed`, `portal_test` ou `boot_autotest`) e quando ele foi pulado por `disabled` ou `no_alert_event`. Esses logs são a primeira evidência para separar falha de regra, configuração desligada e problema físico do buzzer.
 
+Na `v0.8.29`, a arquitetura de alerta não mudou. A alteração foi de manutenção: campos comuns de evento/status/telemetria foram centralizados no firmware e normalizadores repetidos foram centralizados no backend, preservando a decisão local de buzzer e a emissão `alert:new`.
+
 Responsabilidades atuais:
 
 - firmware: decide queda confirmada em tempo real, publica suspeita/movimento experimental quando configurado no portal e aciona buzzer local quando a regra local permitir

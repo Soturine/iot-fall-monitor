@@ -1,8 +1,24 @@
-# Auditoria de Qualidade de Código - v0.8.27
+# Auditoria de Qualidade de Código - v0.8.29
 
 Data da auditoria: 2026-06-03.
 
-Escopo: firmware ESP32, backend Node/Express/MySQL/MQTT/Socket.IO, frontend React/Vite/TypeScript, banco, scripts e documentação operacional. Esta auditoria não alterou lógica de alerta, telemetria, MQTT, buzzer, firmware, backend funcional, frontend funcional, API, Socket.IO ou schema.
+Escopo: firmware ESP32, backend Node/Express/MySQL/MQTT/Socket.IO, frontend React/Vite/TypeScript, banco, scripts e documentação operacional. A rodada inicial da auditoria foi documental; a atualização `v0.8.29` aplicou apenas refatorações pequenas e conservadoras, sem alterar lógica de alerta, telemetria, MQTT, buzzer, API, Socket.IO ou schema.
+
+## Atualização v0.8.29
+
+A `v0.8.29` aplicou a primeira parte segura da auditoria:
+
+- `src/main.cpp` centraliza campos repetidos de payload em helpers pequenos (`device_uid`/`device_id`, bateria, RSSI, diagnóstico de sensor e leitura mais recente), preservando os campos publicados em `status`, `telemetry` e `events`.
+- `backend/src/utils/formatters.js` concentra `toIso`, `toNullableNumber` e `toNullableBoolean`, removendo definições locais repetidas em `eventService`, `alertService`, `deviceService` e `mqttIngestionService`.
+- `frontend/src/lib/deviceDiagnostics.ts` concentra helpers de evidência, tópico MQTT esperado e formatação de diagnóstico usados por `DeviceDetailPage`.
+- nenhum dead code foi removido nesta etapa, porque os candidatos restantes ainda têm uso operacional, compatibilidade legada ou valor documental.
+
+Complexidade observada após a extração:
+
+- `src/main.cpp` continua grande, mas os builders de payload perderam duplicação de campos comuns e ficaram menos propensos a divergência entre `status`, `telemetry` e `events`.
+- os serviços backend ainda são longos, mas normalização de valores voltou para um helper comum e testável.
+- `DeviceDetailPage.tsx` continua concentrando muita UI, porém tópicos/formatadores de diagnóstico saíram do componente.
+- não houve alteração de algoritmo, thresholds, persistência, contratos MQTT, realtime ou visual.
 
 ## Nota geral
 
@@ -143,16 +159,21 @@ Riscos futuros:
 
 ## Refatorações seguras aplicadas
 
-Nenhuma. A rodada foi limitada à auditoria técnica para respeitar a restrição de não mexer na lógica de alerta/telemetria.
+### v0.8.29
+
+- Firmware: extraídos helpers locais em `src/main.cpp` para identidade do device, bateria, rede, diagnóstico de sensor e campos da última leitura. Isso reduz duplicação entre `buildEventPayload`, `buildStatusPayload`, `buildTelemetryPayload` e `addSensorContextToEventPayload` sem criar novo contrato MQTT.
+- Backend: `toIso`, `toNullableNumber` e `toNullableBoolean` foram movidos para `backend/src/utils/formatters.js` e reutilizados por serviços centrais. O comportamento foi mantido: valores vazios continuam virando `null`, números inválidos continuam descartados e datas inválidas continuam retornando `null`.
+- Frontend: helpers puros de evidência, tópicos MQTT esperados e formatação de diagnóstico foram extraídos para `frontend/src/lib/deviceDiagnostics.ts`.
+- Documentação: README, changelog e esta auditoria foram atualizados para registrar a baseline `v0.8.29` e as limitações restantes.
 
 ## Refatorações recomendadas para próximas versões
 
 ### v0.8.x
 
-- Extrair `event_payload_builder` no firmware sem mudar o JSON final.
-- Extrair `sensor_health_reporter` para compartilhar status, telemetry e events.
+- Mover os helpers locais de payload do firmware para `event_payload_builder`/`telemetry_payload_builder` quando houver testes ou revisão dedicada, mantendo o JSON final.
+- Extrair `sensor_health_reporter` como módulo próprio se o diagnóstico de sensor crescer além dos helpers atuais.
 - Extrair `alert_decision_runner` para encapsular `movement_detected`/`fall_suspected`.
-- Centralizar `toIso`, `toNullableNumber`, `toNullableBoolean` em helpers backend.
+- Centralizar mapeadores de `event`, `alert`, `device` e `telemetry` em helpers backend.
 - Extrair `eventEvidenceService` e `eventDedupeService`.
 - Criar `useDeviceDetailRealtime` no frontend.
 - Extrair blocos `EvidenceSummary`, `TelemetryDiagnosticsPanel` e `CurrentStatePanel` para componentes menores.
@@ -191,6 +212,21 @@ Nenhuma. A rodada foi limitada à auditoria técnica para respeitar a restriçã
 9. **Melhoria do algoritmo de queda:** manter FSM local como decisão crítica, adicionar FFT/calibração como evidência experimental até validar.
 
 ## Validações executadas nesta auditoria
+
+### Atualização v0.8.29
+
+- `git diff --check`: passou.
+- `npm run check --prefix backend`: passou, 75 arquivos JavaScript validados.
+- `npm test --prefix backend`: passou, 40 testes.
+- `npm run test:mqtt --prefix backend`: passou, 15 testes.
+- `npm run test:alerts --prefix backend`: passou, 18 testes.
+- `npm run lint --prefix frontend`: passou.
+- `npm run build --prefix frontend`: passou.
+- `& "$env:USERPROFILE\.platformio\penv\Scripts\platformio.exe" run`: passou; RAM 16.7% (`54876` de `327680` bytes), Flash 84.7% (`1110509` de `1310720` bytes).
+- `& "$env:USERPROFILE\.platformio\penv\Scripts\platformio.exe" run -t upload --upload-port COM5`: passou no ESP32 CP210x.
+- Monitor serial: `PlatformIO device monitor` foi aberto, mas precisou ser encerrado por timeout e a porta foi liberada com `scripts/free-serial-port.ps1`. Coleta serial posterior confirmou telemetria publicada, `sensor_ready=1`, `sensor_valid=1`, escala efetiva `MPU6500 +-2g/+-250dps`, magnitude próxima de `1 g` e `i2c_recovery_count` incrementando.
+
+Observação operacional: o monitor ainda mostrou muitos erros I2C/recoveries em bancada, então a refatoração `v0.8.29` não deve ser interpretada como correção física do barramento. O diagnóstico atual aponta para fiação/módulo/alimentação ou estabilidade elétrica ainda a validar.
 
 - `npm run dev:check`: passou; avisos não bloqueantes para `mysql` CLI fora do PATH e portas `4000`/`5173` já ocupadas.
 - `git diff --check`: passou.

@@ -104,6 +104,8 @@ Depois de escrever os registradores, o firmware lê `ACCEL_CONFIG` e `GYRO_CONFI
 
 O sensor é considerado pronto quando o firmware encontra um `WHO_AM_I` compatível e consegue fazer uma leitura raw básica. Falhas de readback de escala ou calibração não deixam mais `sensor_ready=0`: o firmware registra o motivo, usa divisor fallback coerente e continua publicando telemetria sem offsets. Pacote raw totalmente zerado (`ax=ay=az=gx=gy=gz=0`) é descartado e não vira amostra válida. Se `sensor_ready=0` por falha de boot, o loop tenta `sensor.begin()` novamente a cada `SENSOR_BEGIN_RETRY_INTERVAL_MS`.
 
+Na `v0.8.29`, os payloads do firmware foram apenas reorganizados internamente: identidade do device, bateria, RSSI, diagnóstico de sensor e campos da última leitura são preenchidos por helpers comuns em `src/main.cpp`. Isso reduz duplicação entre `events`, `status` e `telemetry`, mas não muda tópicos, nomes de campos nem regras de publicação.
+
 ### Estabilidade I2C do MPU6050
 
 O erro serial `requestFrom(): i2cWriteReadNonStop returned Error -1` costuma aparecer quando o caminho repeated-start do `Wire` falha no barramento. Em bancada, a configuração atual evita depender desse modo:
