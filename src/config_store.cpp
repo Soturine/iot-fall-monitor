@@ -6,7 +6,7 @@ namespace {
 
 constexpr char kNamespace[] = "queda_cfg";
 constexpr char kConfigVersionKey[] = "cfg_ver";
-constexpr uint8_t kConfigVersion = 4;
+constexpr uint8_t kConfigVersion = 5;
 constexpr char kWifiCountKey[] = "wifi_count";
 constexpr char kDeviceIdKey[] = "device_id";
 constexpr char kMqttHostKey[] = "mqtt_host";
@@ -26,6 +26,13 @@ constexpr char kPatientHeightSetKey[] = "patient_h_set";
 constexpr char kPatientHeightKey[] = "patient_h";
 constexpr char kPatientPresetKey[] = "patient_preset";
 constexpr char kPatientSyncedAtKey[] = "patient_synced";
+constexpr char kAlertPresetKey[] = "alert_preset";
+constexpr char kAlertAccelKey[] = "alert_accel";
+constexpr char kAlertGyroKey[] = "alert_gyro";
+constexpr char kAlertWindowKey[] = "alert_window";
+constexpr char kAlertCooldownKey[] = "alert_cooldown";
+constexpr char kAlertBuzzerKey[] = "alert_buzzer";
+constexpr char kAlertEventsKey[] = "alert_events";
 constexpr char kPendingEventCountKey[] = "evt_count";
 
 String wifiSsidKey(size_t index) {
@@ -96,6 +103,25 @@ DeviceSettings::DeviceConfig ConfigStore::load() {
       preferences.getString(kPatientPresetKey, config.patientProfile.fallSensitivityPreset);
   config.patientProfile.syncedAt =
       preferences.getString(kPatientSyncedAtKey, config.patientProfile.syncedAt);
+  config.alertTuning.sensitivityPreset =
+      DeviceSettings::normalizeAlertSensitivityPreset(
+          preferences.getString(kAlertPresetKey, config.alertTuning.sensitivityPreset));
+  config.alertTuning.accelThresholdG =
+      DeviceSettings::clampAlertAccelThreshold(
+          preferences.getFloat(kAlertAccelKey, config.alertTuning.accelThresholdG));
+  config.alertTuning.gyroThresholdDps =
+      DeviceSettings::clampAlertGyroThreshold(
+          preferences.getFloat(kAlertGyroKey, config.alertTuning.gyroThresholdDps));
+  config.alertTuning.analysisWindowMs =
+      DeviceSettings::clampAlertAnalysisWindowMs(
+          preferences.getULong(kAlertWindowKey, config.alertTuning.analysisWindowMs));
+  config.alertTuning.cooldownMs =
+      DeviceSettings::clampAlertCooldownMs(
+          preferences.getULong(kAlertCooldownKey, config.alertTuning.cooldownMs));
+  config.alertTuning.buzzerEnabled =
+      preferences.getBool(kAlertBuzzerKey, config.alertTuning.buzzerEnabled);
+  config.alertTuning.eventsEnabled =
+      preferences.getBool(kAlertEventsKey, config.alertTuning.eventsEnabled);
 
   const size_t count = preferences.getUChar(kWifiCountKey, 0);
   config.wifiNetworkCount = 0;
@@ -152,6 +178,23 @@ bool ConfigStore::save(const DeviceSettings::DeviceConfig& config) {
   preferences.putFloat(kPatientHeightKey, config.patientProfile.heightCm);
   preferences.putString(kPatientPresetKey, config.patientProfile.fallSensitivityPreset);
   preferences.putString(kPatientSyncedAtKey, config.patientProfile.syncedAt);
+  preferences.putString(kAlertPresetKey,
+                        DeviceSettings::normalizeAlertSensitivityPreset(
+                            config.alertTuning.sensitivityPreset));
+  preferences.putFloat(kAlertAccelKey,
+                       DeviceSettings::clampAlertAccelThreshold(
+                           config.alertTuning.accelThresholdG));
+  preferences.putFloat(kAlertGyroKey,
+                       DeviceSettings::clampAlertGyroThreshold(
+                           config.alertTuning.gyroThresholdDps));
+  preferences.putULong(kAlertWindowKey,
+                       DeviceSettings::clampAlertAnalysisWindowMs(
+                           config.alertTuning.analysisWindowMs));
+  preferences.putULong(kAlertCooldownKey,
+                       DeviceSettings::clampAlertCooldownMs(
+                           config.alertTuning.cooldownMs));
+  preferences.putBool(kAlertBuzzerKey, config.alertTuning.buzzerEnabled);
+  preferences.putBool(kAlertEventsKey, config.alertTuning.eventsEnabled);
   preferences.putUChar(kWifiCountKey, static_cast<uint8_t>(config.wifiNetworkCount));
 
   for (size_t index = 0; index < DeviceSettings::kMaxWifiNetworks; ++index) {

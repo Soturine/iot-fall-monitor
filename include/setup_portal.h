@@ -25,6 +25,7 @@ class SetupPortal {
                    const IPAddress& stationIp,
                    bool maintenanceMode = false);
   void update();
+  bool consumeAlertTuningUpdate(DeviceSettings::AlertTuningConfig& alertTuning);
 
   bool isRunning() const;
   IPAddress apIP() const;
@@ -62,6 +63,7 @@ class SetupPortal {
   void appendOperationalHealthCard(String& html) const;
   void appendWifiCard(String& html) const;
   void appendMqttCard(String& html) const;
+  void appendAlertTuningCard(String& html) const;
   void appendPairingCard(String& html) const;
   void appendRestartCard(String& html) const;
 
@@ -91,4 +93,6 @@ class SetupPortal {
   bool mqttProbeChecked_ = false;
   bool mqttProbeSuccess_ = false;
   String mqttProbeMessage_;
+  bool alertTuningUpdatePending_ = false;
+  DeviceSettings::AlertTuningConfig pendingAlertTuning_;
 };

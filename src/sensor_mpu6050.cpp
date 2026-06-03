@@ -45,11 +45,12 @@ constexpr const char* kI2cErrorReadFailed = "i2c_read_failed";
 constexpr const char* kI2cErrorRecoveryFailed = "i2c_recovery_failed";
 
 void scanI2CBus(TwoWire& wire) {
-  if (!AppConfig::FIRMWARE_I2C_DEBUG_ENABLED) {
-    return;
-  }
-
-  AppLog::debug("Escaneando barramento I2C...");
+  AppLog::infof("[i2c] scan start sda=%u scl=%u clock=%luHz stop_mode=%u timeout_ms=%u\n",
+                AppConfig::I2C_SDA_PIN,
+                AppConfig::I2C_SCL_PIN,
+                static_cast<unsigned long>(AppConfig::I2C_CLOCK_HZ),
+                AppConfig::I2C_USE_REPEATED_START ? 0U : 1U,
+                static_cast<unsigned>(AppConfig::I2C_TIMEOUT_MS));
 
   uint8_t devicesFound = 0;
   for (uint8_t address = 1; address < 127; ++address) {
@@ -57,13 +58,13 @@ void scanI2CBus(TwoWire& wire) {
     const uint8_t error = wire.endTransmission();
 
     if (error == 0) {
-      AppLog::debugf("Dispositivo I2C encontrado em 0x%02X\n", address);
+      AppLog::infof("[i2c] scan found address=0x%02X\n", address);
       ++devicesFound;
     }
   }
 
   if (devicesFound == 0) {
-    AppLog::debug("Nenhum dispositivo I2C encontrado.");
+    AppLog::warn("[i2c] scan no device");
   }
 }
 
@@ -361,6 +362,7 @@ bool SensorMPU6050::begin(TwoWire& wire, uint8_t address) {
   consecutiveReadFailures_ = 0;
   totalI2cErrors_ = 0;
   i2cErrorsSinceSummary_ = 0;
+  i2cErrorsSinceRecovery_ = 0;
   i2cRecoveryCount_ = 0;
   lastI2cSummaryAtMs_ = 0;
   lastRecoveryAttemptAtMs_ = 0;
@@ -791,11 +793,15 @@ bool SensorMPU6050::update() {
     lastI2cError_ = kI2cErrorReadFailed;
     ++totalI2cErrors_;
     ++i2cErrorsSinceSummary_;
+    ++i2cErrorsSinceRecovery_;
     ++consecutiveReadFailures_;
     logI2cErrorSummaryIfDue(millis());
 
     if (consecutiveReadFailures_ >= AppConfig::SENSOR_I2C_RECOVERY_FAILURE_THRESHOLD) {
-      recoverI2CBus();
+      recoverI2CBus("consecutive_failures");
+    } else if (
+        i2cErrorsSinceRecovery_ >= AppConfig::SENSOR_I2C_RECOVERY_TOTAL_ERROR_THRESHOLD) {
+      recoverI2CBus("intermittent_error_volume");
     }
 
     return false;
@@ -904,16 +910,17 @@ void SensorMPU6050::logI2cErrorSummaryIfDue(unsigned long nowMs) {
   }
 
   lastI2cSummaryAtMs_ = nowMs;
-  AppLog::warnf("[sensor] i2c errors summary last_window=%lu total=%lu consecutive=%lu recoveries=%lu last_error=%s\n",
+  AppLog::warnf("[sensor] i2c errors summary last_window=%lu total=%lu consecutive=%lu errors_since_recovery=%lu recoveries=%lu last_error=%s\n",
                 i2cErrorsSinceSummary_,
                 totalI2cErrors_,
                 consecutiveReadFailures_,
+                i2cErrorsSinceRecovery_,
                 i2cRecoveryCount_,
                 lastI2cError_);
   i2cErrorsSinceSummary_ = 0;
 }
 
-bool SensorMPU6050::recoverI2CBus() {
+bool SensorMPU6050::recoverI2CBus(const char* reason) {
   if (wire_ == nullptr) {
     return false;
   }
@@ -928,9 +935,12 @@ bool SensorMPU6050::recoverI2CBus() {
   lastRecoveryAttemptAtMs_ = nowMs;
   ++i2cRecoveryCount_;
 
-  AppLog::warnf("[sensor] i2c recovery start reason=consecutive_failures count=%lu total=%lu\n",
+  AppLog::warnf("[i2c] recovery start reason=%s consecutive=%lu errors_since_recovery=%lu total=%lu recoveries=%lu\n",
+                reason,
                 consecutiveReadFailures_,
-                totalI2cErrors_);
+                i2cErrorsSinceRecovery_,
+                totalI2cErrors_,
+                i2cRecoveryCount_);
 
   wire_->end();
   delay(20);
@@ -940,7 +950,7 @@ bool SensorMPU6050::recoverI2CBus() {
   wire_->setClock(AppConfig::I2C_CLOCK_HZ);
   wire_->setTimeOut(AppConfig::I2C_TIMEOUT_MS);
   delay(20);
-  AppLog::warn("[sensor] i2c bus restarted");
+  AppLog::warn("[i2c] bus restarted");
 
   const bool configured = configureSensor(false);
 
@@ -953,15 +963,16 @@ bool SensorMPU6050::recoverI2CBus() {
 
   if (readRawSample(rawAccelX, rawAccelY, rawAccelZ, rawGyroX, rawGyroY, rawGyroZ)) {
     consecutiveReadFailures_ = 0;
+    i2cErrorsSinceRecovery_ = 0;
     lastI2cError_ = kI2cErrorNone;
-    AppLog::infof("[sensor] recovery ok configured=%u recoveries=%lu\n",
+    AppLog::infof("[i2c] recovery ok configured=%u recoveries=%lu\n",
                   configured ? 1U : 0U,
                   i2cRecoveryCount_);
     return true;
   }
 
   lastI2cError_ = kI2cErrorRecoveryFailed;
-  AppLog::warn("[sensor] recovery failed, keeping last valid sample");
+  AppLog::warn("[i2c] recovery failed, keeping last valid sample");
   return false;
 }
 

@@ -16,7 +16,14 @@ const FALL_EVIDENCE_WINDOW_AFTER_MS = 3_000;
 const FALL_EVIDENCE_MAX_SAMPLES = 30;
 const FALL_EVIDENCE_LINKED_MIN_SAMPLES = 2;
 const TELEMETRY_REQUIRED_NUMERIC_FIELDS = ["ax", "ay", "az", "gx", "gy", "gz"];
-const ALERT_EVENT_TYPES = new Set(["fall_detected", "sos_pressed", "manual_sos", "sensor_fault"]);
+const ALERT_EVENT_TYPES = new Set([
+  "fall_detected",
+  "fall_suspected",
+  "movement_detected",
+  "sos_pressed",
+  "manual_sos",
+  "sensor_fault",
+]);
 
 function toNullableNumber(value) {
   if (value == null || value === "") {
@@ -94,6 +101,10 @@ function deriveSeverity(eventType, payload) {
       return toBoolean(payload.immobility_confirmed ?? payload.immobility)
         ? "critical"
         : "high";
+    case "fall_suspected":
+      return "high";
+    case "movement_detected":
+      return "medium";
     case "sos_pressed":
     case "manual_sos":
     case "sensor_fault":
@@ -113,6 +124,10 @@ function deriveMessage(eventType, payload) {
       return toBoolean(payload.immobility_confirmed ?? payload.immobility)
         ? "Queda com imobilidade confirmada."
         : "Queda detectada.";
+    case "fall_suspected":
+      return "Queda suspeita detectada pelo firmware.";
+    case "movement_detected":
+      return "Movimento intenso detectado pelo firmware.";
     case "sos_pressed":
       return "Botão SOS acionado manualmente.";
     case "manual_sos":
@@ -283,6 +298,8 @@ function buildFirmwareDecisionSummary(payload = {}) {
   const linkedTelemetryWindow = isPlainObject(payload.linked_telemetry_window)
     ? payload.linked_telemetry_window
     : null;
+  const alertSettings = isPlainObject(payload.alert_settings) ? payload.alert_settings : null;
+  const thresholds = isPlainObject(payload.thresholds) ? payload.thresholds : null;
   const algorithmVersion = payload.algorithm_version || features.algorithm_version || null;
   const decisionSource = payload.decision_source || features.decision_source || null;
   const reason = payload.reason || payload.fall_reason || features.reason || null;
@@ -292,7 +309,9 @@ function buildFirmwareDecisionSummary(payload = {}) {
     !decisionSource &&
     !reason &&
     !featuresTimeDomain &&
-    !featuresFrequencyDomain
+    !featuresFrequencyDomain &&
+    !alertSettings &&
+    !thresholds
   ) {
     return null;
   }
@@ -331,6 +350,8 @@ function buildFirmwareDecisionSummary(payload = {}) {
     featuresTimeDomain,
     featuresFrequencyDomain,
     linkedTelemetryWindow,
+    alertSettings,
+    thresholds,
   };
 }
 
@@ -616,7 +637,9 @@ async function recordEventFromMqtt({
     }
   }
 
-  const evidence = eventType === "fall_detected"
+  const shouldLinkTelemetryEvidence =
+    eventType === "fall_detected" || eventType === "fall_suspected";
+  const evidence = shouldLinkTelemetryEvidence
     ? await resolveFallTelemetryEvidence({ device, eventTime, immobility }, executor)
     : buildEmptyEvidence(immobility);
   const evidenceSummary = buildEvidenceSummaryForPayload(evidence, payload);

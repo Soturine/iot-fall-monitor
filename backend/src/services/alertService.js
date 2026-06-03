@@ -8,7 +8,12 @@ const { parseDateBoundary } = require("../utils/time");
 const { createAuditLog } = require("./auditService");
 const { assertRole, buildScopeFilter, canAccessScope } = require("./scopeService");
 
-const RECENT_FALL_ALERT_DEDUP_WINDOW_SECONDS = 20;
+const RECENT_CRITICAL_ALERT_DEDUP_WINDOW_SECONDS = 20;
+const RECENT_DEDUP_EVENT_TYPES = new Set([
+  "fall_detected",
+  "fall_suspected",
+  "movement_detected",
+]);
 
 function toIso(value) {
   if (!value) {
@@ -28,8 +33,12 @@ function toNullableNumber(value) {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-async function findRecentOpenFallAlert(event, executor = null) {
-  if (!event?.device?.id || event.eventType !== "fall_detected" || !event.eventTime) {
+async function findRecentOpenCriticalAlert(event, executor = null) {
+  if (
+    !event?.device?.id ||
+    !RECENT_DEDUP_EVENT_TYPES.has(event.eventType) ||
+    !event.eventTime
+  ) {
     return null;
   }
 
@@ -48,13 +57,18 @@ async function findRecentOpenFallAlert(event, executor = null) {
       FROM alerts a
       INNER JOIN events e ON e.id = a.event_id
       WHERE a.device_id = ?
-        AND e.event_type = 'fall_detected'
+        AND e.event_type = ?
         AND a.status IN ('open', 'acknowledged')
         AND ABS(TIMESTAMPDIFF(SECOND, e.event_time, ?)) <= ?
       ORDER BY e.event_time DESC, a.id DESC
       LIMIT 1
     `,
-    [event.device.id, eventTime, RECENT_FALL_ALERT_DEDUP_WINDOW_SECONDS],
+    [
+      event.device.id,
+      event.eventType,
+      eventTime,
+      RECENT_CRITICAL_ALERT_DEDUP_WINDOW_SECONDS,
+    ],
   );
 
   return row?.id ? Number(row.id) : null;
@@ -179,18 +193,19 @@ async function fetchAlertRow(alertId, executor = null) {
 async function createAlertForEvent(event, executor = null, options = {}) {
   const startedAt = process.hrtime.bigint();
   if (options.dedupeRecentFallAlert) {
-    const existingAlertId = await findRecentOpenFallAlert(event, executor);
+    const existingAlertId = await findRecentOpenCriticalAlert(event, executor);
 
     if (existingAlertId) {
       const alert = await fetchAlertRow(existingAlertId, executor);
-      logger.info("Alerta recente de queda reaproveitado.", {
+      logger.info("Alerta critico recente reaproveitado.", {
         correlationId: options.correlationId || null,
         eventId: event.id,
+        eventType: event.eventType,
         alertId: alert.id,
         status: alert.status,
         organizationId: alert.organizationId,
         patientId: alert.patientId,
-        dedupWindowSeconds: RECENT_FALL_ALERT_DEDUP_WINDOW_SECONDS,
+        dedupWindowSeconds: RECENT_CRITICAL_ALERT_DEDUP_WINDOW_SECONDS,
         durationMs: elapsedMsSince(startedAt),
       });
       return alert;

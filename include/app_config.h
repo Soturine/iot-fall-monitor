@@ -119,6 +119,36 @@ constexpr float MOTION_TEST_GYRO_THRESHOLD_DPS = 140.0f;
 constexpr unsigned long MOTION_TEST_BUZZER_DURATION_MS = 180;
 constexpr unsigned long MOTION_TEST_COOLDOWN_MS = 1200;
 
+// Pre-calibracao experimental de alertas configuravel pelo portal.
+// O modo normal preserva thresholds conservadores; o modo demo facilita bancada.
+constexpr char ALERT_SENSITIVITY_LOW[] = "low";
+constexpr char ALERT_SENSITIVITY_NORMAL[] = "normal";
+constexpr char ALERT_SENSITIVITY_HIGH[] = "high";
+constexpr char ALERT_SENSITIVITY_DEMO[] = "demo";
+constexpr char ALERT_DECISION_ENGINE_VERSION[] = "precalibration_threshold_v1";
+constexpr bool ALERT_EVENT_PUBLICATION_ENABLED_DEFAULT = true;
+constexpr bool ALERT_BUZZER_ENABLED_DEFAULT = false;
+constexpr float ALERT_NORMAL_ACCEL_THRESHOLD_G = 2.20f;
+constexpr float ALERT_NORMAL_GYRO_THRESHOLD_DPS = 120.0f;
+constexpr float ALERT_LOW_ACCEL_THRESHOLD_G = 2.80f;
+constexpr float ALERT_LOW_GYRO_THRESHOLD_DPS = 180.0f;
+constexpr float ALERT_HIGH_ACCEL_THRESHOLD_G = 1.70f;
+constexpr float ALERT_HIGH_GYRO_THRESHOLD_DPS = 80.0f;
+constexpr float ALERT_DEMO_ACCEL_THRESHOLD_G = 1.25f;
+constexpr float ALERT_DEMO_GYRO_THRESHOLD_DPS = 35.0f;
+constexpr unsigned long ALERT_NORMAL_ANALYSIS_WINDOW_MS = 1200;
+constexpr unsigned long ALERT_DEMO_ANALYSIS_WINDOW_MS = 500;
+constexpr unsigned long ALERT_NORMAL_COOLDOWN_MS = 15000;
+constexpr unsigned long ALERT_DEMO_COOLDOWN_MS = 3000;
+constexpr float ALERT_MIN_ACCEL_THRESHOLD_G = 1.05f;
+constexpr float ALERT_MAX_ACCEL_THRESHOLD_G = 8.0f;
+constexpr float ALERT_MIN_GYRO_THRESHOLD_DPS = 10.0f;
+constexpr float ALERT_MAX_GYRO_THRESHOLD_DPS = 500.0f;
+constexpr unsigned long ALERT_MIN_ANALYSIS_WINDOW_MS = 200;
+constexpr unsigned long ALERT_MAX_ANALYSIS_WINDOW_MS = 5000;
+constexpr unsigned long ALERT_MIN_COOLDOWN_MS = 1000;
+constexpr unsigned long ALERT_MAX_COOLDOWN_MS = 120000;
+
 // Intervalos principais do firmware.
 constexpr unsigned long SENSOR_SAMPLE_INTERVAL_MS = 50;
 constexpr uint32_t I2C_CLOCK_HZ = 100000;
@@ -130,6 +160,7 @@ constexpr unsigned int I2C_STOP_READ_SETTLE_US = 150;
 // Em bancada, preferimos STOP condition para reduzir erros i2cWriteReadNonStop.
 constexpr bool I2C_USE_REPEATED_START = false;
 constexpr uint8_t SENSOR_I2C_RECOVERY_FAILURE_THRESHOLD = 8;
+constexpr uint16_t SENSOR_I2C_RECOVERY_TOTAL_ERROR_THRESHOLD = 64;
 constexpr unsigned long SENSOR_I2C_RECOVERY_COOLDOWN_MS = 5000;
 constexpr unsigned long SENSOR_I2C_ERROR_SUMMARY_INTERVAL_MS = 10000;
 constexpr unsigned long SENSOR_LAST_SAMPLE_MAX_AGE_MS = 6000;
@@ -145,7 +176,7 @@ constexpr float SENSOR_ACCEL_CALIBRATION_MAX_GYRO_DPS = 20.0f;
 constexpr unsigned long STATUS_REPORT_INTERVAL_MS = 60000;
 constexpr unsigned long TELEMETRY_REPORT_INTERVAL_MS = 2000;
 constexpr unsigned long MQTT_RECONNECT_INTERVAL_MS = 5000;
-constexpr uint16_t MQTT_PACKET_BUFFER_SIZE = 3072;
+constexpr uint16_t MQTT_PACKET_BUFFER_SIZE = 4096;
 constexpr unsigned long SOS_HOLD_TIME_MS = 1500;
 
 // Buffer local para eventos criticos.

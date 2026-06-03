@@ -307,7 +307,7 @@ async function fetchRecentBehaviorEventsByDeviceIds(deviceIds, executor = null) 
           ) AS event_rank
         FROM events e
         WHERE e.device_id IN (${placeholders})
-          AND e.event_type IN ('fall_detected', 'sos_pressed', 'calibration_started', 'calibration_sample_started')
+          AND e.event_type IN ('fall_detected', 'fall_suspected', 'movement_detected', 'sos_pressed', 'manual_sos', 'calibration_started', 'calibration_sample_started')
           AND e.event_time >= UTC_TIMESTAMP() - INTERVAL 10 MINUTE
       ) ranked
       WHERE ranked.event_rank = 1
@@ -357,7 +357,7 @@ async function fetchRecentBehaviorEventsByDeviceId(deviceId, executor = null) {
         e.created_at
       FROM events e
       WHERE e.device_id = ?
-        AND e.event_type IN ('fall_detected', 'sos_pressed', 'calibration_started', 'calibration_sample_started')
+        AND e.event_type IN ('fall_detected', 'fall_suspected', 'movement_detected', 'sos_pressed', 'manual_sos', 'calibration_started', 'calibration_sample_started')
         AND e.event_time >= UTC_TIMESTAMP() - INTERVAL 10 MINUTE
       ORDER BY e.event_time DESC, e.id DESC
       LIMIT 4

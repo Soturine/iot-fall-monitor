@@ -5,12 +5,12 @@ Este documento descreve o fluxo real atual de alertas internos do projeto Queda.
 ## Fluxo ponta a ponta
 
 ```text
-ESP32 detecta queda ou SOS
+ESP32 detecta queda, queda suspeita, movimento intenso ou SOS
 -> publica evento MQTT
 -> backend recebe no mqttIngestionService
 -> backend valida JSON, canal e device
 -> backend resolve device_id/device_uid
--> backend busca telemetria do mesmo device em janela curta quando for fall_detected
+-> backend busca telemetria do mesmo device em janela curta quando for fall_detected/fall_suspected
 -> backend grava evento com status/resumo de evidência
 -> backend vincula amostras em event_telemetry_evidence quando existirem
 -> backend decide se cria alerta
@@ -98,7 +98,7 @@ Campos usados:
 ```
 
 Telemetria válida atualiza `device_status`, grava `telemetry_logs` e emite `telemetry:new`. Para ser considerada amostra real, o payload precisa trazer `ax`, `ay`, `az`, `gx`, `gy` e `gz` numericos e não pode vir com `sensor_valid=false`. Payload diagnóstico sem amostra real atualiza apenas a saúde do device e não cria linha em `telemetry_logs`.
-Para queda, essas amostras também viram evidência técnica consultavel quando o evento `fall_detected` chega perto no tempo.
+Para queda, essas amostras também viram evidência técnica consultavel quando o evento `fall_detected` ou `fall_suspected` chega perto no tempo.
 
 ### Events
 
@@ -198,13 +198,15 @@ Se o device não estiver pareado a uma organização, o backend persiste quando 
 
 - `status`: presença operacional do device, bateria, RSSI, firmware e último contato.
 - `telemetry`: amostras do sensor usadas no gráfico e na heurística experimental de postura/movimento.
-- `events`: fatos discretos, como queda detectada ou SOS manual.
+- `events`: fatos discretos, como queda detectada, queda suspeita, movimento intenso ou SOS manual.
 
 ## Eventos que geram alerta
 
 Hoje `shouldCreateAlert` continua retornando `true` para tipos candidatos a alerta:
 
 - `fall_detected`
+- `fall_suspected`
+- `movement_detected`
 - `sos_pressed`
 - `manual_sos`
 - `sensor_fault`
@@ -213,6 +215,8 @@ Regra de produto atual:
 
 - `fall_detected` com evidência `linked` ou `partial`: grava evento e cria alerta interno.
 - `fall_detected` sem telemetria recente suficiente: grava evento técnico com `evidenceStatus=none`, loga warning e não cria alerta automático.
+- `fall_suspected`: grava evento, preserva evidência/thresholds do firmware e cria alerta interno como heurística experimental.
+- `movement_detected`: grava evento e cria alerta interno de movimento intenso para teste operacional em bancada.
 - `sos_pressed`/`manual_sos`: cria alerta mesmo sem telemetria, porque e acionamento manual.
 - `sensor_fault`: cria alerta técnico de alta prioridade quando o firmware ou integração futura publicar esse evento.
 - payload inválido ou sem device: não cria evento nem alerta.
@@ -222,6 +226,8 @@ Severidade atual:
 - `fall_detected` com evidência e `immobility_confirmed=true`: `critical`
 - `fall_detected` sem imobilidade: `high`
 - `fall_detected` sem evidência: `medium`
+- `fall_suspected`: `high`
+- `movement_detected`: `medium`
 - `sos_pressed`: `high`
 - `manual_sos`: `high`
 - `sensor_fault`: `high`
@@ -231,7 +237,7 @@ Eventos comuns como `device_status`, `heartbeat` ou qualquer outro tipo desconhe
 
 ## Evidencia de telemetria
 
-O backend não trata mais `fall_detected` como alerta confiável sem rastro de sensor. Quando recebe um evento de queda, ele procura amostras em `telemetry_logs` para o mesmo:
+O backend não trata mais `fall_detected` como alerta confiável sem rastro de sensor. Quando recebe `fall_detected` ou `fall_suspected`, ele procura amostras em `telemetry_logs` para o mesmo:
 
 - `device_id`
 - `organization_id`
@@ -252,14 +258,14 @@ O evento recebe:
 - `evidenceWindowSeconds`: intervalo entre primeira e última amostra vinculada
 - `evidenceSummary`: pico de aceleração, pico de giro, imobilidade confirmada, primeira e última amostra
 
-O payload bruto do firmware também fica preservado em `raw_payload_json`, incluindo `event_uuid`, `event_sequence`, `sample_seq`, `decision_source`, `algorithm_version`, `fall_reason`, `features`, `features_time_domain`, `features_frequency_domain`, thresholds e demais campos enviados.
+O payload bruto do firmware também fica preservado em `raw_payload_json`, incluindo `event_uuid`, `event_sequence`, `sample_seq`, `decision_source`, `algorithm_version`, `fall_reason`, `alert_settings`, `features`, `features_time_domain`, `features_frequency_domain`, thresholds e demais campos enviados.
 
 O `evidenceSummary` do backend continua sendo o resumo das amostras realmente persistidas em `telemetry_logs`, mas agora também incorpora um bloco `firmwareDecision` com a decisão local e as features enviadas. Isso evita duplicar a decisão: o firmware decide o alarme local/buzzer, enquanto o backend audita a decisão e relaciona as amostras persistidas.
 
 Responsabilidades atuais:
 
-- firmware: decide queda confirmada em tempo real e aciona buzzer local somente nesse caso
-- backend: registra evento, preserva payload bruto, relaciona evidência de telemetria, cria alerta interno quando a regra permitir e evita duplicata curta de alerta aberto/em atendimento para a mesma queda
+- firmware: decide queda confirmada em tempo real, publica suspeita/movimento experimental quando configurado no portal e aciona buzzer local quando a regra local permitir
+- backend: registra evento, preserva payload bruto, relaciona evidência de telemetria, cria alerta interno quando a regra permitir e evita duplicata curta de alerta aberto/em atendimento para o mesmo tipo crítico no mesmo device
 - frontend: exibe estado, evidência, alertas e diagnóstico, sem decidir queda real
 
 A tabela `event_telemetry_evidence` guarda as amostras relacionadas com `relative_ms` e `role` (`nearest`, `peak`, `before_peak`, `after_peak`). Isso mantém compatibilidade com eventos antigos: se não houver evidência, os campos ficam nulos/default e a API devolve `evidenceStatus=none`.
@@ -274,13 +280,13 @@ VALUES (...)
 ON DUPLICATE KEY UPDATE id = LAST_INSERT_ID(id)
 ```
 
-O indice unico `alerts.event_id` impede alerta duplicado para o mesmo evento persistido. Alem disso, na ingestão MQTT, `createAlertForEvent` pode reaproveitar um alerta de queda aberto/em atendimento para o mesmo device em uma janela curta de `20s`, reduzindo duplicidade quando o mesmo movimento gera pacotes próximos.
+O indice unico `alerts.event_id` impede alerta duplicado para o mesmo evento persistido. Alem disso, na ingestão MQTT, `createAlertForEvent` pode reaproveitar um alerta crítico aberto/em atendimento para o mesmo device e tipo de evento em uma janela curta de `20s`, reduzindo duplicidade quando o mesmo movimento gera pacotes próximos.
 
 Na `v0.8.25`, eventos críticos reenviados com o mesmo `event_uuid` são deduplicados antes de inserir uma nova linha em `events`. Quando o backend encontra um evento existente para o mesmo `device_id` e `event_uuid`, ele registra log de duplicata e não chama `alertService`; assim não há novo alerta nem novo `alert:new`.
 
 Payloads antigos sem `event_uuid` continuam aceitos pelo fluxo legado. Nesses casos, a deduplicação curta de alertas ainda reduz duplicidade, mas eventos MQTT sem identificador externo podem continuar virando eventos distintos e auditáveis.
 
-Para `fall_detected`, a criação de alerta agora acontece somente depois de `recordEventFromMqtt` preencher a evidência. Eventos sem evidência permanecem auditaveis em `events`, mas não entram automaticamente na fila crítica.
+Para `fall_detected`, a criação de alerta agora acontece somente depois de `recordEventFromMqtt` preencher a evidência. Eventos sem evidência permanecem auditaveis em `events`, mas não entram automaticamente na fila crítica. Para `fall_suspected` e `movement_detected`, a decisão do firmware e os thresholds do portal são preservados no payload e o alerta e criado como heurística experimental de bancada.
 
 ## Realtime
 

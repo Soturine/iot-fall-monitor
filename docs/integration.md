@@ -100,7 +100,9 @@ Exemplo de `fall_detected`:
 
 O campo `timestamp` deve ser Unix time em segundos quando o NTP já sincronizou. Para `device_status.last_seen_at`, o backend usa a hora real de recebimento MQTT, porque a chegada de `status`/`telemetry` já prova presença recente do ESP32. Para `telemetry.created_at` e `events.event_time`, o timestamp do device só e usado quando e plausível e esta próximo do recebimento; se o firmware estiver no fallback monotônico de boot (`millis()/1000`) ou com clock/NTP stale, o backend usa a hora de recebimento para evitar gráfico antigo, evidência quebrada e falso offline.
 
-Para `fall_detected`, o firmware continua sendo a fonte da decisão local e do buzzer. O backend não recalcula a queda para acionar alarme local; ele audita o evento, preserva `raw_payload_json`, copia a decisão/feature set para `evidence_summary_json` e procura telemetria do mesmo device entre `event_time - 10s` e `event_time + 3s`. Se encontrar amostras, grava `evidenceStatus` (`partial` ou `linked`), `evidenceTelemetryId`, contagem, janela e resumo técnico. Se não encontrar, grava o evento com `evidenceStatus=none`, loga warning e não cria alerta automático de queda. `sos_pressed` e `manual_sos` continuam podendo criar alerta sem telemetria por serem acionamento manual.
+Para `fall_detected`, o firmware continua sendo a fonte da decisão local confirmada e do buzzer. O backend não recalcula a queda para acionar alarme local; ele audita o evento, preserva `raw_payload_json`, copia a decisão/feature set para `evidence_summary_json` e procura telemetria do mesmo device entre `event_time - 10s` e `event_time + 3s`. Se encontrar amostras, grava `evidenceStatus` (`partial` ou `linked`), `evidenceTelemetryId`, contagem, janela e resumo técnico. Se não encontrar, grava o evento com `evidenceStatus=none`, loga warning e não cria alerta automático de queda confirmada.
+
+Na `v0.8.27`, o firmware também pode publicar `fall_suspected` e `movement_detected` a partir de uma pré-calibração experimental salva no portal do ESP32. Esses eventos carregam `alert_settings`, `thresholds`, motivo da decisão, amostra do sensor e diagnóstico I2C. Eles servem para validar o fluxo real `telemetria -> evento -> alerta -> frontend -> buzzer` em bancada, sem substituir a FSM de `fall_detected`. O backend cria alertas para esses eventos experimentais, mas eles devem ser tratados como heurística operacional, não como certeza clínica. `sos_pressed` e `manual_sos` continuam podendo criar alerta sem telemetria por serem acionamento manual.
 
 ### Confiabilidade por criticidade
 
@@ -266,6 +268,8 @@ Heuristica atual, em alto nível:
 - baixa movimentacao + orientação horizontal/inclinada estável: `sentado_deitado_provavel`
 - variação acima do repouso: `movimento_leve` ou `movimento_intenso`
 - `fall_detected` recente: `queda_suspeita` ou `queda_confirmada`
+- `fall_suspected` recente: `queda_suspeita`
+- `movement_detected` recente: `movimento_intenso`
 - `fall_detected` recente sem evidência de telemetria: no máximo `queda_suspeita`
 - `sos_pressed` recente: `sos_manual`
 

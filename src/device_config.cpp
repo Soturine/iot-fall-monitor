@@ -1,5 +1,7 @@
 #include "device_config.h"
 
+#include <cmath>
+
 namespace {
 
 String trimValue(const String& value) {
@@ -67,6 +69,41 @@ void setErrorMessage(String* errorMessage, const String& message) {
   }
 }
 
+float clampFloat(float value, float minimum, float maximum, float fallback) {
+  if (!std::isfinite(value)) {
+    return fallback;
+  }
+
+  if (value < minimum) {
+    return minimum;
+  }
+
+  if (value > maximum) {
+    return maximum;
+  }
+
+  return value;
+}
+
+unsigned long clampUnsignedLong(unsigned long value,
+                                unsigned long minimum,
+                                unsigned long maximum,
+                                unsigned long fallback) {
+  if (value == 0U) {
+    return fallback;
+  }
+
+  if (value < minimum) {
+    return minimum;
+  }
+
+  if (value > maximum) {
+    return maximum;
+  }
+
+  return value;
+}
+
 }  // namespace
 
 namespace DeviceSettings {
@@ -84,6 +121,9 @@ DeviceConfig makeDefaultConfig() {
   config.mqtt.useTls = AppConfig::DEFAULT_MQTT_USE_TLS;
   config.mqtt.tlsInsecure = AppConfig::DEFAULT_MQTT_TLS_INSECURE;
   config.mqtt.tlsCaCertificate = AppConfig::DEFAULT_MQTT_TLS_CA_CERT;
+  applyAlertSensitivityPreset(config.alertTuning, AppConfig::ALERT_SENSITIVITY_NORMAL);
+  config.alertTuning.buzzerEnabled = AppConfig::ALERT_BUZZER_ENABLED_DEFAULT;
+  config.alertTuning.eventsEnabled = AppConfig::ALERT_EVENT_PUBLICATION_ENABLED_DEFAULT;
 
   const String defaultSsid = trimValue(AppConfig::DEFAULT_WIFI_SSID);
   if (!defaultSsid.isEmpty() && !isPlaceholderValue(defaultSsid)) {
@@ -221,6 +261,81 @@ bool patientProfileEquals(const PatientProfileSummary& left,
          (!left.hasHeightCm || fabsf(left.heightCm - right.heightCm) < 0.01f) &&
          left.fallSensitivityPreset == right.fallSensitivityPreset &&
          left.syncedAt == right.syncedAt;
+}
+
+String normalizeAlertSensitivityPreset(const String& preset) {
+  String normalized = trimValue(preset);
+  normalized.toLowerCase();
+
+  if (normalized == AppConfig::ALERT_SENSITIVITY_LOW ||
+      normalized == AppConfig::ALERT_SENSITIVITY_HIGH ||
+      normalized == AppConfig::ALERT_SENSITIVITY_DEMO) {
+    return normalized;
+  }
+
+  return AppConfig::ALERT_SENSITIVITY_NORMAL;
+}
+
+float clampAlertAccelThreshold(float value) {
+  return clampFloat(value,
+                    AppConfig::ALERT_MIN_ACCEL_THRESHOLD_G,
+                    AppConfig::ALERT_MAX_ACCEL_THRESHOLD_G,
+                    AppConfig::ALERT_NORMAL_ACCEL_THRESHOLD_G);
+}
+
+float clampAlertGyroThreshold(float value) {
+  return clampFloat(value,
+                    AppConfig::ALERT_MIN_GYRO_THRESHOLD_DPS,
+                    AppConfig::ALERT_MAX_GYRO_THRESHOLD_DPS,
+                    AppConfig::ALERT_NORMAL_GYRO_THRESHOLD_DPS);
+}
+
+unsigned long clampAlertAnalysisWindowMs(unsigned long value) {
+  return clampUnsignedLong(value,
+                           AppConfig::ALERT_MIN_ANALYSIS_WINDOW_MS,
+                           AppConfig::ALERT_MAX_ANALYSIS_WINDOW_MS,
+                           AppConfig::ALERT_NORMAL_ANALYSIS_WINDOW_MS);
+}
+
+unsigned long clampAlertCooldownMs(unsigned long value) {
+  return clampUnsignedLong(value,
+                           AppConfig::ALERT_MIN_COOLDOWN_MS,
+                           AppConfig::ALERT_MAX_COOLDOWN_MS,
+                           AppConfig::ALERT_NORMAL_COOLDOWN_MS);
+}
+
+void applyAlertSensitivityPreset(AlertTuningConfig& alertTuning, const String& preset) {
+  const String normalized = normalizeAlertSensitivityPreset(preset);
+  alertTuning.sensitivityPreset = normalized;
+
+  if (normalized == AppConfig::ALERT_SENSITIVITY_LOW) {
+    alertTuning.accelThresholdG = AppConfig::ALERT_LOW_ACCEL_THRESHOLD_G;
+    alertTuning.gyroThresholdDps = AppConfig::ALERT_LOW_GYRO_THRESHOLD_DPS;
+    alertTuning.analysisWindowMs = AppConfig::ALERT_NORMAL_ANALYSIS_WINDOW_MS;
+    alertTuning.cooldownMs = AppConfig::ALERT_NORMAL_COOLDOWN_MS;
+    return;
+  }
+
+  if (normalized == AppConfig::ALERT_SENSITIVITY_HIGH) {
+    alertTuning.accelThresholdG = AppConfig::ALERT_HIGH_ACCEL_THRESHOLD_G;
+    alertTuning.gyroThresholdDps = AppConfig::ALERT_HIGH_GYRO_THRESHOLD_DPS;
+    alertTuning.analysisWindowMs = AppConfig::ALERT_NORMAL_ANALYSIS_WINDOW_MS;
+    alertTuning.cooldownMs = AppConfig::ALERT_NORMAL_COOLDOWN_MS;
+    return;
+  }
+
+  if (normalized == AppConfig::ALERT_SENSITIVITY_DEMO) {
+    alertTuning.accelThresholdG = AppConfig::ALERT_DEMO_ACCEL_THRESHOLD_G;
+    alertTuning.gyroThresholdDps = AppConfig::ALERT_DEMO_GYRO_THRESHOLD_DPS;
+    alertTuning.analysisWindowMs = AppConfig::ALERT_DEMO_ANALYSIS_WINDOW_MS;
+    alertTuning.cooldownMs = AppConfig::ALERT_DEMO_COOLDOWN_MS;
+    return;
+  }
+
+  alertTuning.accelThresholdG = AppConfig::ALERT_NORMAL_ACCEL_THRESHOLD_G;
+  alertTuning.gyroThresholdDps = AppConfig::ALERT_NORMAL_GYRO_THRESHOLD_DPS;
+  alertTuning.analysisWindowMs = AppConfig::ALERT_NORMAL_ANALYSIS_WINDOW_MS;
+  alertTuning.cooldownMs = AppConfig::ALERT_NORMAL_COOLDOWN_MS;
 }
 
 bool upsertWifiNetwork(DeviceConfig& config,

@@ -233,6 +233,16 @@ void ConnectivityManager::updatePortalContext() {
                            wifiManager_.localIP(),
                            maintenancePortalStarted_ && !setupModeStarted_);
   setupPortal_.update();
+  if (setupPortal_.consumeAlertTuningUpdate(config_.alertTuning)) {
+    AppLog::infof("[portal] alert tuning applied preset=%s accel=%.2f gyro=%.1f window_ms=%lu cooldown_ms=%lu events=%u buzzer=%u\n",
+                  config_.alertTuning.sensitivityPreset.c_str(),
+                  config_.alertTuning.accelThresholdG,
+                  config_.alertTuning.gyroThresholdDps,
+                  config_.alertTuning.analysisWindowMs,
+                  config_.alertTuning.cooldownMs,
+                  config_.alertTuning.eventsEnabled ? 1U : 0U,
+                  config_.alertTuning.buzzerEnabled ? 1U : 0U);
+  }
 }
 
 void ConnectivityManager::enterSetupMode(const String& reason) {

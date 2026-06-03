@@ -9,6 +9,30 @@
 - testar classificação de movimentos com múltiplas runs por classe
 - validar o sistema com ESP32 real, MPU6050, backend, MQTT e dashboard em cenário ponta a ponta
 
+## [v0.8.27] - 2026-06-02
+### Adicionado
+- seção de pré-calibração experimental no portal do ESP32 para sensibilidade, thresholds, janela, cooldown, publicação de eventos e buzzer
+- eventos MQTT `fall_suspected` e `movement_detected` gerados pelo firmware a partir de telemetria real válida e fresca
+- payloads de eventos com motivo da decisão, thresholds usados, diagnóstico do sensor, contadores I2C e `sample_seq`
+- logs seriais de alerta e buzzer para `event_published`, `event_queued`, cooldown, publish e pulso não bloqueante
+- recovery I2C por volume de falhas intermitentes desde o último recovery, além do gatilho por falhas consecutivas
+
+### Alterado
+- `fall_detected` continua sendo a queda confirmada pela FSM local com imobilidade, enquanto `fall_suspected`/`movement_detected` servem para validação operacional em bancada
+- backend passa a criar alertas para `fall_suspected` e `movement_detected`, mantendo compatibilidade com `fall_detected`, SOS e `sensor_fault`
+- deduplicação curta de alertas passa a considerar o mesmo device e o mesmo tipo crítico recente
+- frontend de detalhe do dispositivo passa a exibir evidência, motivo e thresholds para eventos experimentais de alerta
+- versão alinhada para `0.8.27` em packages da raiz, backend, frontend e locks existentes
+
+### Corrigido
+- fluxo real de telemetria intensa agora consegue chegar a evento MQTT, alerta backend, `alert:new` e buzzer quando habilitado no portal
+- `i2c_recovery_count` deixa de ficar preso em zero quando as falhas do MPU6050 são intermitentes, mas numerosas
+
+### Limitações conhecidas
+- o modo `demo` é apenas para teste controlado de bancada e pode gerar falsos positivos
+- não há validação clínica; não testar queda real em pessoa
+- a decisão principal por FFT/Fourier continua experimental e desligada
+
 ## [v0.8.26] - 2026-05-20
 ### Adicionado
 - screenshots reais da interface web em `docs/assets/screenshots`, capturados do frontend rodando localmente

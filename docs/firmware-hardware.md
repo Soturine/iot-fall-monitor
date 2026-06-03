@@ -108,8 +108,9 @@ O erro serial `requestFrom(): i2cWriteReadNonStop returned Error -1` costuma apa
 - `I2C_USE_REPEATED_START = false`
 - `I2C_READ_RETRY_COUNT = 3`
 - `SENSOR_I2C_RECOVERY_FAILURE_THRESHOLD = 8`
+- `SENSOR_I2C_RECOVERY_TOTAL_ERROR_THRESHOLD = 64`
 
-Quando houver falhas consecutivas, o firmware registra um resumo throttled, reinicia o barramento I2C, reconfigura o MPU6050 e não recalibra em loop. Se o recovery falhar, a última amostra válida fica preservada por uma janela curta. O status MQTT continua levando diagnóstico do sensor; a telemetria periódica só e publicada quando houver amostra válida e fresca.
+Quando houver falhas consecutivas ou volume alto de falhas intermitentes desde o último recovery, o firmware registra um resumo throttled, reinicia o barramento I2C, reconfigura o MPU6050 e não recalibra em loop. Se o recovery falhar, a última amostra válida fica preservada por uma janela curta. O status MQTT continua levando diagnóstico do sensor; a telemetria periódica só e publicada quando houver amostra válida e fresca.
 
 Checklist físico antes de investigar software:
 
@@ -142,7 +143,7 @@ Na prática:
 - os logs de saúde do sensor mostram faixa efetiva, `lsb_per_g`, raw AX/AY/AZ/GX/GY/GZ, conversão em `g`/`deg/s`, calibração e magnitude publicada
 - no boot, procure `ready=1 calibrated=0 reason=...` quando a calibração for pulada; isso ainda e operacional e deve publicar telemetria
 - no boot, procure `[boot] sensor_begin_ok ... sensorReady=1` ou `[boot] sensor_begin_failed ... sensorReady=0`
-- falhas I2C repetidas aparecem como resumo, por exemplo `[sensor] i2c errors summary ...`, e recovery aparece como `[sensor] i2c recovery start`, `[sensor] i2c bus restarted` e `[sensor] recovery ok`
+- falhas I2C repetidas aparecem como resumo, por exemplo `[sensor] i2c errors summary ...`, e recovery aparece como `[i2c] recovery start`, `[i2c] bus restarted`, `[i2c] recovery ok` ou `[i2c] recovery failed`
 - quando a telemetria não for publicada, procure `[telemetry] skipped reason=...`; os motivos esperados são `mqtt_disconnected`, `sensor_not_ready`, `no_valid_sample`, `stale_sample` e `publish_failed`
 - o `MOTION TEST` continua com flags proprias para bancada, mas agora fica desabilitado por padrão para não misturar teste de bancada com alarme real
 
@@ -174,6 +175,7 @@ O portal local do ESP32 agora cobre:
 - bloco de saúde operacional com `Wi-Fi conectado`, `MQTT OK`, `Backend API` e `Pronto para operar`
 - botoes `Testar backend` e `Testar MQTT`
 - visualização do perfil resumido do paciente sincronizado
+- pré-calibração experimental de alertas com sensibilidade, thresholds, janela, cooldown, publicação de eventos e buzzer
 
 Capturas reais do portal devem ser salvas em [assets](assets/README.md), especialmente `assets/screenshots/esp32-portal-v0.8.26.png` quando a tela for capturada do ESP32 rodando. Não há link direto neste documento enquanto a imagem real não existir no repositório.
 
@@ -194,6 +196,20 @@ Fluxo oficial:
 Com `SETUP_PORTAL_ALWAYS_ON = true`, o ESP32 opera em `WIFI_AP_STA`: o AP local permanece visivel em `http://192.168.4.1`, enquanto a interface station segue conectando no Wi-Fi e o MQTT continua tentando publicar status, eventos e telemetria. Isso e diferente de `SETUP_MODE`, que e um modo de fallback/configuração.
 
 Para restaurar o comportamento antigo, defina `SETUP_PORTAL_ALWAYS_ON = false`. Nesse caso, o AP aparece apenas quando o firmware entra em setup/fallback.
+
+### Pré-calibração experimental de alertas
+
+A seção de pré-calibração do portal permite testar o fluxo real sem recompilar:
+
+- sensibilidade: `baixa`, `normal`, `alta` ou `teste/demonstração`
+- threshold de aceleração resultante em `g`
+- threshold de giroscópio em `deg/s`
+- janela de análise em `ms`
+- cooldown de alerta em `ms`
+- habilitar/desabilitar publicação de eventos experimentais
+- habilitar/desabilitar buzzer local
+
+O modo `normal` preserva thresholds conservadores. O modo `teste/demonstração` baixa os thresholds para validação de bancada e pode gerar falsos positivos; use apenas com movimentos controlados do conjunto `ESP32 + MPU6050`, nunca com queda real de pessoa. As configurações ficam em `NVS` e, quando salvas pelo portal de manutenção, a sensibilidade passa a valer no loop atual sem reiniciar Wi-Fi/MQTT.
 
 ### Como forcar SETUP_MODE em bancada
 
@@ -320,7 +336,7 @@ npm run mqtt:watch --prefix backend
 6. Confirme que não aparece repetidamente `[telemetry] skipped reason=sensor_not_ready`, `no_valid_sample` ou `stale_sample`.
 7. Deixe o ESP32 parado sobre a mesa e confirme `[sensor] read ok ... magnitude=...` perto de `1.00 g`.
 8. Confirme que o Serial não fica inundado por erro I2C; falhas repetidas devem virar resumo e recovery.
-9. Se ocorrer recovery, procure `[sensor] recovery ok`; se aparecer `recovery failed`, revise o checklist físico.
+9. Se ocorrer recovery, procure `[i2c] recovery ok`; se aparecer `[i2c] recovery failed`, revise o checklist físico.
 10. Confirme no `mqtt:watch` linhas novas em `queda/devices/esp32_01/telemetry`.
 11. Confirme no dashboard que AX/AY/AZ estão em `g`, `accel_magnitude` fica perto de `1 g` em repouso e o gráfico estabiliza perto de `1 g`.
 12. Mexa o sensor rapidamente e confirme que a aceleração sobe temporariamente.
@@ -330,7 +346,7 @@ npm run mqtt:watch --prefix backend
 16. Se aparecer `[telemetry] skipped reason=sensor_not_ready`, o firmware não encontrou o MPU6050 ou não conseguiu leitura raw básica no boot.
 17. Se o Serial mostrar `publish ok` mas o `mqtt:watch` não receber, verifique host/porta, broker efetivo, clientId e rede.
 
-## Buzzer e motion test
+## Buzzer, alertas e motion test
 
 O buzzer esta conservador para bancada:
 
@@ -342,7 +358,8 @@ O buzzer esta conservador para bancada:
 Na prática:
 
 - boot, Wi-Fi connecting, MQTT connecting, setup mode e warning visual não devem acionar buzzer
-- o alarme real por queda/SOS continua disponível quando `BUZZER_ENABLED = true`
+- o alarme real por queda/SOS e o alerta experimental de bancada usam o buzzer apenas quando ele está habilitado na pré-calibração do portal
+- o buzzer é não bloqueante e registra `[buzzer] alert pulse start` e `[buzzer] alert pulse end`
 - o teste de bancada deixa de ficar habilitado por padrão em uso normal
 - se a placa usar buzzer ativo-low, a inversao agora pode ser tratada em `include/app_config.h` sem mexer na logica do alarme
 
@@ -702,7 +719,7 @@ O que entra no payload quando a queda e confirmada:
 - médias, desvios, energia por eixo e jerk aproximado no domínio do tempo
 - estrutura de FFT/Fourier com `available=false`, pronta para etapa futura
 
-O buzzer continua vinculado somente a `fall_detected` confirmado localmente. A nova camada de features não gera alarme sozinha.
+O buzzer continua vinculado a decisões locais do firmware: `fall_detected` confirmado pela FSM, SOS manual quando habilitado e, em bancada, `fall_suspected`/`movement_detected` quando a pré-calibração permitir. A nova camada de features/FFT não substitui a decisão principal.
 
 ## Parametros atuais de calibração do `fall_detector`
 

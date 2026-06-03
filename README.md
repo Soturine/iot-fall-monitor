@@ -6,9 +6,13 @@ O objetivo do repositório é integrar hardware embarcado, ingestão de eventos,
 
 ## Baseline Atual
 
-Baseline atual do repositório: `v0.8.26`.
+Baseline atual do repositório: `v0.8.27`.
 
-A baseline `v0.8.26` adiciona documentação visual real da interface web, com screenshots capturados do projeto rodando localmente em `docs/assets/screenshots`.
+A baseline `v0.8.27` conecta o fluxo real de telemetria do ESP32 a eventos e alertas mais visíveis: movimentos intensos e quedas suspeitas podem gerar `movement_detected`/`fall_suspected` pelo firmware, com motivo, thresholds, `sample_seq`, diagnóstico do MPU6050/I2C e cooldown. `fall_detected` continua sendo a queda confirmada pela FSM local com imobilidade.
+
+O portal local do ESP32 agora possui uma seção de pré-calibração experimental para sensibilidade de alerta, thresholds de aceleração/giroscópio, janela, cooldown, publicação de eventos e buzzer. O modo normal segue conservador; o modo teste/demonstração é voltado apenas a bancada controlada, sem testar queda em pessoa.
+
+A baseline anterior `v0.8.26` adiciona documentação visual real da interface web, com screenshots capturados do projeto rodando localmente em `docs/assets/screenshots`.
 
 A baseline anterior `v0.8.25` adiciona confiabilidade incremental para eventos críticos MQTT. Telemetria continua sendo dado periódico e pode tolerar perda eventual; eventos como `fall_detected`, SOS manual (`sos_pressed`/`manual_sos`) e `sensor_fault` passam a ter rastreabilidade com `event_uuid`, `event_sequence` e `sample_seq`.
 
@@ -45,6 +49,9 @@ O modelo atual deixou de ser um painel global único e passou a trabalhar com or
 - lock leve por device na ingestão MQTT para reduzir corrida entre status/eventos/telemetria simultâneos
 - alertas idempotentes por evento MQTT persistido
 - confiabilidade de eventos críticos MQTT com `event_uuid`, `sample_seq`, fila local e deduplicação no backend
+- pré-calibração experimental de alertas pelo portal do ESP32, com thresholds persistidos em `NVS`
+- eventos `fall_suspected` e `movement_detected` para teste ponta a ponta de alerta real em bancada
+- recovery I2C também por volume de falhas intermitentes, além de falhas consecutivas
 - vínculo técnico entre queda detectada e janela de telemetria relacionada
 - evidência estruturada do firmware para `fall_detected`, com versão do algoritmo, janela, picos, imobilidade e features no domínio do tempo
 - base experimental para FFT/Fourier e calibração futura por classes de movimento, sem trocar a decisão principal atual
@@ -388,7 +395,7 @@ O frontend exibe esse status de forma discreta no dashboard, na lista de disposi
 - Os thresholds de queda, imobilidade e postura ainda precisam de validação prática com hardware real.
 - A leitura de bateria do firmware real ainda pode ser placeholder se não houver circuito de medição dedicado.
 - O fluxo padrão continua usando `mqtt://`; `mqtts://` existe como preparação opt-in e depende de configuração coerente.
-- O buzzer fica desabilitado por padrão em bancada; para teste manual ou alarme sonoro real, revise `BUZZER_ENABLED` e `BUZZER_ACTIVE_HIGH` conforme a polaridade do módulo.
+- O buzzer fica desabilitado por padrão em bancada; para teste manual ou alarme sonoro real, revise `BUZZER_ACTIVE_HIGH` conforme a polaridade do módulo e habilite o buzzer na pré-calibração do portal ESP32.
 - O portal local do ESP32 não substitui o dashboard principal.
 - O portal local do ESP32 não possui autenticação local própria.
 - O pairing depende de o backend estar acessível ao ESP32 pela rede atual.

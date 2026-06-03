@@ -1,5 +1,7 @@
 #include "setup_portal.h"
 
+#include <cmath>
+
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
 
@@ -18,6 +20,57 @@ uint16_t parsePortOrDefault(const String& value, uint16_t fallback) {
   }
 
   return static_cast<uint16_t>(parsed);
+}
+
+float parseFloatOrDefault(const String& value, float fallback) {
+  if (value.isEmpty()) {
+    return fallback;
+  }
+
+  const float parsed = value.toFloat();
+  return std::isfinite(parsed) ? parsed : fallback;
+}
+
+unsigned long parseUnsignedLongOrDefault(const String& value, unsigned long fallback) {
+  if (value.isEmpty()) {
+    return fallback;
+  }
+
+  const long parsed = value.toInt();
+  if (parsed <= 0) {
+    return fallback;
+  }
+
+  return static_cast<unsigned long>(parsed);
+}
+
+String sensitivityLabel(const String& preset) {
+  const String normalized = DeviceSettings::normalizeAlertSensitivityPreset(preset);
+  if (normalized == AppConfig::ALERT_SENSITIVITY_LOW) {
+    return "Baixa";
+  }
+  if (normalized == AppConfig::ALERT_SENSITIVITY_HIGH) {
+    return "Alta";
+  }
+  if (normalized == AppConfig::ALERT_SENSITIVITY_DEMO) {
+    return "Teste/demonstracao";
+  }
+  return "Normal";
+}
+
+String sensitivityOption(const DeviceSettings::AlertTuningConfig& alertTuning,
+                         const char* value,
+                         const char* label) {
+  String html = "<option value='";
+  html += value;
+  html += "'";
+  if (DeviceSettings::normalizeAlertSensitivityPreset(alertTuning.sensitivityPreset) == value) {
+    html += " selected";
+  }
+  html += ">";
+  html += label;
+  html += "</option>";
+  return html;
 }
 
 String readJsonStringMember(const JsonVariantConst& value) {
@@ -181,6 +234,16 @@ IPAddress SetupPortal::apIP() const {
   return apIp_;
 }
 
+bool SetupPortal::consumeAlertTuningUpdate(DeviceSettings::AlertTuningConfig& alertTuning) {
+  if (!alertTuningUpdatePending_) {
+    return false;
+  }
+
+  alertTuning = pendingAlertTuning_;
+  alertTuningUpdatePending_ = false;
+  return true;
+}
+
 void SetupPortal::configureRoutes() {
   server_.on("/", HTTP_GET, [this]() { handleRoot(); });
   server_.on("/save", HTTP_POST, [this]() { handleSaveSettings(); });
@@ -316,16 +379,88 @@ void SetupPortal::handleCaptiveProbe() {
 
 void SetupPortal::handleSaveSettings() {
   DeviceSettings::DeviceConfig updated = config_;
-  updated.deviceId = server_.arg("device_id");
-  updated.mqtt.host = server_.arg("mqtt_host");
-  updated.mqtt.port = parsePortOrDefault(server_.arg("mqtt_port"),
-                                         AppConfig::DEFAULT_MQTT_PORT);
-  updated.mqtt.username = server_.arg("mqtt_username");
-  updated.mqtt.password = server_.arg("mqtt_password");
-  updated.mqtt.clientId = server_.arg("mqtt_client_id");
-  updated.mqtt.backendApiBaseUrl = server_.arg("backend_api_base_url");
+  const bool updatesMqtt =
+      server_.hasArg("device_id") || server_.hasArg("mqtt_host") ||
+      server_.hasArg("mqtt_port") || server_.hasArg("mqtt_username") ||
+      server_.hasArg("mqtt_password") || server_.hasArg("mqtt_client_id") ||
+      server_.hasArg("backend_api_base_url");
+  const bool updatesAlert =
+      server_.hasArg("alert_sensitivity") ||
+      server_.hasArg("alert_accel_threshold_g") ||
+      server_.hasArg("alert_gyro_threshold_dps") ||
+      server_.hasArg("alert_window_ms") ||
+      server_.hasArg("alert_cooldown_ms") ||
+      server_.hasArg("alert_form");
 
-  if (!DeviceSettings::hasValidMqttConfig(updated)) {
+  if (server_.hasArg("device_id")) {
+    updated.deviceId = server_.arg("device_id");
+  }
+  if (server_.hasArg("mqtt_host")) {
+    updated.mqtt.host = server_.arg("mqtt_host");
+  }
+  if (server_.hasArg("mqtt_port")) {
+    updated.mqtt.port = parsePortOrDefault(server_.arg("mqtt_port"),
+                                           updated.mqtt.port);
+  }
+  if (server_.hasArg("mqtt_username")) {
+    updated.mqtt.username = server_.arg("mqtt_username");
+  }
+  if (server_.hasArg("mqtt_password")) {
+    updated.mqtt.password = server_.arg("mqtt_password");
+  }
+  if (server_.hasArg("mqtt_client_id")) {
+    updated.mqtt.clientId = server_.arg("mqtt_client_id");
+  }
+  if (server_.hasArg("backend_api_base_url")) {
+    updated.mqtt.backendApiBaseUrl = server_.arg("backend_api_base_url");
+  }
+
+  if (updatesAlert) {
+    bool alertPresetChanged = false;
+    if (server_.hasArg("alert_sensitivity")) {
+      const String oldPreset = updated.alertTuning.sensitivityPreset;
+      const String newPreset =
+          DeviceSettings::normalizeAlertSensitivityPreset(server_.arg("alert_sensitivity"));
+      if (newPreset != oldPreset) {
+        alertPresetChanged = true;
+        const bool oldBuzzer = updated.alertTuning.buzzerEnabled;
+        const bool oldEvents = updated.alertTuning.eventsEnabled;
+        DeviceSettings::applyAlertSensitivityPreset(updated.alertTuning, newPreset);
+        updated.alertTuning.buzzerEnabled = oldBuzzer;
+        updated.alertTuning.eventsEnabled = oldEvents;
+      } else {
+        updated.alertTuning.sensitivityPreset = newPreset;
+      }
+    }
+    if (!alertPresetChanged && server_.hasArg("alert_accel_threshold_g")) {
+      updated.alertTuning.accelThresholdG =
+          DeviceSettings::clampAlertAccelThreshold(
+              parseFloatOrDefault(server_.arg("alert_accel_threshold_g"),
+                                  updated.alertTuning.accelThresholdG));
+    }
+    if (!alertPresetChanged && server_.hasArg("alert_gyro_threshold_dps")) {
+      updated.alertTuning.gyroThresholdDps =
+          DeviceSettings::clampAlertGyroThreshold(
+              parseFloatOrDefault(server_.arg("alert_gyro_threshold_dps"),
+                                  updated.alertTuning.gyroThresholdDps));
+    }
+    if (!alertPresetChanged && server_.hasArg("alert_window_ms")) {
+      updated.alertTuning.analysisWindowMs =
+          DeviceSettings::clampAlertAnalysisWindowMs(
+              parseUnsignedLongOrDefault(server_.arg("alert_window_ms"),
+                                         updated.alertTuning.analysisWindowMs));
+    }
+    if (!alertPresetChanged && server_.hasArg("alert_cooldown_ms")) {
+      updated.alertTuning.cooldownMs =
+          DeviceSettings::clampAlertCooldownMs(
+              parseUnsignedLongOrDefault(server_.arg("alert_cooldown_ms"),
+                                         updated.alertTuning.cooldownMs));
+    }
+    updated.alertTuning.buzzerEnabled = server_.hasArg("alert_buzzer_enabled");
+    updated.alertTuning.eventsEnabled = server_.hasArg("alert_events_enabled");
+  }
+
+  if (updatesMqtt && !DeviceSettings::hasValidMqttConfig(updated)) {
     flashMessage_ =
         "Broker MQTT invalido. Use host/IP real do broker e nunca localhost no ESP32.";
     flashTone_ = "error";
@@ -341,9 +476,17 @@ void SetupPortal::handleSaveSettings() {
   }
 
   config_ = updated;
+  if (updatesAlert) {
+    pendingAlertTuning_ = updated.alertTuning;
+    alertTuningUpdatePending_ = true;
+  }
   clearOperationalProbeResults();
   if (server_.arg("action") == "save_restart") {
     scheduleRestart("Configuracao salva. Reiniciando o ESP32 para aplicar Wi-Fi e MQTT.");
+  } else if (updatesAlert && !updatesMqtt) {
+    flashMessage_ =
+        "Pre-calibracao de alerta salva em NVS. Os novos thresholds valem no loop atual.";
+    flashTone_ = "success";
   } else {
     flashMessage_ =
         "Configuracao salva em NVS. Use 'Salvar e reiniciar' para aplicar imediatamente.";
@@ -555,14 +698,28 @@ void SetupPortal::handleTestBackend() {
 
 void SetupPortal::handleTestMqtt() {
   DeviceSettings::DeviceConfig probeConfig = config_;
-  probeConfig.deviceId = server_.arg("device_id");
-  probeConfig.mqtt.host = server_.arg("mqtt_host");
-  probeConfig.mqtt.port = parsePortOrDefault(server_.arg("mqtt_port"),
-                                             AppConfig::DEFAULT_MQTT_PORT);
-  probeConfig.mqtt.username = server_.arg("mqtt_username");
-  probeConfig.mqtt.password = server_.arg("mqtt_password");
-  probeConfig.mqtt.clientId = server_.arg("mqtt_client_id");
-  probeConfig.mqtt.backendApiBaseUrl = server_.arg("backend_api_base_url");
+  if (server_.hasArg("device_id")) {
+    probeConfig.deviceId = server_.arg("device_id");
+  }
+  if (server_.hasArg("mqtt_host")) {
+    probeConfig.mqtt.host = server_.arg("mqtt_host");
+  }
+  if (server_.hasArg("mqtt_port")) {
+    probeConfig.mqtt.port = parsePortOrDefault(server_.arg("mqtt_port"),
+                                               probeConfig.mqtt.port);
+  }
+  if (server_.hasArg("mqtt_username")) {
+    probeConfig.mqtt.username = server_.arg("mqtt_username");
+  }
+  if (server_.hasArg("mqtt_password")) {
+    probeConfig.mqtt.password = server_.arg("mqtt_password");
+  }
+  if (server_.hasArg("mqtt_client_id")) {
+    probeConfig.mqtt.clientId = server_.arg("mqtt_client_id");
+  }
+  if (server_.hasArg("backend_api_base_url")) {
+    probeConfig.mqtt.backendApiBaseUrl = server_.arg("backend_api_base_url");
+  }
 
   mqttProbeChecked_ = true;
   mqttProbeSuccess_ = false;
@@ -609,7 +766,7 @@ void SetupPortal::appendPageHead(String& html) const {
   html += ".card{background:#fff;border:1px solid #d7e2dd;border-radius:18px;padding:18px;box-shadow:0 10px 30px rgba(21,49,42,.06);}";
   html += "h1,h2{margin:0 0 10px;}h1{font-size:28px;}h2{font-size:20px;}";
   html += "p,li{line-height:1.5;}label{display:block;font-weight:700;margin:12px 0 6px;}";
-  html += "input,textarea{width:100%;padding:12px;border:1px solid #cfdad4;border-radius:12px;box-sizing:border-box;font:inherit;}";
+  html += "input,textarea,select{width:100%;padding:12px;border:1px solid #cfdad4;border-radius:12px;box-sizing:border-box;font:inherit;background:#fff;}";
   html += "textarea{min-height:110px;resize:vertical;}";
   html += "button{border:0;border-radius:12px;padding:12px 16px;font-weight:700;cursor:pointer;}";
   html += ".primary{background:#15312a;color:#fff;}.secondary{background:#eef3f0;color:#15312a;}";
@@ -808,6 +965,59 @@ void SetupPortal::appendMqttCard(String& html) const {
   html += "</div>";
 }
 
+void SetupPortal::appendAlertTuningCard(String& html) const {
+  const auto& alert = config_.alertTuning;
+  html += "<div class='card'><h2>Pre-calibracao experimental de alertas</h2>";
+  html += "<p class='muted'>Ajuste usado para testes controlados em bancada. O modo normal continua conservador; nao use como validacao clinica nem teste queda em pessoa.</p>";
+  html += "<form method='post' action='/save' class='grid'>";
+  html += "<input type='hidden' name='alert_form' value='1'>";
+  html += "<div class='two grid'><div><label>Sensibilidade do alerta</label><select name='alert_sensitivity'>";
+  html += sensitivityOption(alert, AppConfig::ALERT_SENSITIVITY_LOW, "Baixa");
+  html += sensitivityOption(alert, AppConfig::ALERT_SENSITIVITY_NORMAL, "Normal");
+  html += sensitivityOption(alert, AppConfig::ALERT_SENSITIVITY_HIGH, "Alta");
+  html += sensitivityOption(alert, AppConfig::ALERT_SENSITIVITY_DEMO, "Teste/demonstracao");
+  html += "</select><p class='hint'>Atual: ";
+  html += htmlEscape(sensitivityLabel(alert.sensitivityPreset));
+  html += "</p></div>";
+  html += "<div><label>Cooldown de alerta (ms)</label><input name='alert_cooldown_ms' type='number' min='";
+  html += String(AppConfig::ALERT_MIN_COOLDOWN_MS);
+  html += "' max='";
+  html += String(AppConfig::ALERT_MAX_COOLDOWN_MS);
+  html += "' value='";
+  html += String(alert.cooldownMs);
+  html += "'></div></div>";
+  html += "<div class='two grid'><div><label>Threshold aceleracao resultante (g)</label><input name='alert_accel_threshold_g' type='number' step='0.05' min='";
+  html += String(AppConfig::ALERT_MIN_ACCEL_THRESHOLD_G, 2);
+  html += "' max='";
+  html += String(AppConfig::ALERT_MAX_ACCEL_THRESHOLD_G, 2);
+  html += "' value='";
+  html += String(alert.accelThresholdG, 2);
+  html += "'></div>";
+  html += "<div><label>Threshold giroscopio (deg/s)</label><input name='alert_gyro_threshold_dps' type='number' step='1' min='";
+  html += String(AppConfig::ALERT_MIN_GYRO_THRESHOLD_DPS, 0);
+  html += "' max='";
+  html += String(AppConfig::ALERT_MAX_GYRO_THRESHOLD_DPS, 0);
+  html += "' value='";
+  html += String(alert.gyroThresholdDps, 0);
+  html += "'></div></div>";
+  html += "<div><label>Janela de analise (ms)</label><input name='alert_window_ms' type='number' min='";
+  html += String(AppConfig::ALERT_MIN_ANALYSIS_WINDOW_MS);
+  html += "' max='";
+  html += String(AppConfig::ALERT_MAX_ANALYSIS_WINDOW_MS);
+  html += "' value='";
+  html += String(alert.analysisWindowMs);
+  html += "'></div>";
+  html += "<label><input name='alert_events_enabled' type='checkbox' style='width:auto;margin-right:8px;'";
+  html += alert.eventsEnabled ? " checked" : "";
+  html += ">Publicar eventos MQTT de alerta experimental</label>";
+  html += "<label><input name='alert_buzzer_enabled' type='checkbox' style='width:auto;margin-right:8px;'";
+  html += alert.buzzerEnabled ? " checked" : "";
+  html += ">Habilitar buzzer local para alerta</label>";
+  html += "<p class='muted'>Em demonstracao, valores baixos facilitam teste de bancada e podem gerar falsos positivos. Volte para normal apos validar o fluxo.</p>";
+  html += "<div class='row'><button class='primary' type='submit'>Salvar pre-calibracao</button></div></form>";
+  html += "</div>";
+}
+
 void SetupPortal::appendPairingCard(String& html) const {
   html += "<div class='card'><h2>Parear dispositivo com codigo temporario</h2>";
   html += "<p class='muted'>Device UID tecnico deste ESP32: <span class='mono'>";
@@ -843,6 +1053,7 @@ String SetupPortal::renderPage() const {
   appendOperationalHealthCard(html);
   appendWifiCard(html);
   appendMqttCard(html);
+  appendAlertTuningCard(html);
   appendPairingCard(html);
   appendRestartCard(html);
   html += "</div></body></html>";

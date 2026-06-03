@@ -44,6 +44,8 @@ unsigned long lastStatusSentAtMs = 0;
 unsigned long lastTelemetrySentAtMs = 0;
 unsigned long lastPatientProfileSyncAttemptAtMs = 0;
 unsigned long lastMotionTestTriggerAtMs = 0;
+unsigned long lastExperimentalAlertAtMs = 0;
+unsigned long lastExperimentalAlertSkipLogAtMs = 0;
 unsigned long motionTestStableSinceAtMs = 0;
 unsigned long lastEventBufferPersistAtMs = 0;
 unsigned long lastSensorHealthLogAtMs = 0;
@@ -267,6 +269,115 @@ void enrichFallAlertWithCurrentWindow(FallAlert& alert, const SensorReading& rea
   alert.linkedTelemetryWindow.sampleCount = alert.sampleCount;
 }
 
+float clampConfidence(float value) {
+  if (value < 0.0f) {
+    return 0.0f;
+  }
+  if (value > 0.95f) {
+    return 0.95f;
+  }
+  return value;
+}
+
+void addSensorContextToEventPayload(JsonDocument& doc, unsigned long nowMs) {
+  const bool sensorSampleFresh = hasFreshSensorSample(nowMs);
+  doc["sensor_ready"] = sensorReady;
+  doc["sensor_valid"] = sensorSampleFresh;
+  doc["sensor_read_ok"] = lastSensorReadSucceeded;
+  doc["sensor_sample_age_ms"] = latestSensorSampleAgeMs(nowMs);
+  doc["sample_age_ms"] = latestSensorSampleAgeMs(nowMs);
+  doc["sensor_failures"] = sensor.consecutiveFailureCount();
+  doc["i2c_error_count"] = sensor.totalI2cErrorCount();
+  doc["i2c_recovery_count"] = sensor.i2cRecoveryCount();
+  doc["i2c_last_error"] = sensor.lastI2cError();
+
+  if (!sensorSampleFresh) {
+    return;
+  }
+
+  doc["ax"] = latestReading.accelXG;
+  doc["ay"] = latestReading.accelYG;
+  doc["az"] = latestReading.accelZG;
+  doc["gx"] = latestReading.gyroXDegPerSec;
+  doc["gy"] = latestReading.gyroYDegPerSec;
+  doc["gz"] = latestReading.gyroZDegPerSec;
+  doc["pitch_deg"] = latestReading.pitchDeg;
+  doc["roll_deg"] = latestReading.rollDeg;
+}
+
+void addAlertTuningToEventPayload(JsonDocument& doc) {
+  const auto& alertTuning = runtimeConfig().alertTuning;
+  JsonObject settings = doc.createNestedObject("alert_settings");
+  settings["sensitivity"] = alertTuning.sensitivityPreset;
+  settings["accel_threshold_g"] = alertTuning.accelThresholdG;
+  settings["gyro_threshold_dps"] = alertTuning.gyroThresholdDps;
+  settings["analysis_window_ms"] = alertTuning.analysisWindowMs;
+  settings["cooldown_ms"] = alertTuning.cooldownMs;
+  settings["events_enabled"] = alertTuning.eventsEnabled;
+  settings["buzzer_enabled"] = alertTuning.buzzerEnabled;
+}
+
+FallAlert buildExperimentalAlertDecision(const SensorReading& reading,
+                                         const char* eventType,
+                                         const char* reason,
+                                         bool accelTriggered,
+                                         bool gyroTriggered,
+                                         unsigned long nowMs) {
+  FallAlert alert;
+  const auto& alertTuning = runtimeConfig().alertTuning;
+  const FallTimeDomainFeatures timeFeatures = fallFeatureExtractor.timeDomainSnapshot();
+  const float accelRatio =
+      alertTuning.accelThresholdG > 0.0f
+          ? reading.accelMagnitudeG / alertTuning.accelThresholdG
+          : 0.0f;
+  const float gyroRatio =
+      alertTuning.gyroThresholdDps > 0.0f
+          ? reading.gyroMagnitudeDegPerSec / alertTuning.gyroThresholdDps
+          : 0.0f;
+
+  alert.detected = false;
+  alert.candidate = true;
+  alert.immobilityConfirmed = false;
+  alert.decisionSource = "firmware";
+  alert.algorithmVersion = AppConfig::ALERT_DECISION_ENGINE_VERSION;
+  alert.activityStateEstimate =
+      String(eventType) == "fall_suspected" ? "queda_suspeita" : "movimento_intenso";
+  alert.confidence = clampConfidence((accelTriggered && gyroTriggered ? 0.55f : 0.38f) +
+                                     (fminf(accelRatio, 2.0f) * 0.10f) +
+                                     (fminf(gyroRatio, 2.0f) * 0.10f));
+  alert.accelMagnitudeG = reading.accelMagnitudeG;
+  alert.gyroMagnitudeDegPerSec = reading.gyroMagnitudeDegPerSec;
+  alert.peakAccelG = timeFeatures.available
+                         ? fmaxf(timeFeatures.peakAccelMagnitudeG,
+                                 reading.accelMagnitudeG)
+                         : reading.accelMagnitudeG;
+  alert.peakGyroDps = timeFeatures.available
+                          ? fmaxf(timeFeatures.peakGyroMagnitudeDps,
+                                  reading.gyroMagnitudeDegPerSec)
+                          : reading.gyroMagnitudeDegPerSec;
+  alert.pitchDeg = reading.pitchDeg;
+  alert.rollDeg = reading.rollDeg;
+  alert.orientationDeltaDeg = 0.0f;
+  alert.analysisWindowMs = alertTuning.analysisWindowMs;
+  alert.windowEndedAtMs = nowMs;
+  alert.windowStartedAtMs =
+      nowMs >= alertTuning.analysisWindowMs ? nowMs - alertTuning.analysisWindowMs : 0U;
+  alert.sampleCount = timeFeatures.available ? timeFeatures.sampleCount : 1U;
+  alert.samplesConsidered = alert.sampleCount;
+  alert.immobilityDurationMs = 0;
+  alert.reason = reason;
+  alert.timestampMs = reading.timestampMs;
+  alert.timeDomainFeatures = timeFeatures;
+  alert.frequencyDomainFeatures = fallFeatureExtractor.frequencyDomainSnapshot();
+  alert.linkedTelemetryWindow.available = false;
+  alert.linkedTelemetryWindow.reason = "backend_links_persisted_telemetry";
+  alert.linkedTelemetryWindow.windowStartedAtMs = alert.windowStartedAtMs;
+  alert.linkedTelemetryWindow.windowEndedAtMs = alert.windowEndedAtMs;
+  alert.linkedTelemetryWindow.sampleCount = alert.sampleCount;
+
+  return alert;
+}
+
 String buildEventPayload(const char* eventType,
                          float accelMagnitudeG,
                          float gyroMagnitudeDegPerSec,
@@ -276,7 +387,8 @@ String buildEventPayload(const char* eventType,
                          uint32_t sampleSeq,
                          const FallAlert* fallAlert = nullptr) {
   // Mantem o formato do payload centralizado em um unico ponto.
-  StaticJsonDocument<2560> doc;
+  StaticJsonDocument<3072> doc;
+  const unsigned long nowMs = millis();
   doc["device_uid"] = DeviceSettings::technicalDeviceUid();
   doc["device_id"] = DeviceSettings::effectiveDeviceId(runtimeConfig());
   doc["event_type"] = eventType;
@@ -290,6 +402,11 @@ String buildEventPayload(const char* eventType,
   doc["immobility_confirmed"] = immobilityConfirmed;
   doc["battery_level"] = batteryLevelPercent();
   doc["battery_percent"] = batteryLevelPercent();
+  doc["algorithm"] = fallAlert != nullptr
+                         ? fallAlert->algorithmVersion
+                         : AppConfig::ALERT_DECISION_ENGINE_VERSION;
+  addSensorContextToEventPayload(doc, nowMs);
+  addAlertTuningToEventPayload(doc);
 
   if (fallAlert != nullptr) {
     doc["decision_source"] = fallAlert->decisionSource;
@@ -348,6 +465,10 @@ String buildEventPayload(const char* eventType,
     thresholds["impact_gyro_dps"] = AppConfig::IMPACT_GYRO_THRESHOLD_DPS;
     thresholds["orientation_change_deg"] = AppConfig::ORIENTATION_CHANGE_THRESHOLD_DEG;
     thresholds["required_immobility_ms"] = AppConfig::REQUIRED_IMMOBILITY_MS;
+    thresholds["experimental_accel_g"] = runtimeConfig().alertTuning.accelThresholdG;
+    thresholds["experimental_gyro_dps"] = runtimeConfig().alertTuning.gyroThresholdDps;
+    thresholds["experimental_window_ms"] = runtimeConfig().alertTuning.analysisWindowMs;
+    thresholds["experimental_cooldown_ms"] = runtimeConfig().alertTuning.cooldownMs;
   }
 
   if (doc.overflowed()) {
@@ -547,6 +668,52 @@ IndicatorState computeIndicatorState() {
   return IndicatorState::Error;
 }
 
+void triggerConfiguredAlertBuzzer(const char* eventType, uint8_t cycles) {
+  if (!runtimeConfig().alertTuning.buzzerEnabled) {
+    if (AppConfig::FIRMWARE_MQTT_DIAGNOSTIC_ENABLED) {
+      AppLog::infof("[buzzer] alert skipped reason=disabled type=%s\n", eventType);
+    }
+    return;
+  }
+
+  indicator.setBuzzerEnabled(true);
+  indicator.triggerAlarm(cycles);
+}
+
+void publishThresholdAlertEvent(const char* eventType,
+                                const FallAlert& alert,
+                                bool immobilityConfirmed,
+                                uint8_t buzzerCycles) {
+  const String topic = DeviceSettings::buildTopic(runtimeConfig(), "events");
+  const uint32_t eventSequence = nextMonotonicSequence(criticalEventSeq);
+  const String eventUuid = buildCriticalEventUuid(eventType, eventSequence, millis());
+  const String payload = buildEventPayload(eventType,
+                                           alert.accelMagnitudeG,
+                                           alert.gyroMagnitudeDegPerSec,
+                                           immobilityConfirmed,
+                                           eventUuid,
+                                           eventSequence,
+                                           sensorSampleSeq,
+                                           &alert);
+  const bool published = publishCriticalEvent(topic, payload, eventType, eventUuid);
+
+  AppLog::warnf("[alert] %s event=%s topic=%s event_uuid=%s sample_seq=%lu published=%u reason=%s accel=%.2f gyro=%.2f confidence=%.2f cooldown_ms=%lu preset=%s\n",
+                published ? "event_published" : "event_queued",
+                eventType,
+                topic.c_str(),
+                eventUuid.c_str(),
+                static_cast<unsigned long>(sensorSampleSeq),
+                published ? 1U : 0U,
+                alert.reason,
+                alert.accelMagnitudeG,
+                alert.gyroMagnitudeDegPerSec,
+                alert.confidence,
+                runtimeConfig().alertTuning.cooldownMs,
+                runtimeConfig().alertTuning.sensitivityPreset.c_str());
+
+  triggerConfiguredAlertBuzzer(eventType, buzzerCycles);
+}
+
 void publishFallAlert(const FallAlert& alert) {
   const String topic = DeviceSettings::buildTopic(runtimeConfig(), "events");
   const uint32_t eventSequence = nextMonotonicSequence(criticalEventSeq);
@@ -575,7 +742,7 @@ void publishFallAlert(const FallAlert& alert) {
                   alert.gyroMagnitudeDegPerSec,
                   alert.orientationDeltaDeg);
   }
-  indicator.triggerAlarm();
+  triggerConfiguredAlertBuzzer("fall_detected", 6);
 }
 
 void publishSosAlert() {
@@ -602,7 +769,7 @@ void publishSosAlert() {
                   static_cast<unsigned long>(sensorSampleSeq),
                   static_cast<unsigned>(payload.length()));
   }
-  indicator.triggerAlarm(4);
+  triggerConfiguredAlertBuzzer("sos_pressed", 4);
 }
 
 void publishPeriodicStatus() {
@@ -998,6 +1165,83 @@ void handleMotionTest(const SensorReading& reading, unsigned long nowMs) {
   }
 }
 
+void logExperimentalAlertSkippedIfDue(const char* reason,
+                                      const SensorReading& reading,
+                                      unsigned long nowMs) {
+  if (!AppConfig::FIRMWARE_MQTT_DIAGNOSTIC_ENABLED) {
+    return;
+  }
+
+  if (lastExperimentalAlertSkipLogAtMs > 0U &&
+      (nowMs - lastExperimentalAlertSkipLogAtMs) < 2000U) {
+    return;
+  }
+
+  lastExperimentalAlertSkipLogAtMs = nowMs;
+  AppLog::warnf("[alert] skipped reason=%s accel=%.2f gyro=%.2f preset=%s cooldown_remaining_ms=%lu sensor_valid=%u events_enabled=%u\n",
+                reason,
+                reading.accelMagnitudeG,
+                reading.gyroMagnitudeDegPerSec,
+                runtimeConfig().alertTuning.sensitivityPreset.c_str(),
+                lastExperimentalAlertAtMs > 0U &&
+                        (nowMs - lastExperimentalAlertAtMs) <
+                            runtimeConfig().alertTuning.cooldownMs
+                    ? runtimeConfig().alertTuning.cooldownMs -
+                          (nowMs - lastExperimentalAlertAtMs)
+                    : 0U,
+                hasFreshSensorSample(nowMs) ? 1U : 0U,
+                runtimeConfig().alertTuning.eventsEnabled ? 1U : 0U);
+}
+
+void handleExperimentalAlertDetection(const SensorReading& reading, unsigned long nowMs) {
+  if (!reading.valid || !hasFreshSensorSample(nowMs)) {
+    return;
+  }
+
+  const auto& alertTuning = runtimeConfig().alertTuning;
+  const bool accelTriggered = reading.accelMagnitudeG >= alertTuning.accelThresholdG;
+  const bool gyroTriggered = reading.gyroMagnitudeDegPerSec >= alertTuning.gyroThresholdDps;
+
+  if (!accelTriggered && !gyroTriggered) {
+    return;
+  }
+
+  if (!alertTuning.eventsEnabled) {
+    logExperimentalAlertSkippedIfDue("events_disabled", reading, nowMs);
+    return;
+  }
+
+  if (lastExperimentalAlertAtMs > 0U &&
+      (nowMs - lastExperimentalAlertAtMs) < alertTuning.cooldownMs) {
+    logExperimentalAlertSkippedIfDue("cooldown", reading, nowMs);
+    return;
+  }
+
+  const bool suspectedFall = accelTriggered && gyroTriggered;
+  const char* eventType = suspectedFall ? "fall_suspected" : "movement_detected";
+  const char* reason = suspectedFall
+                           ? "experimental_threshold_accel_gyro"
+                           : (accelTriggered ? "experimental_threshold_accel"
+                                             : "experimental_threshold_gyro");
+  FallAlert alert = buildExperimentalAlertDecision(reading,
+                                                   eventType,
+                                                   reason,
+                                                   accelTriggered,
+                                                   gyroTriggered,
+                                                   nowMs);
+
+  lastExperimentalAlertAtMs = nowMs;
+  AppLog::warnf("[alert] %s accel=%.2f threshold=%.2f gyro=%.2f threshold=%.1f preset=%s sample_seq=%lu\n",
+                eventType,
+                reading.accelMagnitudeG,
+                alertTuning.accelThresholdG,
+                reading.gyroMagnitudeDegPerSec,
+                alertTuning.gyroThresholdDps,
+                alertTuning.sensitivityPreset.c_str(),
+                static_cast<unsigned long>(sensorSampleSeq));
+  publishThresholdAlertEvent(eventType, alert, false, suspectedFall ? 4 : 2);
+}
+
 }  // namespace
 
 void setup() {
@@ -1007,14 +1251,13 @@ void setup() {
   // A ordem de inicializacao prioriza feedback local mesmo antes da rede subir.
   holdDisabledBuzzerInactive();
 
-  if (AppConfig::STATUS_LED_ENABLED || AppConfig::BUZZER_ENABLED) {
-    indicator.begin(AppConfig::STATUS_LED_PIN,
-                    AppConfig::BUZZER_PIN,
-                    AppConfig::BUZZER_ACTIVE_HIGH,
-                    AppConfig::STATUS_LED_ENABLED,
-                    AppConfig::BUZZER_ENABLED);
-    indicator.setState(IndicatorState::Booting);
-  }
+  indicator.begin(AppConfig::STATUS_LED_PIN,
+                  AppConfig::BUZZER_PIN,
+                  AppConfig::BUZZER_ACTIVE_HIGH,
+                  AppConfig::STATUS_LED_ENABLED,
+                  true);
+  indicator.setBuzzerEnabled(false);
+  indicator.setState(IndicatorState::Booting);
 
   if (AppConfig::SOS_BUTTON_ENABLED) {
     sosButton.begin(AppConfig::SOS_BUTTON_PIN, true, AppConfig::SOS_HOLD_TIME_MS);
@@ -1047,6 +1290,7 @@ void setup() {
   AppLog::infof("[boot] sensorReady final=%u\n", sensorReady ? 1U : 0U);
 
   connectivityManager.begin();
+  indicator.setBuzzerEnabled(runtimeConfig().alertTuning.buzzerEnabled);
   restoreBufferedEventsFromStore();
 
   lastStatusSentAtMs = millis();
@@ -1079,6 +1323,7 @@ void loop() {
       }
 
       handleMotionTest(latestReading, nowMs);
+      handleExperimentalAlertDetection(latestReading, nowMs);
 
       // O detector trabalha sobre a ultima leitura filtrada do sensor.
       FallAlert alert = fallDetector.update(latestReading);
@@ -1118,10 +1363,9 @@ void loop() {
   flushBufferedEvents();
   maybePersistBufferedEvents(nowMs);
 
-  if (AppConfig::STATUS_LED_ENABLED || AppConfig::BUZZER_ENABLED) {
-    indicator.setState(computeIndicatorState());
-    indicator.update();
-  }
+  indicator.setBuzzerEnabled(runtimeConfig().alertTuning.buzzerEnabled);
+  indicator.setState(computeIndicatorState());
+  indicator.update();
 
   delay(5);
 }

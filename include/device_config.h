@@ -35,12 +35,23 @@ struct PatientProfileSummary {
   String syncedAt;
 };
 
+struct AlertTuningConfig {
+  String sensitivityPreset;
+  float accelThresholdG = AppConfig::ALERT_NORMAL_ACCEL_THRESHOLD_G;
+  float gyroThresholdDps = AppConfig::ALERT_NORMAL_GYRO_THRESHOLD_DPS;
+  unsigned long analysisWindowMs = AppConfig::ALERT_NORMAL_ANALYSIS_WINDOW_MS;
+  unsigned long cooldownMs = AppConfig::ALERT_NORMAL_COOLDOWN_MS;
+  bool buzzerEnabled = AppConfig::ALERT_BUZZER_ENABLED_DEFAULT;
+  bool eventsEnabled = AppConfig::ALERT_EVENT_PUBLICATION_ENABLED_DEFAULT;
+};
+
 struct DeviceConfig {
   bool loadedFromNvs = false;
   String deviceId;
   MqttConfig mqtt;
   String deviceSyncToken;
   PatientProfileSummary patientProfile;
+  AlertTuningConfig alertTuning;
   WifiNetworkConfig wifiNetworks[kMaxWifiNetworks];
   size_t wifiNetworkCount = 0;
 };
@@ -65,6 +76,12 @@ String buildSetupApSsid(const DeviceConfig& config);
 void clearPatientProfile(DeviceConfig& config);
 bool patientProfileEquals(const PatientProfileSummary& left,
                           const PatientProfileSummary& right);
+void applyAlertSensitivityPreset(AlertTuningConfig& alertTuning, const String& preset);
+String normalizeAlertSensitivityPreset(const String& preset);
+float clampAlertAccelThreshold(float value);
+float clampAlertGyroThreshold(float value);
+unsigned long clampAlertAnalysisWindowMs(unsigned long value);
+unsigned long clampAlertCooldownMs(unsigned long value);
 
 bool upsertWifiNetwork(DeviceConfig& config,
                        const String& ssid,

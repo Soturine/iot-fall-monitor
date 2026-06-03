@@ -1,5 +1,7 @@
 #include "buzzer_led.h"
 
+#include "app_logging.h"
+
 void BuzzerLed::begin(uint8_t ledPin,
                       uint8_t buzzerPin,
                       bool buzzerActiveHigh,
@@ -23,17 +25,44 @@ void BuzzerLed::begin(uint8_t ledPin,
   writeOutputs(false, false);
 }
 
+void BuzzerLed::setBuzzerEnabled(bool enabled) {
+  if (buzzerEnabled_ == enabled) {
+    return;
+  }
+
+  buzzerEnabled_ = enabled;
+  configured_ = ledEnabled_ || buzzerEnabled_;
+
+  if (enabled) {
+    pinMode(buzzerPin_, OUTPUT);
+  } else {
+    pinMode(buzzerPin_, OUTPUT);
+    digitalWrite(buzzerPin_, buzzerActiveHigh_ ? LOW : HIGH);
+    buzzerState_ = false;
+  }
+
+  AppLog::infof("[buzzer] runtime enabled=%u\n", enabled ? 1U : 0U);
+}
+
 void BuzzerLed::setState(IndicatorState state) {
   state_ = state;
 }
 
 void BuzzerLed::triggerAlarm(uint8_t cycles) {
   // Cada ciclo alterna LED e buzzer duas vezes para formar um padrao perceptivel.
+  if (cycles == 0U) {
+    return;
+  }
+
   alarmTogglesRemaining_ = cycles * 2U;
   lastAlarmToggleMs_ = 0;
+  alarmActive_ = true;
   pulseActive_ = false;
   pulseStartedAtMs_ = 0;
   pulseDurationMs_ = 0;
+  AppLog::warnf("[buzzer] alert pulse start cycles=%u buzzer_enabled=%u\n",
+                cycles,
+                buzzerEnabled_ ? 1U : 0U);
 }
 
 void BuzzerLed::triggerPulse(unsigned long durationMs) {
@@ -44,6 +73,9 @@ void BuzzerLed::triggerPulse(unsigned long durationMs) {
   pulseActive_ = true;
   pulseStartedAtMs_ = 0;
   pulseDurationMs_ = durationMs;
+  AppLog::warnf("[buzzer] test pulse start duration_ms=%lu buzzer_enabled=%u\n",
+                durationMs,
+                buzzerEnabled_ ? 1U : 0U);
 }
 
 void BuzzerLed::update() {
@@ -59,6 +91,11 @@ void BuzzerLed::update() {
       lastAlarmToggleMs_ = nowMs;
       writeOutputs(!ledState_, !buzzerState_);
       --alarmTogglesRemaining_;
+      if (alarmTogglesRemaining_ == 0U && alarmActive_) {
+        alarmActive_ = false;
+        writeOutputs(ledState_, false);
+        AppLog::warn("[buzzer] alert pulse end");
+      }
     }
     return;
   }
@@ -79,6 +116,7 @@ void BuzzerLed::update() {
     pulseStartedAtMs_ = 0;
     pulseDurationMs_ = 0;
     writeOutputs(ledState_, false);
+    AppLog::warn("[buzzer] test pulse end");
   }
 
   renderState(nowMs);

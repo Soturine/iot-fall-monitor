@@ -22,6 +22,8 @@ test("deriveSeverity classifica eventos criticos de queda, SOS e sensor", () => 
   assert.equal(deriveSeverity("sos_pressed", {}), "high");
   assert.equal(deriveSeverity("manual_sos", {}), "high");
   assert.equal(deriveSeverity("sensor_fault", {}), "high");
+  assert.equal(deriveSeverity("fall_suspected", {}), "high");
+  assert.equal(deriveSeverity("movement_detected", {}), "medium");
   assert.equal(deriveSeverity("unknown_event", {}), "medium");
 });
 
@@ -34,6 +36,8 @@ test("shouldCreateAlert cria alerta apenas para eventos criticos", () => {
   assert.equal(shouldCreateAlert("sos_pressed"), true);
   assert.equal(shouldCreateAlert("manual_sos"), true);
   assert.equal(shouldCreateAlert("sensor_fault"), true);
+  assert.equal(shouldCreateAlert("fall_suspected"), true);
+  assert.equal(shouldCreateAlert("movement_detected"), true);
   assert.equal(shouldCreateAlert("device_status"), false);
   assert.equal(shouldCreateAlert("heartbeat"), false);
 });
@@ -61,6 +65,14 @@ test("shouldCreateAlertForEvent exige evidencia para queda e preserva SOS manual
   );
   assert.equal(
     shouldCreateAlertForEvent({ eventType: "sensor_fault", evidenceStatus: "none" }),
+    true,
+  );
+  assert.equal(
+    shouldCreateAlertForEvent({ eventType: "fall_suspected", evidenceStatus: "none" }),
+    true,
+  );
+  assert.equal(
+    shouldCreateAlertForEvent({ eventType: "movement_detected", evidenceStatus: "none" }),
     true,
   );
 });
@@ -144,6 +156,15 @@ test("buildEvidenceSummaryForPayload preserva decisao e features do firmware", (
       experimental: true,
       reason: "fft_experimental_disabled",
     },
+    alert_settings: {
+      sensitivity: "demo",
+      accel_threshold_g: 1.25,
+      gyro_threshold_dps: 35,
+    },
+    thresholds: {
+      experimental_accel_g: 1.25,
+      experimental_gyro_dps: 35,
+    },
   });
 
   assert.equal(summary.maxAccelMagnitude, 3.8);
@@ -154,6 +175,8 @@ test("buildEvidenceSummaryForPayload preserva decisao e features do firmware", (
   );
   assert.equal(summary.firmwareDecision.featuresTimeDomain.sample_count, 64);
   assert.equal(summary.firmwareDecision.featuresFrequencyDomain.available, false);
+  assert.equal(summary.firmwareDecision.alertSettings.sensitivity, "demo");
+  assert.equal(summary.firmwareDecision.thresholds.experimental_accel_g, 1.25);
   assert.equal(summary.linkedTelemetryWindow.status, "partial");
 });
 

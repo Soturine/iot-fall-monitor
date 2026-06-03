@@ -36,12 +36,23 @@ const TELEMETRY_STALE_AFTER_MS = 30000;
 
 type EvidenceCarrier = Pick<
   EventRecord,
+  | "eventType"
   | "evidenceStatus"
   | "evidenceSampleCount"
   | "evidenceWindowSeconds"
   | "evidenceSummary"
   | "rawPayloadJson"
 >;
+
+const ALERT_EVIDENCE_EVENT_TYPES = new Set([
+  "fall_detected",
+  "fall_suspected",
+  "movement_detected",
+]);
+
+function hasAlertEvidence(event: Pick<EventRecord, "eventType"> | AlertRecord["event"]) {
+  return ALERT_EVIDENCE_EVENT_TYPES.has(event.eventType);
+}
 
 function humanizeEvidenceStatus(status?: string) {
   switch (status) {
@@ -121,6 +132,10 @@ function extractFirmwareDecision(event: EvidenceCarrier) {
   const featuresFrequencyDomain = isRecord(rawPayload.features_frequency_domain)
     ? rawPayload.features_frequency_domain
     : null;
+  const alertSettings = isRecord(rawPayload.alert_settings)
+    ? rawPayload.alert_settings
+    : null;
+  const thresholds = isRecord(rawPayload.thresholds) ? rawPayload.thresholds : null;
 
   return {
     decisionSource: readString(rawPayload, "decision_source") || readString(features, "decision_source"),
@@ -156,6 +171,8 @@ function extractFirmwareDecision(event: EvidenceCarrier) {
       readNumber(features, "immobility_duration_ms"),
     featuresTimeDomain,
     featuresFrequencyDomain,
+    alertSettings,
+    thresholds,
   };
 }
 
@@ -166,6 +183,12 @@ function EvidenceSummary({ event }: { event: EvidenceCarrier }) {
     : null;
   const featuresFrequencyDomain = isRecord(firmwareDecision?.featuresFrequencyDomain)
     ? firmwareDecision.featuresFrequencyDomain
+    : null;
+  const alertSettings = isRecord(firmwareDecision?.alertSettings)
+    ? firmwareDecision.alertSettings
+    : null;
+  const thresholds = isRecord(firmwareDecision?.thresholds)
+    ? firmwareDecision.thresholds
     : null;
   const frequencyAvailable = readBoolean(featuresFrequencyDomain, "available");
 
@@ -252,6 +275,38 @@ function EvidenceSummary({ event }: { event: EvidenceCarrier }) {
               {frequencyAvailable ? "experimental disponivel" : "experimental desativada"}
             </span>
           </p>
+          <p>
+            Motivo:{" "}
+            <span className="font-semibold text-surface-800">
+              {firmwareDecision.reason || "--"}
+            </span>
+          </p>
+          <p>
+            Sensibilidade:{" "}
+            <span className="font-semibold text-surface-800">
+              {readString(alertSettings, "sensitivity") || "--"}
+            </span>
+          </p>
+          <p>
+            Limiar aceleracao:{" "}
+            <span className="font-semibold text-surface-800">
+              {formatEvidenceNumber(
+                readNumber(alertSettings, "accel_threshold_g") ??
+                  readNumber(thresholds, "experimental_accel_g"),
+              )}{" "}
+              g
+            </span>
+          </p>
+          <p>
+            Limiar giroscopio:{" "}
+            <span className="font-semibold text-surface-800">
+              {formatEvidenceNumber(
+                readNumber(alertSettings, "gyro_threshold_dps") ??
+                  readNumber(thresholds, "experimental_gyro_dps"),
+              )}{" "}
+              deg/s
+            </span>
+          </p>
           {featuresTimeDomain ? (
             <p className="md:col-span-2">
               Features tempo: pico jerk{" "}
@@ -309,10 +364,7 @@ function expectedTopic(deviceIdentifier: string, channel: "status" | "telemetry"
   return `${MQTT_TOPIC_BASE}/${deviceIdentifier}/${channel}`;
 }
 
-function classifyCurrentState(
-  detail: DeviceDetailResponse,
-  _latestTelemetry: DeviceDetailResponse["recentTelemetry"][number] | undefined,
-) {
+function classifyCurrentState(detail: DeviceDetailResponse) {
   return {
     label: humanizeDeviceBehaviorState(detail.device.behavior.state),
     tone: deviceBehaviorTone(detail.device.behavior.state),
@@ -447,9 +499,9 @@ export function DeviceDetailPage() {
   const latestTelemetry = detail.recentTelemetry.at(-1);
   const latestEvent = detail.recentEvents[0];
   const latestFallEvent = detail.recentEvents.find(
-    (event) => event.eventType === "fall_detected",
+    (event) => event.eventType === "fall_detected" || event.eventType === "fall_suspected",
   );
-  const currentState = classifyCurrentState(detail, latestTelemetry);
+  const currentState = classifyCurrentState(detail);
   const statusTopic = expectedTopic(detail.device.deviceIdentifier, "status");
   const telemetryTopic = expectedTopic(detail.device.deviceIdentifier, "telemetry");
   const eventsTopic = expectedTopic(detail.device.deviceIdentifier, "events");
@@ -827,7 +879,7 @@ export function DeviceDetailPage() {
                   <p className="mt-1 text-sm text-surface-600">
                     {formatDateTime(alert.event.eventTime)}
                   </p>
-                  {alert.event.eventType === "fall_detected" ? (
+                  {hasAlertEvidence(alert.event) ? (
                     <EvidenceSummary event={alert.event} />
                   ) : null}
                 </div>
@@ -923,7 +975,7 @@ export function DeviceDetailPage() {
                     Imobilidade confirmada
                   </div>
                 ) : null}
-                {event.eventType === "fall_detected" ? (
+                {hasAlertEvidence(event) ? (
                   <EvidenceSummary event={event} />
                 ) : null}
               </div>

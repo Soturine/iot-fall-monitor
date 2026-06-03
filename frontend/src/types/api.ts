@@ -207,6 +207,8 @@ export interface EvidenceSummary {
     featuresTimeDomain?: Record<string, unknown> | null;
     featuresFrequencyDomain?: Record<string, unknown> | null;
     linkedTelemetryWindow?: Record<string, unknown> | null;
+    alertSettings?: Record<string, unknown> | null;
+    thresholds?: Record<string, unknown> | null;
   } | null;
   linkedTelemetryWindow?: {
     status?: string | null;

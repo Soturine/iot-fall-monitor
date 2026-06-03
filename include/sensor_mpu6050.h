@@ -37,7 +37,7 @@ class SensorMPU6050 {
   void calibrateAccelerometer();
   bool refreshScaleFromRegisters();
   void logI2cErrorSummaryIfDue(unsigned long nowMs);
-  bool recoverI2CBus();
+  bool recoverI2CBus(const char* reason);
 
   bool configureSensor(bool runCalibration = true);
   bool readRawSample(int16_t& accelX,
@@ -66,6 +66,7 @@ class SensorMPU6050 {
   unsigned long consecutiveReadFailures_ = 0;
   unsigned long totalI2cErrors_ = 0;
   unsigned long i2cErrorsSinceSummary_ = 0;
+  unsigned long i2cErrorsSinceRecovery_ = 0;
   unsigned long i2cRecoveryCount_ = 0;
   unsigned long lastI2cSummaryAtMs_ = 0;
   unsigned long lastRecoveryAttemptAtMs_ = 0;

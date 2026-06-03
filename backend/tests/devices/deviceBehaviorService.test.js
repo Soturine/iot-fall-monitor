@@ -108,3 +108,36 @@ test("computeDeviceBehavior prioriza queda e SOS recentes", () => {
   assert.equal(fall.state, "queda_confirmada");
   assert.equal(sos.state, "sos_manual");
 });
+
+test("computeDeviceBehavior usa eventos experimentais recentes do firmware", () => {
+  const suspected = computeDeviceBehavior({
+    status: { online: true },
+    telemetrySamples: [],
+    recentEvents: [
+      {
+        eventType: "fall_suspected",
+        severity: "high",
+        immobility: false,
+        evidenceStatus: "none",
+        evidenceSampleCount: 0,
+        eventTime: new Date(now.getTime() - 15_000).toISOString(),
+      },
+    ],
+    now,
+  });
+  const movement = computeDeviceBehavior({
+    status: { online: true },
+    telemetrySamples: [],
+    recentEvents: [
+      {
+        eventType: "movement_detected",
+        severity: "medium",
+        eventTime: new Date(now.getTime() - 15_000).toISOString(),
+      },
+    ],
+    now,
+  });
+
+  assert.equal(suspected.state, "queda_suspeita");
+  assert.equal(movement.state, "movimento_intenso");
+});

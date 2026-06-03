@@ -198,7 +198,13 @@ function computeDeviceBehavior({
   );
   const recentFallEvent = findRecentEvent(
     recentEvents,
-    ["fall_detected"],
+    ["fall_detected", "fall_suspected"],
+    referenceNow,
+    RECENT_FALL_WINDOW_MS,
+  );
+  const recentMovementEvent = findRecentEvent(
+    recentEvents,
+    ["movement_detected"],
     referenceNow,
     RECENT_FALL_WINDOW_MS,
   );
@@ -230,7 +236,9 @@ function computeDeviceBehavior({
   if (recentFallEvent) {
     const hasEvidence = ["linked", "partial"].includes(recentFallEvent.evidenceStatus);
     const confirmed =
-      hasEvidence && (recentFallEvent.immobility || recentFallEvent.severity === "critical");
+      recentFallEvent.eventType === "fall_detected" &&
+      hasEvidence &&
+      (recentFallEvent.immobility || recentFallEvent.severity === "critical");
 
     return buildBehavior(
       confirmed ? "queda_confirmada" : "queda_suspeita",
@@ -244,6 +252,19 @@ function computeDeviceBehavior({
         source: "recent_fall_event",
         updatedAt: recentFallEvent.eventTime,
         telemetrySampleCount: recentFallEvent.evidenceSampleCount,
+      },
+    );
+  }
+
+  if (recentMovementEvent) {
+    return buildBehavior(
+      "movimento_intenso",
+      "medio",
+      "Evento recente de movimento intenso reportado pelo firmware.",
+      {
+        source: "recent_movement_event",
+        updatedAt: recentMovementEvent.eventTime,
+        telemetrySampleCount: recentMovementEvent.evidenceSampleCount,
       },
     );
   }

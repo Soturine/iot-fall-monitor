@@ -436,6 +436,36 @@ Depois do login:
 
 ## 13. Como testar em bancada o `MPU6050 + buzzer`
 
+### Fluxo real de alerta via portal
+
+Para validar `telemetria real -> evento MQTT -> alerta -> frontend -> buzzer` sem recompilar:
+
+1. suba `npm run dev:broker --prefix backend`
+2. suba `npm run dev --prefix backend`
+3. suba `npm run dev --prefix frontend`
+4. abra `npm run mqtt:watch --prefix backend`
+5. abra `/devices/1` no frontend
+6. reinicie o ESP32 com Serial Monitor em `115200`
+7. no portal `Q-ESP32-*`, abra a seção de pré-calibração experimental
+8. selecione `teste/demonstração`
+9. confirme que `Publicar eventos MQTT de alerta experimental` está habilitado
+10. habilite o buzzer apenas se o módulo estiver ligado e a polaridade estiver correta
+11. salve a pré-calibração
+12. mova o conjunto `ESP32 + MPU6050` de forma controlada em bancada
+
+O esperado:
+
+- Serial mostra `[alert] fall_suspected ...` ou `[alert] movement_detected ...`
+- watcher mostra `queda/devices/esp32_01/events`
+- backend registra `MQTT event processado` e `alert:new`
+- frontend atualiza ocorrências/alertas sem F5
+- se o buzzer estiver habilitado, aparecem `[buzzer] alert pulse start` e `[buzzer] alert pulse end`
+- telemetria continua publicando depois do alerta
+
+Volte a sensibilidade para `normal` depois do teste. Não teste queda real em pessoa; use apenas movimento controlado do hardware em bancada.
+
+### Motion test compile-time legado
+
 O firmware tem um modo opcional de teste local.
 
 Passo a passo:

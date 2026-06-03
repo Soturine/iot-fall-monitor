@@ -202,9 +202,22 @@ function buildHarness(options = {}) {
       };
     },
     shouldCreateAlert: (eventType) =>
-      ["fall_detected", "sos_pressed", "manual_sos", "sensor_fault"].includes(eventType),
+      [
+        "fall_detected",
+        "fall_suspected",
+        "movement_detected",
+        "sos_pressed",
+        "manual_sos",
+        "sensor_fault",
+      ].includes(eventType),
     shouldCreateAlertForEvent: (event) =>
-      ["sos_pressed", "manual_sos", "sensor_fault"].includes(event.eventType) ||
+      [
+        "fall_suspected",
+        "movement_detected",
+        "sos_pressed",
+        "manual_sos",
+        "sensor_fault",
+      ].includes(event.eventType) ||
       (event.eventType === "fall_detected" && ["linked", "partial"].includes(event.evidenceStatus)),
   };
   const fakeAlertService = {
@@ -333,9 +346,14 @@ test("telemetry grava amostra, atualiza status e emite telemetry:new", async () 
   });
 });
 
-test("fall_detected e sos_pressed geram evento, alerta e alert:new", async () => {
+test("fall_detected, fall_suspected, movement_detected e sos_pressed geram alerta", async () => {
   await withHarness({}, async ({ calls, handleMqttMessage }) => {
-    for (const eventType of ["fall_detected", "sos_pressed"]) {
+    for (const eventType of [
+      "fall_detected",
+      "fall_suspected",
+      "movement_detected",
+      "sos_pressed",
+    ]) {
       await handleMqttMessage({
         topicInfo: topicInfo("events"),
         payloadText: JSON.stringify({
@@ -348,9 +366,12 @@ test("fall_detected e sos_pressed geram evento, alerta e alert:new", async () =>
       });
     }
 
-    assert.equal(calls.events.length, 2);
-    assert.equal(calls.alerts.length, 2);
-    assert.deepEqual(calls.emits.map((entry) => entry.eventName), ["alert:new", "alert:new"]);
+    assert.equal(calls.events.length, 4);
+    assert.equal(calls.alerts.length, 4);
+    assert.deepEqual(
+      calls.emits.map((entry) => entry.eventName),
+      ["alert:new", "alert:new", "alert:new", "alert:new"],
+    );
   });
 });
 
