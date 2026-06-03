@@ -4,7 +4,7 @@ const {
   elapsedMsSince,
 } = require("../utils/correlation");
 const { logger } = require("../utils/logger");
-const { toBoolean } = require("../utils/formatters");
+const { toBoolean, toNullableNumber } = require("../utils/formatters");
 const { resolveRealtimeMqttTimestamp } = require("../utils/time");
 const {
   getDeviceBehaviorSnapshot,
@@ -21,15 +21,6 @@ const {
 const { createAlertForEvent } = require("./alertService");
 const { emitScopedEvent } = require("../socket/scopedEmitter");
 const { runWithKeyedLock } = require("../utils/keyedLock");
-
-function toNullableNumber(value) {
-  if (value == null || value === "") {
-    return null;
-  }
-
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
-}
 
 function buildStatusUpdateFromPayload(payload, receivedAt, diagnostics = {}) {
   return {

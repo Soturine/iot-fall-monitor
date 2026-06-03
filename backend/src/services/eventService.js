@@ -1,6 +1,12 @@
 const { execute, one } = require("../db/pool");
 const { elapsedMsSince } = require("../utils/correlation");
-const { parseMaybeJson, toBoolean } = require("../utils/formatters");
+const {
+  parseMaybeJson,
+  toBoolean,
+  toIso,
+  toNullableBoolean,
+  toNullableNumber,
+} = require("../utils/formatters");
 const { HttpError } = require("../utils/httpError");
 const { logger } = require("../utils/logger");
 const { getPagination } = require("../utils/pagination");
@@ -25,26 +31,9 @@ const ALERT_EVENT_TYPES = new Set([
   "sensor_fault",
 ]);
 
-function toNullableNumber(value) {
-  if (value == null || value === "") {
-    return null;
-  }
-
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
 function toFiniteNumber(value, fallback = 0) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
-}
-
-function toNullableBoolean(value) {
-  if (value == null || value === "") {
-    return null;
-  }
-
-  return toBoolean(value);
 }
 
 function isPlainObject(value) {
@@ -68,15 +57,6 @@ function validateTelemetryPayload(payload = {}) {
         ? "missing_sensor_axes"
         : null,
   };
-}
-
-function toIso(value) {
-  if (!value) {
-    return null;
-  }
-
-  const date = value instanceof Date ? value : new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
 function resolveMqttPersistenceTime(payload, receivedAt, override = null) {

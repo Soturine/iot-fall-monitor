@@ -1,5 +1,11 @@
 const { execute, one, transaction } = require("../db/pool");
-const { parseMaybeJson, toBoolean } = require("../utils/formatters");
+const {
+  parseMaybeJson,
+  toBoolean,
+  toIso,
+  toNullableBoolean,
+  toNullableNumber,
+} = require("../utils/formatters");
 const { HttpError } = require("../utils/httpError");
 const { logger } = require("../utils/logger");
 const { getPagination } = require("../utils/pagination");
@@ -7,38 +13,12 @@ const { createAuditLog } = require("./auditService");
 const { computeDeviceBehavior } = require("./deviceBehaviorService");
 const { assertRole, buildScopeFilter, canAccessScope } = require("./scopeService");
 
-function toNullableNumber(value) {
-  if (value == null || value === "") {
-    return null;
-  }
-
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function toNullableBoolean(value) {
-  if (value == null || value === "") {
-    return null;
-  }
-
-  return toBoolean(value);
-}
-
 function toNullableString(value, maxLength = 255) {
   if (value == null || value === "") {
     return null;
   }
 
   return String(value).slice(0, maxLength);
-}
-
-function toIso(value) {
-  if (!value) {
-    return null;
-  }
-
-  const date = value instanceof Date ? value : new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
 function normalizeDeviceIdentifier(value, fallback = "device") {

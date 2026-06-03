@@ -1,6 +1,11 @@
 const { execute, one, transaction } = require("../db/pool");
 const { elapsedMsSince } = require("../utils/correlation");
-const { parseMaybeJson, toBoolean } = require("../utils/formatters");
+const {
+  parseMaybeJson,
+  toBoolean,
+  toIso,
+  toNullableNumber,
+} = require("../utils/formatters");
 const { HttpError } = require("../utils/httpError");
 const { logger } = require("../utils/logger");
 const { getPagination } = require("../utils/pagination");
@@ -14,24 +19,6 @@ const RECENT_DEDUP_EVENT_TYPES = new Set([
   "fall_suspected",
   "movement_detected",
 ]);
-
-function toIso(value) {
-  if (!value) {
-    return null;
-  }
-
-  const date = value instanceof Date ? value : new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date.toISOString();
-}
-
-function toNullableNumber(value) {
-  if (value == null || value === "") {
-    return null;
-  }
-
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
-}
 
 async function findRecentOpenCriticalAlert(event, executor = null) {
   if (

@@ -30,7 +30,36 @@ function toBoolean(value) {
   return false;
 }
 
+function toNullableBoolean(value) {
+  if (value == null || value === "") {
+    return null;
+  }
+
+  return toBoolean(value);
+}
+
+function toNullableNumber(value) {
+  if (value == null || value === "") {
+    return null;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function toIso(value) {
+  if (!value) {
+    return null;
+  }
+
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
 module.exports = {
   parseMaybeJson,
   toBoolean,
+  toIso,
+  toNullableBoolean,
+  toNullableNumber,
 };
