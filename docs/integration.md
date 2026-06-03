@@ -1,10 +1,10 @@
-# Integracao Firmware, Backend e Frontend
+# Integração Firmware, Backend e Frontend
 
 Este documento descreve o contrato MQTT real do projeto, o fluxo de pairing por código temporário e como os dados percorrem firmware, backend, banco e frontend no modelo multi-tenant atual.
 
 Para hardware, pinagem e calibração do detector, consulte [firmware-hardware.md](firmware-hardware.md). Para o fluxo detalhado de queda/SOS e alertas internos, consulte [alerting-architecture.md](alerting-architecture.md). Para setup geral do projeto, consulte o [README da raiz](../README.md). Para o passo a passo operacional no Windows, consulte [quickstart-windows.md](quickstart-windows.md).
 
-## O que mudou na integracao
+## O que mudou na integração
 
 O sistema preservou o contrato MQTT, mas mudou o modelo de ownership do device.
 
@@ -51,7 +51,7 @@ Topicos publicados hoje pelo firmware:
 - `queda/devices/{deviceId}/status`
 - `queda/devices/{deviceId}/telemetry`
 
-Observacoes importantes:
+Observações importantes:
 
 - o contrato MQTT foi preservado
 - os tópicos continuam sendo montados a partir de `device_id`
@@ -98,7 +98,7 @@ Exemplo de `fall_detected`:
 }
 ```
 
-O campo `timestamp` deve ser Unix time em segundos quando o NTP já sincronizou. Para `device_status.last_seen_at`, o backend usa a hora real de recebimento MQTT, porque a chegada de `status`/`telemetry` já prova presença recente do ESP32. Para `telemetry.created_at` e `events.event_time`, o timestamp do device só e usado quando e plausível e esta próximo do recebimento; se o firmware estiver no fallback monotônico de boot (`millis()/1000`) ou com clock/NTP stale, o backend usa a hora de recebimento para evitar gráfico antigo, evidência quebrada e falso offline.
+O campo `timestamp` deve ser Unix time em segundos quando o NTP já sincronizou. Para `device_status.last_seen_at`, o backend usa a hora real de recebimento MQTT, porque a chegada de `status`/`telemetry` já prova presença recente do ESP32. Para `telemetry.created_at` e `events.event_time`, o timestamp do device só é usado quando é plausível e está próximo do recebimento; se o firmware estiver no fallback monotônico de boot (`millis()/1000`) ou com clock/NTP stale, o backend usa a hora de recebimento para evitar gráfico antigo, evidência quebrada e falso offline.
 
 Para `fall_detected`, o firmware continua sendo a fonte da decisão local confirmada e do buzzer. O backend não recalcula a queda para acionar alarme local; ele audita o evento, preserva `raw_payload_json`, copia a decisão/feature set para `evidence_summary_json` e procura telemetria do mesmo device entre `event_time - 10s` e `event_time + 3s`. Se encontrar amostras, grava `evidenceStatus` (`partial` ou `linked`), `evidenceTelemetryId`, contagem, janela e resumo técnico. Se não encontrar, grava o evento com `evidenceStatus=none`, loga warning e não cria alerta automático de queda confirmada.
 
@@ -283,7 +283,7 @@ Nesta baseline, o frontend passou a separar melhor tres camadas diferentes:
 - último snapshot conhecido do device no backend
 - presença recente de status/telemetria MQTT do ESP32
 
-Regras praticas:
+Regras práticas:
 
 - `socket do painel desconectado` significa apenas que o navegador perdeu o canal realtime
 - `device offline` continua significando ausência recente de `status`/`telemetry` MQTT no backend
@@ -296,15 +296,15 @@ O firmware pode publicar `device_id` como identificador humano/técnico curto, p
 
 Na ingestão MQTT atual, quando chega uma mensagem com `device_uid` real e o backend encontra um cadastro legado `legacy:{device_id}` já `claimed` e com organização, ele reconcilia o cadastro para o UID real antes de persistir status/telemetria. Se uma tentativa anterior já tiver criado um duplicado técnico sem organização para esse UID real, o backend move telemetrias, eventos e alertas desse duplicado para o device pareado e remove o duplicado.
 
-Isso evita o caso em que o broker recebe telemetria corretamente, mas o dashboard da organização continua stale porque o payload foi associado a um device sem tenant. Se a mensagem MQTT chegar sem `device_uid` depois da reconciliacao, o backend tenta associar por `device_id` apenas quando houver exatamente um cadastro pareado com aquele identificador.
+Isso evita o caso em que o broker recebe telemetria corretamente, mas o dashboard da organização continua stale porque o payload foi associado a um device sem tenant. Se a mensagem MQTT chegar sem `device_uid` depois da reconciliação, o backend tenta associar por `device_id` apenas quando houver exatamente um cadastro pareado com aquele identificador.
 
-Isso reduz a chance de interpretar uma falha do navegador como se o ESP32 tivesse realmente caido.
+Isso reduz a chance de interpretar uma falha do navegador como se o ESP32 tivesse realmente caído.
 
-### Concorrencia no realtime/MQTT
+### Concorrência no realtime/MQTT
 
-Nesta baseline, mensagens MQTT do mesmo `device_id` são serializadas por um lock leve em memoria dentro da instancia Node. O objetivo e impedir que dois pacotes simultaneos do mesmo ESP32 tentem reconciliar identidade, atualizar status e emitir realtime em ordem conflitante.
+Nesta baseline, mensagens MQTT do mesmo `device_id` são serializadas por um lock leve em memória dentro da instância Node. O objetivo é impedir que dois pacotes simultâneos do mesmo ESP32 tentem reconciliar identidade, atualizar status e emitir realtime em ordem conflitante.
 
-O lock e local ao processo. Ele cobre o ambiente atual de desenvolvimento e instancia unica; se o backend for escalado horizontalmente, a garantia precisa migrar para um lock distribuido, uma fila particionada por device ou outro mecanismo equivalente.
+O lock é local ao processo. Ele cobre o ambiente atual de desenvolvimento e instância única; se o backend for escalado horizontalmente, a garantia precisa migrar para um lock distribuído, uma fila particionada por device ou outro mecanismo equivalente.
 
 A entrega Socket.IO deixou de iterar todos os sockets conectados a cada evento. Cada conexão entra em rooms de organização, paciente ou plataforma global conforme o contexto de acesso, e `emitScopedEvent` publica diretamente nessas rooms.
 
@@ -333,7 +333,7 @@ No portal local do ESP32, a rodada atual também adicionou um bloco de saúde op
 - `Backend API`
 - `Pronto para operar`
 
-Com `SETUP_PORTAL_ALWAYS_ON = true`, o portal também pode ficar em modo de manutenção paralelo: o AP `Q-ESP32-*` permanece visivel, mas Wi-Fi station, MQTT, sensor, status/eventos e telemetria continuam no loop normal. Em `SETUP_MODE`, o portal continua sendo fallback/configuração e o operador pode usar `Testar backend` e `Testar MQTT` para validar a configuração antes de reiniciar o ESP32.
+Com `SETUP_PORTAL_ALWAYS_ON = true`, o portal também pode ficar em modo de manutenção paralelo: o AP `Q-ESP32-*` permanece visível, mas Wi-Fi station, MQTT, sensor, status/eventos e telemetria continuam no loop normal. Em `SETUP_MODE`, o portal continua sendo fallback/configuração e o operador pode usar `Testar backend` e `Testar MQTT` para validar a configuração antes de reiniciar o ESP32.
 
 ### Broker MQTT local no Windows
 
@@ -344,7 +344,7 @@ MQTT_BIND_HOST=0.0.0.0
 MQTT_PORT=1883
 ```
 
-Para descobrir quem esta usando a porta:
+Para descobrir quem está usando a porta:
 
 ```powershell
 netstat -ano | findstr :1883
@@ -357,7 +357,7 @@ Para validar o acesso esperado pelo ESP32:
 Test-NetConnection IP_DO_NOTEBOOK -Port 1883
 ```
 
-O esperado e `TcpTestSucceeded : True`.
+O esperado é `TcpTestSucceeded : True`.
 
 Esse teste valida apenas abertura de porta TCP. Para confirmar o protocolo MQTT, rode um cliente e aguarde `CONNACK`:
 
@@ -367,13 +367,13 @@ npm run mqtt:test -- 127.0.0.1 1883
 npm run mqtt:test -- IP_DO_NOTEBOOK 1883
 ```
 
-O esperado e `MQTT handshake OK`. Para o backend local, prefira `MQTT_BROKER_URL=mqtt://127.0.0.1:1883`; para o ESP32, use o IPv4 real do notebook.
+O esperado é `MQTT handshake OK`. Para o backend local, prefira `MQTT_BROKER_URL=mqtt://127.0.0.1:1883`; para o ESP32, use o IPv4 real do notebook.
 
 `localhost`, `127.0.0.1` e `::1` apontam para o próprio computador e não servem como `MQTT_HOST` no ESP32. Mesmo com o broker em `0.0.0.0:1883`, firewall local ou isolamento de clientes em rede institucional ainda podem impedir a conexão.
 
-### Diagnostico de mensagens MQTT reais
+### Diagnóstico de mensagens MQTT reais
 
-Para ver se o ESP32 esta publicando de fato no broker usado pelo backend:
+Para ver se o ESP32 está publicando de fato no broker usado pelo backend:
 
 ```powershell
 npm run mqtt:watch --prefix backend
@@ -602,9 +602,9 @@ Hoje:
 - pode enviar alguns campos extras como `message` e `firmware_version`
 - continua preservando o contrato base de `events`, `status` e `telemetry`
 
-Essas diferenças não quebram a integracao atual, mas precisam ser lembradas em demonstracoes.
+Essas diferenças não quebram a integração atual, mas precisam ser lembradas em demonstrações.
 
-## Automacao local e smoke test
+## Automação local e smoke test
 
 O smoke test do Windows também foi alinhado ao modelo multi-tenant atual.
 
@@ -615,11 +615,11 @@ Fluxo:
 3. envia `X-Organization-Id` nas chamadas protegidas
 4. valida `organization`, `patients`, `dashboard`, `devices` e `alerts`
 
-Isso ajuda a pegar regressao real de escopo, em vez de apenas confirmar que o backend subiu.
+Isso ajuda a pegar regressão real de escopo, em vez de apenas confirmar que o backend subiu.
 
 ## Testes de alertas, MQTT e stress
 
-A rodada atual mantém testes `node:test` focados no backend e separa claramente smoke, integracao leve, stress dry-run e stress real:
+A rodada atual mantém testes `node:test` focados no backend e separa claramente smoke, integração leve, stress dry-run e stress real:
 
 ```powershell
 npm test --prefix backend
@@ -636,7 +636,7 @@ Os testes cobrem:
 - severidade e decisão de criar alerta em `eventService`
 - criação idempotente e transições de `alertService`
 - descartes e persistência simulada em `mqttIngestionService`
-- lock por `device_id` em mensagens simultaneas
+- lock por `device_id` em mensagens simultâneas
 - emissão Socket.IO escopada para organização/paciente/plataforma
 - vinculo entre `fall_detected` e telemetria recente
 - bloqueio de alerta automático de queda sem evidência
@@ -657,16 +657,16 @@ backend/logs/stress/report-<runId>.md
 
 Elas não disparam notificação externa. No estado atual do projeto, alerta significa registro interno em banco e realtime no painel; SMS, WhatsApp, e-mail, push e webhook ficam como camada futura documentada em [alerting-architecture.md](alerting-architecture.md).
 
-## Observacoes operacionais importantes
+## Observações operacionais importantes
 
 - `telemetry` continua fora do `EventBuffer` do firmware
-- `battery_level` do firmware real ainda e placeholder
-- o firmware só considera o device realmente saudavel quando `Wi-Fi + MQTT` estão simultaneamente ok
+- `battery_level` do firmware real ainda é placeholder
+- o firmware só considera o device realmente saudável quando `Wi-Fi + MQTT` estão simultaneamente ok
 - eventos críticos pendentes ficam primeiro em RAM; um snapshot pequeno em `NVS` pode reduzir perda após reboot rápido, mas não substitui persistência durável
 - o AP curto `Q-ESP32-*` pode ficar sempre ativo em bancada com `SETUP_PORTAL_ALWAYS_ON = true`; com a flag desligada, aparece apenas em `SETUP_MODE` ou quando `FORCE_SETUP_MODE_ON_BOOT = true`
 - para depuração local no Windows, a porta serial também pode ser liberada com `.\scripts\free-serial-port.ps1 -Port COM4` quando um monitor `PlatformIO` antigo ficar preso
 - o fluxo de upload do firmware na placa atual pode ainda exigir `BOOT` manual durante o `Connecting...`; isso não altera o contrato MQTT nem o backend
-- o pairing depende de o backend estar acessivel ao ESP32 pela rede atual
+- o pairing depende de o backend estar acessível ao ESP32 pela rede atual
 - `localhost` nunca deve ser usado dentro do portal do ESP32 para broker MQTT ou backend API
 
 ## Limitações abertas

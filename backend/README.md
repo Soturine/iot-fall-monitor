@@ -98,7 +98,7 @@ npm run mqtt:test -- 127.0.0.1 1883
 npm run mqtt:test -- IP_DO_NOTEBOOK 1883
 ```
 
-O esperado e `MQTT handshake OK`.
+O esperado é `MQTT handshake OK`.
 
 Para separar broker, ESP32 e backend durante bancada:
 
@@ -109,25 +109,25 @@ npm run mqtt:publish:test --prefix backend
 
 `mqtt:watch` assina os tópicos reais `queda/devices/+/status`, `queda/devices/+/telemetry` e `queda/devices/+/events`, mostrando timestamp, tópico, tamanho, resumo do payload e erro de JSON quando houver. `mqtt:publish:test` publica um status e uma sequência curta de telemetria válida; use `-- --device esp32_01 --count 10 --interval-ms 1000` para testar o dashboard sem ESP32 real.
 
-Quando o teste simulado funcionar, mas o ESP32 real não alimentar o gráfico, use o Serial Monitor do firmware junto com `mqtt:watch`: o watcher precisa mostrar mensagens novas vindas do `clientId` real do ESP32. Se apenas o publisher de teste aparece, o problema esta antes do backend.
+Quando o teste simulado funcionar, mas o ESP32 real não alimentar o gráfico, use o Serial Monitor do firmware junto com `mqtt:watch`: o watcher precisa mostrar mensagens novas vindas do `clientId` real do ESP32. Se apenas o publisher de teste aparece, o problema está antes do backend.
 
 ### Identidade MQTT e devices legados
 
 O backend aceita mensagens MQTT com `device_id` e, quando disponível, `device_uid`. Em ambientes antigos ou seeds de demo, o device pode estar cadastrado como `device_uid = legacy:{device_id}` enquanto o firmware real já publica um UID físico do ESP32.
 
-Na ingestão atual, se chegar um `device_uid` real para um `device_id` que já possui um cadastro legado `claimed` com organização, o backend reconcilia esse cadastro para o UID real antes de gravar `status`, `telemetry` ou `events`. Se uma tentativa anterior criou um duplicado técnico sem organização para esse mesmo UID, as telemetrias/eventos/alertas desse duplicado são movidos para o device pareado e o duplicado e removido.
+Na ingestão atual, se chegar um `device_uid` real para um `device_id` que já possui um cadastro legado `claimed` com organização, o backend reconcilia esse cadastro para o UID real antes de gravar `status`, `telemetry` ou `events`. Se uma tentativa anterior criou um duplicado técnico sem organização para esse mesmo UID, as telemetrias/eventos/alertas desse duplicado são movidos para o device pareado e o duplicado é removido.
 
-Quando a mensagem chega sem `device_uid`, o backend ainda preserva o fallback legado. Depois da reconciliacao, ele tenta resolver pelo `device_id` apenas se existir exatamente um device pareado com esse identificador, evitando associacao ambígua.
+Quando a mensagem chega sem `device_uid`, o backend ainda preserva o fallback legado. Depois da reconciliação, ele tenta resolver pelo `device_id` apenas se existir exatamente um device pareado com esse identificador, evitando associação ambígua.
 
-### Concorrencia e idempotência
+### Concorrência e idempotência
 
-A ingestão MQTT usa um lock leve em memoria por `device_id` para serializar mensagens simultaneas do mesmo ESP32 dentro de uma instancia Node. Isso reduz corrida entre reconciliacao de identidade, atualização de `device_status`, persistência de telemetria/eventos e emissão realtime. Em uma topologia com multiplas instancias de backend, ainda sera necessário trocar esse lock por coordenacao distribuida ou garantir particionamento por device no consumidor MQTT.
+A ingestão MQTT usa um lock leve em memória por `device_id` para serializar mensagens simultâneas do mesmo ESP32 dentro de uma instância Node. Isso reduz corrida entre reconciliação de identidade, atualização de `device_status`, persistência de telemetria/eventos e emissão realtime. Em uma topologia com múltiplas instâncias de backend, ainda será necessário trocar esse lock por coordenação distribuída ou garantir particionamento por device no consumidor MQTT.
 
-A criação de alertas para eventos de queda/SOS e idempotente sobre o indice unico `alerts.event_id`: se duas rotas tentarem criar o mesmo alerta, o backend reaproveita o registro existente por `LAST_INSERT_ID(id)`.
+A criação de alertas para eventos de queda/SOS é idempotente sobre o índice único `alerts.event_id`: se duas rotas tentarem criar o mesmo alerta, o backend reaproveita o registro existente por `LAST_INSERT_ID(id)`.
 
-O Socket.IO usa rooms por escopo (`organization`, `patient` e plataforma global), evitando varrer todos os sockets a cada telemetria. Usuarios com escopo restrito por paciente entram apenas nas rooms de seus pacientes atribuidos.
+O Socket.IO usa rooms por escopo (`organization`, `patient` e plataforma global), evitando varrer todos os sockets a cada telemetria. Usuários com escopo restrito por paciente entram apenas nas rooms de seus pacientes atribuídos.
 
-O schema também possui indices de apoio para leituras recentes de telemetria, eventos por device/tipo, status online stale e filas de alertas por organização/status.
+O schema também possui índices de apoio para leituras recentes de telemetria, eventos por device/tipo, status online stale e filas de alertas por organização/status.
 
 ## O que mudou no modelo do backend
 
@@ -195,24 +195,24 @@ O backend continua aceitando descoberta técnica por MQTT, mas isso não signifi
 Fluxo atual:
 
 1. `organization_admin` gera um código temporário em `POST /api/devices/pairing-sessions`
-2. o frontend pode consultar `GET /api/system/network-info` para sugerir a URL do backend acessivel pelo ESP32
+2. o frontend pode consultar `GET /api/system/network-info` para sugerir a URL do backend acessível pelo ESP32
 3. o ESP32 envia `device_uid`, `device_id` e `pairing_code` para `POST /api/pairing/claim`
 4. o backend valida:
    - código válido
    - não expirado
-   - uso unico
+   - uso único
    - organização correta
-5. o claim e transacional
+5. o claim é transacional
 6. o backend devolve `deviceSyncToken` e um `patientProfile` resumido para o ESP32
 7. o device passa para `claimed`
 8. o device fica locked na organização
-9. se o pairing session tiver `patient_id`, o backend cria o vinculo inicial com paciente
+9. se o pairing session tiver `patient_id`, o backend cria o vínculo inicial com paciente
 
 O ESP32 pode usar esse `deviceSyncToken` depois em `POST /api/pairing/device-profile-sync` para sincronizar novamente o perfil resumido do paciente atual sem transformar o portal local em cadastro clínico.
 
 Devices desconhecidos que chegam via MQTT continuam podendo ser auto-provisionados, mas entram como `unclaimed`.
 
-## Historico de assignment
+## Histórico de assignment
 
 O backend preserva rastreabilidade com:
 
@@ -222,7 +222,7 @@ O backend preserva rastreabilidade com:
 
 Ao trocar o paciente:
 
-- o assignment anterior e encerrado
+- o assignment anterior é encerrado
 - um novo assignment e aberto
 - eventos futuros passam a gravar o novo escopo
 - eventos antigos continuam pertencendo ao assignment antigo
@@ -243,7 +243,7 @@ O claim usa transacao e protege:
 
 ### Auto-provisionamento
 
-O device técnico e deduplicado por `device_uid` com `UNIQUE KEY`, evitando duplicidade por mensagens MQTT quase simultaneas.
+O device técnico é deduplicado por `device_uid` com `UNIQUE KEY`, evitando duplicidade por mensagens MQTT quase simultâneas.
 
 ## MQTT e ingestão
 
@@ -275,7 +275,7 @@ Na ingestão:
 - `Socket.IO` também emite em escopo filtrado
 - `device_status.last_seen_at` agora usa a hora de recebimento do MQTT no backend, porque receber status/telemetria já prova presença recente do ESP32
 - timestamps MQTT em telemetria/eventos só são usados quando parecem Unix time plausível e próximos do recebimento; se o ESP32 estiver sem NTP ou com clock stale, o backend persiste a hora de recebimento para evitar device falsamente stale/offline
-- `fall_detected` busca telemetria recente do mesmo device em uma janela de `-10s/+3s`; sem evidência, o evento fica auditavel, mas não cria alerta automático de queda
+- `fall_detected` busca telemetria recente do mesmo device em uma janela de `-10s/+3s`; sem evidência, o evento fica auditável, mas não cria alerta automático de queda
 - `sos_pressed` e `manual_sos` seguem criando alerta sem telemetria, porque são acionamentos manuais
 - `sensor_fault`, quando publicado pelo firmware, é tratado como evento crítico auditável
 
@@ -401,7 +401,7 @@ backend/logs/stress/failures-<runId>.json
 backend/logs/stress/report-<runId>.md
 ```
 
-O JSONL e voltado a máquina; o Markdown `report-*.md` resume resultado, MQTT, telemetria, quedas/alertas, falhas e recomendações para leitura humana. Eles são artefatos locais e ficam ignorados pelo Git. O fluxo detalhado de alertas esta em [docs/alerting-architecture.md](../docs/alerting-architecture.md).
+O JSONL é voltado a máquina; o Markdown `report-*.md` resume resultado, MQTT, telemetria, quedas/alertas, falhas e recomendações para leitura humana. Eles são artefatos locais e ficam ignorados pelo Git. O fluxo detalhado de alertas está em [docs/alerting-architecture.md](../docs/alerting-architecture.md).
 
 ## Tempo real
 
@@ -414,11 +414,11 @@ Eventos emitidos:
 
 O socket também recebe contexto de organização no handshake, e o backend filtra emissão por organização e paciente.
 
-## Observacoes e limitações
+## Observações e limitações
 
 - o broker dev serve apenas para desenvolvimento e demonstração local
-- o fluxo de pairing depende de o backend estar acessivel ao ESP32 pela rede
-- o portal local/AP do ESP32 continua sendo um fluxo do firmware; nesta rodada o backend não precisou de alteracao de contrato para os testes de bancada
+- o fluxo de pairing depende de o backend estar acessível ao ESP32 pela rede
+- o portal local/AP do ESP32 continua sendo um fluxo do firmware; nesta rodada o backend não precisou de alteração de contrato para os testes de bancada
 - quando a depuração embarcada no Windows prender a serial, prefira liberar a porta com `.\scripts\free-serial-port.ps1 -Port COM4` antes de atribuir o problema ao backend
 - o ambiente atual continua operando por padrão com `mqtt://` sem TLS, embora `mqtts://` já esteja preparado de forma opt-in
 - ainda não existe fluxo completo de unpair cross-tenant pela UI

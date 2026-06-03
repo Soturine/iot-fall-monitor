@@ -86,7 +86,7 @@ Depois do login, a sidebar mostra:
 - nome da organização ativa
 - papel do usuário naquela organização
 - seletor de organização quando o usuário possui mais de uma membership
-- mensagem explicita quando a sessão possui apenas uma organização ativa ou quando não há membership trocavel
+- mensagem explícita quando a sessão possui apenas uma organização ativa ou quando não há membership trocável
 
 O frontend envia `X-Organization-Id` automaticamente para a API e também informa `organizationId` no handshake do `Socket.IO`.
 
@@ -96,11 +96,11 @@ Isso significa que:
 - listas de pacientes, devices, alertas e eventos passam a refletir apenas o tenant ativo
 - o frontend depende do backend filtrado e não tenta resolver segurança apenas escondendo componentes
 
-## Reidratacao de sessão e recuperacao de erro
+## Reidratação de sessão e recuperação de erro
 
 O `AuthProvider` agora:
 
-- normaliza sessão salva no `localStorage` antes de usar os dados em memoria
+- normaliza sessão salva no `localStorage` antes de usar os dados em memória
 - reidrata o usuário autenticado com `GET /api/me` no boot
 - limpa a sessão automaticamente se o token estiver inválido ou se o navegador estiver preso a um shape antigo de autenticação
 

@@ -242,7 +242,7 @@ No frontend, o gráfico principal de `Sinais recentes do sensor` mostra `Acelera
 
 Para validar a escala física do MPU6050, deixe o ESP32 parado sobre a mesa ao reiniciar. O Serial Monitor deve mostrar a faixa efetiva (`accel=+-2g`, `+-4g`, `+-8g` ou `+-16g`), o divisor `lsb_per_g` usado e leituras convertidas com `accel_magnitude` perto de `1.00 g` em repouso. Se aparecer algo perto de `4 g`, há erro de escala ou movimento durante a calibração.
 
-Se a calibração ou o readback de escala falhar, o firmware deve continuar operando com fallback: procure `ready=1`, `calibrated=0` e `continuing_without_offsets` no Serial Monitor. Se não houver amostra válida, o `status` continua saindo com diagnóstico e a telemetria e pulada com motivo claro, como `sensor_not_ready`, `no_valid_sample` ou `stale_sample`.
+Se a calibração ou o readback de escala falhar, o firmware deve continuar operando com fallback: procure `ready=1`, `calibrated=0` e `continuing_without_offsets` no Serial Monitor. Se não houver amostra válida, o `status` continua saindo com diagnóstico e a telemetria é pulada com motivo claro, como `sensor_not_ready`, `no_valid_sample` ou `stale_sample`.
 
 Se aparecer erro repetido do Wire como `i2cWriteReadNonStop returned Error -1`, valide primeiro o hardware do barramento: GND comum, VCC correto no módulo, SDA/SCL nos pinos configurados, fios curtos, contato da protoboard e alimentacao estável. A build atual usa `I2C_CLOCK_HZ = 100000`, `I2C_USE_REPEATED_START = false`, retry curto e recovery do barramento para reduzir falhas transitórias sem travar Wi-Fi/MQTT.
 

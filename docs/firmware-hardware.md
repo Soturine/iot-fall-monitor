@@ -1,6 +1,6 @@
 # Firmware e Hardware
 
-Este documento concentra a documentação embarcada do projeto: pinagem recomendada, ligacoes, detalhes do `MPU6050`, portal local do ESP32, pairing por código, payloads do firmware, parâmetros de calibração e observações praticas de montagem e teste.
+Este documento concentra a documentação embarcada do projeto: pinagem recomendada, ligações, detalhes do `MPU6050`, portal local do ESP32, pairing por código, payloads do firmware, parâmetros de calibração e observações práticas de montagem e teste.
 
 Para o fluxo completo com backend e frontend, consulte [integration.md](integration.md). Para setup geral do sistema, consulte o [README da raiz](../README.md). Para o passo a passo operacional no Windows, consulte [quickstart-windows.md](quickstart-windows.md).
 
@@ -13,9 +13,9 @@ O firmware hoje trabalha com duas camadas:
 
 Na prática:
 
-- `include/app_config.h` guarda defaults de fabrica, pinos, limites e thresholds
+- `include/app_config.h` guarda defaults de fábrica, pinos, limites e thresholds
 - o portal local do ESP32 grava em `NVS` as redes Wi-Fi, MQTT, `DEVICE_ID`, `MQTT_CLIENT_ID`, `BACKEND_API_BASE_URL`, `deviceSyncToken` e o perfil resumido do paciente
-- depois da primeira configuração, você normalmente não precisa recompilar para mudar Wi-Fi, broker ou backend acessivel para pairing
+- depois da primeira configuração, você normalmente não precisa recompilar para mudar Wi-Fi, broker ou backend acessível para pairing
 
 ### O que continua em `include/app_config.h`
 
@@ -96,9 +96,9 @@ Configuracao desejada do sensor no boot:
 - giroscópio em faixa `+-500 dps`
 - `DLPF` configurado para reduzir ruído de bancada
 
-Depois de escrever os registradores, o firmware lê `ACCEL_CONFIG` e `GYRO_CONFIG` de volta e usa a faixa efetiva para converter raw em unidade física. Se o acelerômetro permanecer em `+-2 g`, o divisor usado sera `16384 LSB/g`; se `+-8 g` for realmente aplicado, sera `4096 LSB/g`. Isso evita repouso aparecendo como `4 g` por divisor incompatível.
+Depois de escrever os registradores, o firmware lê `ACCEL_CONFIG` e `GYRO_CONFIG` de volta e usa a faixa efetiva para converter raw em unidade física. Se o acelerômetro permanecer em `+-2 g`, o divisor usado será `16384 LSB/g`; se `+-8 g` for realmente aplicado, será `4096 LSB/g`. Isso evita repouso aparecendo como `4 g` por divisor incompatível.
 
-O sensor e considerado pronto quando o firmware encontra um `WHO_AM_I` compatível e consegue fazer uma leitura raw básica. Falhas de readback de escala ou calibração não deixam mais `sensor_ready=0`: o firmware registra o motivo, usa divisor fallback coerente e continua publicando telemetria sem offsets.
+O sensor é considerado pronto quando o firmware encontra um `WHO_AM_I` compatível e consegue fazer uma leitura raw básica. Falhas de readback de escala ou calibração não deixam mais `sensor_ready=0`: o firmware registra o motivo, usa divisor fallback coerente e continua publicando telemetria sem offsets.
 
 ### Estabilidade I2C do MPU6050
 
@@ -110,7 +110,7 @@ O erro serial `requestFrom(): i2cWriteReadNonStop returned Error -1` costuma apa
 - `SENSOR_I2C_RECOVERY_FAILURE_THRESHOLD = 8`
 - `SENSOR_I2C_RECOVERY_TOTAL_ERROR_THRESHOLD = 64`
 
-Quando houver falhas consecutivas ou volume alto de falhas intermitentes desde o último recovery, o firmware registra um resumo throttled, reinicia o barramento I2C, reconfigura o MPU6050 e não recalibra em loop. Se o recovery falhar, a última amostra válida fica preservada por uma janela curta. O status MQTT continua levando diagnóstico do sensor; a telemetria periódica só e publicada quando houver amostra válida e fresca.
+Quando houver falhas consecutivas ou volume alto de falhas intermitentes desde o último recovery, o firmware registra um resumo throttled, reinicia o barramento I2C, reconfigura o MPU6050 e não recalibra em loop. Se o recovery falhar, a última amostra válida fica preservada por uma janela curta. O status MQTT continua levando diagnóstico do sensor; a telemetria periódica só é publicada quando houver amostra válida e fresca.
 
 Checklist físico antes de investigar software:
 
@@ -120,7 +120,7 @@ Checklist físico antes de investigar software:
 - use fios curtos e firmes
 - evite mau contato em protoboard
 - teste outro módulo MPU6050 se o erro persistir
-- mantenha alimentacao estável e clock I2C em `100 kHz`
+- mantenha alimentação estável e clock I2C em `100 kHz`
 
 ## Logs e diagnóstico no firmware
 
@@ -193,7 +193,7 @@ Fluxo oficial:
 
 ### Portal de manutenção sempre ativo em bancada
 
-Com `SETUP_PORTAL_ALWAYS_ON = true`, o ESP32 opera em `WIFI_AP_STA`: o AP local permanece visivel em `http://192.168.4.1`, enquanto a interface station segue conectando no Wi-Fi e o MQTT continua tentando publicar status, eventos e telemetria. Isso e diferente de `SETUP_MODE`, que e um modo de fallback/configuração.
+Com `SETUP_PORTAL_ALWAYS_ON = true`, o ESP32 opera em `WIFI_AP_STA`: o AP local permanece visível em `http://192.168.4.1`, enquanto a interface station segue conectando no Wi-Fi e o MQTT continua tentando publicar status, eventos e telemetria. Isso é diferente de `SETUP_MODE`, que é um modo de fallback/configuração.
 
 Para restaurar o comportamento antigo, defina `SETUP_PORTAL_ALWAYS_ON = false`. Nesse caso, o AP aparece apenas quando o firmware entra em setup/fallback.
 
@@ -225,7 +225,7 @@ Depois do teste, volte `FORCE_SETUP_MODE_ON_BOOT = false` para restaurar o compo
 
 ### Observacao importante sobre upload
 
-Se a placa ainda exigir segurar `BOOT` durante o upload, isso indica que ela não esta entrando automaticamente em modo de download. Nesta rodada, a serial e o log ficaram acessiveis, mas o auto-reset para upload ainda permaneceu dependente do hardware/driver da placa.
+Se a placa ainda exigir segurar `BOOT` durante o upload, isso indica que ela não está entrando automaticamente em modo de download. Nesta rodada, a serial e o log ficaram acessíveis, mas o auto-reset para upload ainda permaneceu dependente do hardware/driver da placa.
 
 Estado validado nesta bancada:
 
@@ -235,12 +235,12 @@ Estado validado nesta bancada:
 
 ## Captive portal e acesso pelo celular
 
-Quando o ESP32 entra em setup ou quando o portal de manutenção esta sempre ativo:
+Quando o ESP32 entra em setup ou quando o portal de manutenção está sempre ativo:
 
 - sobe `AP + WebServer + DNSServer`
 - responde probes comuns de captive portal
 - tenta redirecionar para `http://setup.queda/`
-- continua acessivel manualmente em `http://192.168.4.1`
+- continua acessível manualmente em `http://192.168.4.1`
 
 Na prática, isso tende a funcionar melhor em:
 
@@ -252,7 +252,7 @@ No iOS, a notificação de "fazer login na rede" pode variar mais. Se ela não a
 - abra `http://setup.queda`
 - ou abra `http://192.168.4.1`
 
-### Saude operacional no portal
+### Saúde operacional no portal
 
 Como o portal pode existir tanto em `SETUP_MODE` quanto em manutenção paralela, a leitura de saúde precisa ser honesta:
 
@@ -261,7 +261,7 @@ Como o portal pode existir tanto em `SETUP_MODE` quanto em manutenção paralela
 - `Backend API` mostra validade da URL e último `Testar backend`
 - em manutenção, `Pronto para operar` foca em Wi-Fi station + MQTT; em setup/fallback, também exige os testes esperados de configuração
 
-Isso evita prometer que o device já esta operando normalmente quando ele ainda esta apenas em fase de ajuste/configuração.
+Isso evita prometer que o device já está operando normalmente quando ele ainda está apenas em fase de ajuste/configuração.
 
 ## Telemetria e snapshot técnico
 
@@ -279,7 +279,7 @@ Unidades esperadas no payload MQTT:
 
 Com isso, o backend consegue manter bateria, RSSI e `lastSeenAt` mais coerentes nas telas sem depender apenas do `status` periódico.
 
-Para online/offline, o backend usa a hora em que recebeu MQTT como `lastSeenAt`. Se o ESP32 ainda não sincronizou NTP e mandar `timestamp = millis()/1000`, ou se mandar um Unix time plausível mas stale demais, o backend usa a hora de recebimento para telemetria/eventos. Isso evita telemetria recem-chegada com data antiga, evidência de queda sem vinculo e status falsamente offline.
+Para online/offline, o backend usa a hora em que recebeu MQTT como `lastSeenAt`. Se o ESP32 ainda não sincronizou NTP e mandar `timestamp = millis()/1000`, ou se mandar um Unix time plausível mas stale demais, o backend usa a hora de recebimento para telemetria/eventos. Isso evita telemetria recém-chegada com data antiga, evidência de queda sem vínculo e status falsamente offline.
 
 No dashboard, essa telemetria continua chegando no mesmo contrato MQTT. A visualização do gráfico do device normaliza apenas a camada visual: `accel_magnitude` aparece como `Aceleração resultante (g)`, o tooltip mostra giroscópio e eixos AX/AY/AZ com unidades, e outliers fora da escala visual são escondidos sem apagar ou alterar os dados persistidos.
 
@@ -341,18 +341,18 @@ npm run mqtt:watch --prefix backend
 11. Confirme no dashboard que AX/AY/AZ estão em `g`, `accel_magnitude` fica perto de `1 g` em repouso e o gráfico estabiliza perto de `1 g`.
 12. Mexa o sensor rapidamente e confirme que a aceleração sobe temporariamente.
 13. Deixe parado novamente e confirme retorno para perto de `1 g`.
-14. Se aparecer `[telemetry] skipped reason=mqtt_disconnected`, o problema esta no link MQTT/reconnect.
-15. Se aparecer `[telemetry] skipped reason=no_valid_sample` ou `stale_sample` com `sensor_ready=1`, o problema esta em leitura raw temporaria/I2C após o boot.
+14. Se aparecer `[telemetry] skipped reason=mqtt_disconnected`, o problema está no link MQTT/reconnect.
+15. Se aparecer `[telemetry] skipped reason=no_valid_sample` ou `stale_sample` com `sensor_ready=1`, o problema está em leitura raw temporária/I2C após o boot.
 16. Se aparecer `[telemetry] skipped reason=sensor_not_ready`, o firmware não encontrou o MPU6050 ou não conseguiu leitura raw básica no boot.
 17. Se o Serial mostrar `publish ok` mas o `mqtt:watch` não receber, verifique host/porta, broker efetivo, clientId e rede.
 
 ## Buzzer, alertas e motion test
 
-O buzzer esta conservador para bancada:
+O buzzer está conservador para bancada:
 
 - `BUZZER_ENABLED = false` por padrão
-- polaridade explicita via `BUZZER_ACTIVE_HIGH`
-- default `BUZZER_ACTIVE_HIGH = false`, adequado para modulos active-low comuns
+- polaridade explícita via `BUZZER_ACTIVE_HIGH`
+- default `BUZZER_ACTIVE_HIGH = false`, adequado para módulos active-low comuns
 - `MOTION_TEST_MODE_ENABLED = false` por padrão
 
 Na prática:
@@ -393,11 +393,11 @@ O firmware também entra em setup quando:
 - o Wi-Fi conectar, mas o MQTT falhar por tempo ou tentativas suficientes
 - a configuração estiver incompleta
 
-Isso evita o estado ruim de "Wi-Fi ok, mas broker quebrado sem caminho claro de recuperacao".
+Isso evita o estado ruim de "Wi-Fi ok, mas broker quebrado sem caminho claro de recuperação".
 
-Com `SETUP_PORTAL_ALWAYS_ON = true`, falhas repetidas de MQTT deixam o portal já disponível para correcao, mas não desconectam o MQTT nem interrompem sensor, status/eventos e tentativas normais. Com a flag em `false`, o fallback antigo para `SETUP_MODE` permanece.
+Com `SETUP_PORTAL_ALWAYS_ON = true`, falhas repetidas de MQTT deixam o portal já disponível para correção, mas não desconectam o MQTT nem interrompem sensor, status/eventos e tentativas normais. Com a flag em `false`, o fallback antigo para `SETUP_MODE` permanece.
 
-## Confiabilidade de eventos criticos MQTT
+## Confiabilidade de eventos críticos MQTT
 
 A partir da `v0.8.25`, o firmware diferencia telemetria periódica de eventos críticos. `telemetry` continua leve e sem fila obrigatória; eventos do canal `events`, como `fall_detected` e SOS manual, recebem identificadores rastreáveis e podem ser reenviados depois de queda temporária do MQTT.
 
@@ -425,12 +425,12 @@ flowchart TD
   A[ESP32 detecta evento critico] --> B[gera event_uuid e sample_seq]
   B --> C{MQTT publish aceito?}
   C -->|sim| D[event publish ok]
-  C -->|nao| E[event queued em RAM]
+  C -->|não| E[event queued em RAM]
   E --> F[MQTT reconecta]
   F --> G[flush do EventBuffer]
   G --> H[backend recebe events]
   H --> I{event_uuid ja existe?}
-  I -->|nao| J[eventService grava evento]
+  I -->|não| J[eventService grava evento]
   J --> K[alertService cria alerta quando regra permitir]
   K --> L[Socket.IO atualiza dashboard]
   I -->|sim| M[backend ignora duplicata sem novo alerta]
@@ -455,7 +455,7 @@ Uso previsto:
 
 ## Pairing pelo portal local
 
-O portal possui uma secao especifica de pairing.
+O portal possui uma seção específica de pairing.
 
 ### O que o usuário informa
 
@@ -475,7 +475,7 @@ O portal possui uma secao especifica de pairing.
 - faz o claim transacional
 - devolve `deviceSyncToken` e o perfil resumido do paciente atual
 - o device fica locked naquela organização
-- se o código foi gerado com paciente inicial, o backend também cria o vinculo inicial
+- se o código foi gerado com paciente inicial, o backend também cria o vínculo inicial
 
 ### UX atual do pairing no portal
 
@@ -487,10 +487,10 @@ O portal foi simplificado para o caminho que funciona de forma mais consistente 
 
 Mensagens esperadas no portal:
 
-- `Codigo expirado. Gere um novo no dashboard.`
-- `Codigo inválido. Confira o valor informado.`
-- `Codigo já utilizado. Gere outro código.`
-- `Nao foi possível alcancar o backend nessa URL. Use o IP real do notebook na rede atual.`
+- `Código expirado. Gere um novo no dashboard.`
+- `Código inválido. Confira o valor informado.`
+- `Código já utilizado. Gere outro código.`
+- `Não foi possível alcançar o backend nessa URL. Use o IP real do notebook na rede atual.`
 - `Backend API inválida. Use o IP real do notebook na rede atual com http:// ou https://.`
 
 ## Perfil resumido do paciente no ESP32
@@ -559,12 +559,12 @@ No arquivo [include/app_config.h](../include/app_config.h):
 
 ## Pinagem recomendada
 
-| Modulo / funcao | Pino no módulo | Pino no ESP32 | Uso no firmware | Observacoes |
+| Módulo / função | Pino no módulo | Pino no ESP32 | Uso no firmware | Observações |
 |---|---|---:|---|---|
 | `MPU6050` | `SDA` | `GPIO21` | ativo | barramento `I2C` principal |
 | `MPU6050` | `SCL` | `GPIO22` | ativo | barramento `I2C` principal |
 | `MPU6050` | `INT` | não usado | inativo | pode ser aproveitado no futuro |
-| `MPU6050` | `AD0` | `GND` | recomendado | mantém endereco `0x68` |
+| `MPU6050` | `AD0` | `GND` | recomendado | mantém endereço `0x68` |
 | Botao SOS | sinal | `GPIO27` | opcional | requer `SOS_BUTTON_ENABLED = true` |
 | Buzzer ativo | `SIG` | `GPIO25` | opcional | hoje `BUZZER_ENABLED = false`; revise `BUZZER_ACTIVE_HIGH` antes de habilitar |
 | LED de status | anodo via resistor | `GPIO26` | opcional | requer `STATUS_LED_ENABLED = true` |
@@ -579,9 +579,9 @@ No arquivo [include/app_config.h](../include/app_config.h):
 - `SCL -> GPIO22`
 - `AD0 -> GND`
 
-Observacoes:
+Observações:
 
-- o projeto trabalha normalmente com `AD0 -> GND`, mantendo endereco `0x68`
+- o projeto trabalha normalmente com `AD0 -> GND`, mantendo endereço `0x68`
 - se o módulo estiver em `0x69`, confira `AD0` e a montagem física
 - o firmware consegue lidar com esse fallback no barramento
 
@@ -607,7 +607,7 @@ Observacoes:
 
 - `VCC` e `GND`: alimentacao
 - `SDA` e `SCL`: comunicação `I2C`
-- `AD0`: define endereco `0x68` ou `0x69`
+- `AD0`: define endereço `0x68` ou `0x69`
 
 ### Pinos não usados por enquanto
 
@@ -696,9 +696,9 @@ Todos os payloads são `JSON` em `snake_case`.
 }
 ```
 
-Observacoes relevantes:
+Observações relevantes:
 
-- `battery_level` ainda e placeholder
+- `battery_level` ainda é placeholder
 - `telemetry` não entra no `EventBuffer`
 - o modo de teste `MPU6050 + buzzer` não altera payloads
 - os tópicos continuam `queda/devices/{deviceId}/{canal}`
@@ -789,21 +789,21 @@ constexpr unsigned long REQUIRED_IMMOBILITY_MS = 1800;
 | `setup_portal` | `include/setup_portal.h`, `src/setup_portal.cpp` | AP, captive portal, configuração e pairing |
 | `connectivity_manager` | `include/connectivity_manager.h`, `src/connectivity_manager.cpp` | estados Wi-Fi + MQTT e fallback para setup |
 | `patient_profile_client` | `include/patient_profile_client.h`, `src/patient_profile_client.cpp` | sincronização do perfil resumido do paciente via backend HTTP |
-| `sensor_mpu6050` | `include/sensor_mpu6050.h`, `src/sensor_mpu6050.cpp` | leitura do sensor e calculo das magnitudes |
+| `sensor_mpu6050` | `include/sensor_mpu6050.h`, `src/sensor_mpu6050.cpp` | leitura do sensor e cálculo das magnitudes |
 | `fall_detector` | `include/fall_detector.h`, `src/fall_detector.cpp` | máquina de estados da queda |
 | `mqtt_client` | `include/mqtt_client.h`, `src/mqtt_client.cpp` | publicação MQTT |
-| `event_buffer` | `include/event_buffer.h`, `src/event_buffer.cpp` | fila circular local para reenvio de eventos criticos do canal `events` |
+| `event_buffer` | `include/event_buffer.h`, `src/event_buffer.cpp` | fila circular local para reenvio de eventos críticos do canal `events` |
 | `fall_feature_extractor` | `include/fall_feature_extractor.h`, `src/fall_feature_extractor.cpp` | features experimentais em janela circular para evidência/calibração |
-| `buzzer_led` | `include/buzzer_led.h`, `src/buzzer_led.cpp` | sinalizacao sonora/visual e pulso do motion test |
-| `main` | `src/main.cpp` | integracao do loop principal |
+| `buzzer_led` | `include/buzzer_led.h`, `src/buzzer_led.cpp` | sinalização sonora/visual e pulso do motion test |
+| `main` | `src/main.cpp` | integração do loop principal |
 
 ## Como preencher MQTT e backend em cada ambiente
 
-### Cenario A: broker local no notebook
+### Cenário A: broker local no notebook
 
 - `MQTT_HOST` deve ser o IP real do notebook
 - `BACKEND_API_BASE_URL` também deve apontar para o IP real do notebook
-- o broker local de desenvolvimento deve escutar em `0.0.0.0:1883` ou outro bind acessivel pela LAN
+- o broker local de desenvolvimento deve escutar em `0.0.0.0:1883` ou outro bind acessível pela LAN
 - nunca use `localhost` no ESP32
 
 No Windows, valide a porta do ponto de vista da LAN:
@@ -812,7 +812,7 @@ No Windows, valide a porta do ponto de vista da LAN:
 Test-NetConnection IP_DO_NOTEBOOK -Port 1883
 ```
 
-O esperado e `TcpTestSucceeded : True`. Se `localhost:1883` funcionar, mas o IP do notebook falhar, o broker provavelmente esta preso a loopback/IPv6 ou a rede/firewall ainda esta bloqueando o acesso.
+O esperado é `TcpTestSucceeded : True`. Se `localhost:1883` funcionar, mas o IP do notebook falhar, o broker provavelmente está preso a loopback/IPv6 ou a rede/firewall ainda está bloqueando o acesso.
 
 Esse teste não valida o handshake MQTT. Para confirmar que o broker respondeu com `CONNACK`:
 
@@ -821,33 +821,33 @@ cd backend
 npm run mqtt:test -- IP_DO_NOTEBOOK 1883
 ```
 
-O esperado e `MQTT handshake OK`. Depois disso, o botão `Testar MQTT` do portal do ESP32 deve conseguir passar se host, porta, TLS e credenciais estiverem coerentes.
+O esperado é `MQTT handshake OK`. Depois disso, o botão `Testar MQTT` do portal do ESP32 deve conseguir passar se host, porta, TLS e credenciais estiverem coerentes.
 
-### Cenario B: hotspot do celular
+### Cenário B: hotspot do celular
 
 - conecte notebook e ESP32 no mesmo hotspot
 - use o IP do notebook naquela rede para broker e backend
 - costuma ser o melhor cenário para demo
 
-### Cenario C: Wi-Fi da faculdade
+### Cenário C: Wi-Fi da faculdade
 
 - notebook e ESP32 precisam estar na mesma rede
 - use o IP do notebook naquela rede
 - algumas redes institucionais isolam clientes e podem impedir o pairing e o MQTT
 
-### Cenario D: broker e backend externos
+### Cenário D: broker e backend externos
 
-- use domínio ou IP acessivel pelo ESP32
+- use domínio ou IP acessível pelo ESP32
 - preencha autenticação MQTT quando necessário
-- e o modo mais simples para demonstração fora da rede do notebook
+- é o modo mais simples para demonstração fora da rede do notebook
 
-## Observacoes praticas de montagem e teste
+## Observações práticas de montagem e teste
 
-- fixe o `MPU6050` com rigidez mecanica
-- mantenha `GND` comum entre todos os modulos
+- fixe o `MPU6050` com rigidez mecânica
+- mantenha `GND` comum entre todos os módulos
 - deixe o dispositivo parado por alguns segundos após ligar
 - confira `AD0` se o sensor não responder
-- o snapshot em `NVS` reduz perda de eventos criticos após reboot, mas não substitui persistência completa
+- o snapshot em `NVS` reduz perda de eventos críticos após reboot, mas não substitui persistência completa
 - o fluxo padrão continua em MQTT sem `TLS`; a preparação para TLS existe, mas fica desligada por default
 
 ## Datasheets e referências técnicas

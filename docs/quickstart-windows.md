@@ -2,7 +2,7 @@
 
 Este guia foi pensado para uso no Windows com VS Code e PowerShell. Ele cobre o fluxo real atual do projeto: ambiente local, banco multi-tenant, dashboard por organização, mock publisher e pairing do ESP32 por código temporário.
 
-Antes de continuar, vale ter em mao também:
+Antes de continuar, vale ter em mão também:
 
 - [README.md](../README.md)
 - [firmware-hardware.md](firmware-hardware.md)
@@ -18,7 +18,7 @@ Instale antes:
 - opcionalmente `mysql CLI` ou `MySQL Workbench`
 - `PlatformIO Core` ou a extensão PlatformIO do VS Code, se você for compilar o firmware
 
-## 2. Diagnostico inicial
+## 2. Diagnóstico inicial
 
 Rode:
 
@@ -85,7 +85,7 @@ MQTT_TLS_REJECT_UNAUTHORIZED=true
 MQTT_TLS_CA_FILE=
 ```
 
-Notas praticas:
+Notas práticas:
 
 - o ambiente local atual usa `MYSQL_PASSWORD=` vazio
 - backend e frontend podem usar `localhost` no notebook; para MQTT local do backend, prefira `127.0.0.1`
@@ -281,7 +281,7 @@ Se o device entrar em `SETUP_MODE` ou se o portal de manutenção estiver ativo:
 4. preencha `MQTT_HOST`, `MQTT_PORT`, usuário/senha se houver
 5. preencha `DEVICE_ID`, `MQTT_CLIENT_ID` e `BACKEND_API_BASE_URL`
 
-Na bancada atual, `SETUP_PORTAL_ALWAYS_ON = true` deixa esse AP visivel em paralelo com Wi-Fi station e MQTT. Isso não e `SETUP_MODE`: o ESP32 pode continuar publicando status, eventos e telemetria enquanto o portal esta aberto.
+Na bancada atual, `SETUP_PORTAL_ALWAYS_ON = true` deixa esse AP visível em paralelo com Wi-Fi station e MQTT. Isso não é `SETUP_MODE`: o ESP32 pode continuar publicando status, eventos e telemetria enquanto o portal está aberto.
 
 Se você quiser testar especificamente o modo bloqueante de setup:
 
@@ -305,7 +305,7 @@ No site:
 
 No portal do ESP32:
 
-1. abra a secao de pairing
+1. abra a seção de pairing
 2. preencha `BACKEND_API_BASE_URL` com a URL principal recomendada
 3. cole o código temporário
 4. clique em `Parear agora`
@@ -320,24 +320,24 @@ Se tudo estiver correto:
 
 ### Se a URL principal não funcionar
 
-O modal `Parear dispositivo` mostra uma URL principal recomendada e, quando necessário, uma area `Outras opcoes de rede`.
+O modal `Parear dispositivo` mostra uma URL principal recomendada e, quando necessário, uma área `Outras opções de rede`.
 
 Use as URLs secundarias apenas se:
 
-1. o celular não alcancar o backend pela URL principal
+1. o celular não alcançar o backend pela URL principal
 2. o notebook estiver em outra interface da mesma rede
 3. a rede atual tiver uma topologia incomum
 
 ## 12. Como preencher MQTT e backend corretamente no ESP32
 
-### Cenario A: broker local no notebook
+### Cenário A: broker local no notebook
 
 - `MQTT_HOST` = IP real do notebook
 - `BACKEND_API_BASE_URL` = `http://IP-DO-NOTEBOOK:4000`
-- o broker dev precisa estar escutando em `0.0.0.0:1883` ou host equivalente acessivel pela LAN
+- o broker dev precisa estar escutando em `0.0.0.0:1883` ou host equivalente acessível pela LAN
 - nunca use `localhost` no ESP32
 
-Diagnostico Windows para o broker local:
+Diagnóstico Windows para o broker local:
 
 ```powershell
 netstat -ano | findstr :1883
@@ -350,7 +350,7 @@ Para testar o mesmo caminho TCP que o ESP32 precisa abrir:
 Test-NetConnection IP_DO_NOTEBOOK -Port 1883
 ```
 
-O esperado e:
+O esperado é:
 
 ```text
 TcpTestSucceeded : True
@@ -364,7 +364,7 @@ npm run mqtt:test -- 127.0.0.1 1883
 npm run mqtt:test -- IP_DO_NOTEBOOK 1883
 ```
 
-O esperado e `MQTT handshake OK`.
+O esperado é `MQTT handshake OK`.
 
 Para confirmar mensagens reais do ESP32 no broker que o backend usa:
 
@@ -383,7 +383,7 @@ Durante o teste real, deixe esse terminal aberto e reinicie o ESP32 com o Serial
 [telemetry] publish ok topic=queda/devices/esp32_01/telemetry bytes=...
 ```
 
-Se o Serial Monitor mostrar `publish ok` repetindo e o `mqtt:watch` não mostrar linhas novas, o ESP32 provavelmente esta publicando em outro broker/rede. Se o `mqtt:watch` mostrar as linhas e o dashboard não atualizar, volte a investigar backend, escopo do device, Socket.IO ou frontend.
+Se o Serial Monitor mostrar `publish ok` repetindo e o `mqtt:watch` não mostrar linhas novas, o ESP32 provavelmente está publicando em outro broker/rede. Se o `mqtt:watch` mostrar as linhas e o dashboard não atualizar, volte a investigar backend, escopo do device, Socket.IO ou frontend.
 
 Para testar backend e dashboard sem ESP32 físico:
 
@@ -398,7 +398,7 @@ Se o backend iniciar avisando schema desatualizado para evidência, rode a migra
 npm run db:migrate:evidence --prefix backend
 ```
 
-Observacoes:
+Observações:
 
 - `localhost:1883` funcionando não garante que o ESP32 consiga acessar
 - TCP aberto não garante que o broker concluiu o protocolo MQTT
@@ -429,9 +429,9 @@ Depois do login:
 - algumas redes institucionais podem bloquear comunicação entre clientes
 - hotspot do celular costuma ser mais confiável para demo
 
-### Cenario D: broker ou backend externos
+### Cenário D: broker ou backend externos
 
-- use domínio ou IP externo acessivel pelo ESP32
+- use domínio ou IP externo acessível pelo ESP32
 - preencha credenciais quando necessário
 
 ## 13. Como testar em bancada o `MPU6050 + buzzer`
@@ -499,7 +499,7 @@ Quando terminar:
 
 ### `Login falhou com o usuário demo`
 
-Provavel causa:
+Provável causa:
 
 - seed não aplicado
 - banco antigo ainda não foi recriado para o schema novo
@@ -510,24 +510,24 @@ Como resolver:
 
 ### `O ESP32 não consegue parear`
 
-Provavel causa:
+Provável causa:
 
 - `BACKEND_API_BASE_URL` inválida
-- notebook não acessivel na rede atual
+- notebook não acessível na rede atual
 - código expirado
 - código já utilizado
 
 Como resolver:
 
-- use IP real do notebook ou backend externo acessivel
+- use IP real do notebook ou backend externo acessível
 - gere um novo código no dashboard
 - confira se o device e o notebook estão na mesma rede
 
 ### `O ESP32 conecta no Wi-Fi, mas o dashboard continua offline`
 
-Provavel causa:
+Provável causa:
 
-- broker MQTT inacessivel
+- broker MQTT inacessível
 - `MQTT_HOST` configurado com `localhost`
 - backend ouvindo outro broker
 - device ainda sem claim na organização do usuário
@@ -539,15 +539,15 @@ Como resolver:
 - use o IP real do notebook ou um broker externo
 - no Windows, confirme `Test-NetConnection IP_DO_NOTEBOOK -Port 1883`
 - confirme `npm run mqtt:test -- IP_DO_NOTEBOOK 1883`
-- revise a secao MQTT do portal
+- revise a seção MQTT do portal
 - acompanhe os logs de ingestão MQTT no backend e procure `telemetry processada`
 
-### `A COM4 esta ocupada e o monitor/upload não funciona`
+### `A COM4 está ocupada e o monitor/upload não funciona`
 
-Provavel causa:
+Provável causa:
 
 - monitor serial antigo do `PlatformIO` ainda aberto
-- processo `device monitor` orfao segurando a porta
+- processo `device monitor` órfão segurando a porta
 
 Como resolver:
 
@@ -565,10 +565,10 @@ Se a porta continuar ocupada:
 
 ### `Ainda preciso segurar BOOT para fazer upload`
 
-Provavel causa:
+Provável causa:
 
-- a placa não esta entrando automaticamente em modo de download
-- a `COM` pode estar livre, mas o auto-reset de upload ainda não esta funcionando corretamente no hardware/driver
+- a placa não está entrando automaticamente em modo de download
+- a `COM` pode estar livre, mas o auto-reset de upload ainda não está funcionando corretamente no hardware/driver
 
 O que isso significa:
 
@@ -577,24 +577,24 @@ O que isso significa:
 
 Estado atual desta rodada:
 
-- a serial/log do ESP32 ficou acessivel
+- a serial/log do ESP32 ficou acessível
 - o upload voltou a funcionar quando `BOOT` foi mantido pressionado durante o `Connecting...`
-- sem isso, o auto-reset ainda não esta confiável na placa atual
+- sem isso, o auto-reset ainda não está confiável na placa atual
 
 Procedimento prático atual:
 
 1. rode `.\scripts\free-serial-port.ps1 -Port COM4`
 2. inicie o upload
 3. segure `BOOT` durante `Connecting...`
-4. solte quando a gravação efetivamente comecar
+4. solte quando a gravação efetivamente começar
 
 ### `O smoke test falhou mesmo com o login funcionando`
 
-Provavel causa:
+Provável causa:
 
 - backend ou frontend não estavam rodando
 - a resposta de login não trouxe `activeOrganizationId`
-- houve regressao no filtro multi-tenant de `organization`, `patients`, `dashboard`, `devices` ou `alerts`
+- houve regressão no filtro multi-tenant de `organization`, `patients`, `dashboard`, `devices` ou `alerts`
 - o backend pode estar apontando para um banco antigo, ainda sem o schema multi-tenant atual
 
 Como resolver:
@@ -607,7 +607,7 @@ Como resolver:
 
 ### `A página ficou branca e o console mostra erro no AuthProvider`
 
-Provavel causa:
+Provável causa:
 
 - o navegador ainda tem um `user` antigo salvo no `localStorage`
 - esse objeto veio de uma versão anterior ao modelo multi-tenant atual e não tem `memberships` no formato esperado
@@ -615,7 +615,7 @@ Provavel causa:
 Como resolver:
 
 - recarregue a página uma vez
-- se aparecer a tela de recuperacao do frontend, clique em `Limpar sessão local e abrir login`
+- se aparecer a tela de recuperação do frontend, clique em `Limpar sessão local e abrir login`
 - se preferir manualmente, limpe o `localStorage` do site em `localhost:5173`
 - depois entre novamente ou use `/login?force=1`
 

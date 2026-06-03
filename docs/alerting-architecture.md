@@ -305,13 +305,13 @@ Eventos emitidos:
 
 Um evento sem organização fica restrito ao escopo global de plataforma e não entra em room de tenant.
 
-## Concorrencia e locks
+## Concorrência e locks
 
-A ingestão MQTT usa `runWithKeyedLock("mqtt:{deviceIdentifier}")` para serializar mensagens simultaneas do mesmo device dentro de uma instancia Node. Isso protege reconciliacao de identidade, atualização de status, persistência e emissão realtime contra corrida local.
+A ingestão MQTT usa `runWithKeyedLock("mqtt:{deviceIdentifier}")` para serializar mensagens simultâneas do mesmo device dentro de uma instância Node. Isso protege reconciliação de identidade, atualização de status, persistência e emissão realtime contra corrida local.
 
-Limitacao: o lock e em memoria. Se o backend rodar em multiplas instancias, sera necessário usar fila particionada por device, lock distribuido ou consumidor MQTT com afinidade por chave.
+Limitação: o lock é em memória. Se o backend rodar em múltiplas instâncias, será necessário usar fila particionada por device, lock distribuído ou consumidor MQTT com afinidade por chave.
 
-As acoes de alerta usam transacao e `SELECT ... FOR UPDATE`, impedindo transições conflitantes entre operadores.
+As ações de alerta usam transação e `SELECT ... FOR UPDATE`, impedindo transições conflitantes entre operadores.
 
 ## Observabilidade
 
@@ -345,7 +345,7 @@ npm run stress:dry --prefix backend
 npm run stress:real --prefix backend
 ```
 
-`stress:dry` usa mocks do banco, broker e Socket.IO. Ele e útil para regressao rapida e smoke de carga em processo local, mas não mede MySQL/broker/backend reais.
+`stress:dry` usa mocks do banco, broker e Socket.IO. Ele é útil para regressão rápida e smoke de carga em processo local, mas não mede MySQL/broker/backend reais.
 
 `stress:real` valida pré-requisitos e aborta se backend `/health`, broker MQTT ou MySQL local/dev não estiverem disponíveis. Ele publica MQTT real, consulta o banco depois do teste e mede perda estimada entre mensagens publicadas, aceitas no broker e persistidas.
 

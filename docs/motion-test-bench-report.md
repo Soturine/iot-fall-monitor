@@ -18,9 +18,9 @@ Verificar a viabilidade do teste local de:
 
 - o dispositivo foi identificado no Windows como `USB-Enhanced-SERIAL CH9102 (COM4)`
 - o firmware compilou com sucesso depois dos ajustes desta rodada
-- havia um monitor `PlatformIO` orfao segurando a `COM4`
+- havia um monitor `PlatformIO` órfão segurando a `COM4`
 - depois da limpeza da porta, foi possível ler logs reais do ESP32 pela serial
-- a gravação automática ainda não foi concluida porque o chip não entrou sozinho em modo de download
+- a gravação automática ainda não foi concluída porque o chip não entrou sozinho em modo de download
 
 ## Avanco real desta rodada
 
@@ -102,7 +102,7 @@ Trecho relevante observado na serial:
 
 Isso confirma que:
 
-- a build nova esta efetivamente rodando na placa
+- a build nova está efetivamente rodando na placa
 - o crash loop visto antes pertencia a uma build antiga
 - o portal/AP agora deve estar disponível no hardware quando o device estiver em `SETUP_MODE`
 
@@ -123,13 +123,13 @@ Isso confirma que:
 Interpretacao atual:
 
 - o bloqueio principal deixou de ser a porta ocupada
-- o ponto fraco restante esta no auto-reset/bootloader da placa `CH9102`
+- o ponto fraco restante está no auto-reset/bootloader da placa `CH9102`
 
-## Diagnostico histórico do AP de setup
+## Diagnóstico histórico do AP de setup
 
 ### Comportamento observado na epoca
 
-Naquela build, o AP `Queda-Setup-*` não ficava visivel o tempo todo.
+Naquela build, o AP `Queda-Setup-*` não ficava visível o tempo todo.
 
 Na versão atual, o SSID esperado e `Q-ESP32-*`. Com `SETUP_PORTAL_ALWAYS_ON = true`, esse AP pode ficar ativo como manutenção mesmo quando o device continua tentando Wi-Fi/MQTT.
 
@@ -153,7 +153,7 @@ No hardware atual, apareceu ainda um segundo fator:
 
 Isso também ajuda a explicar por que o AP parecia não ficar disponível de forma confiável.
 
-## Diagnostico do Motion Test
+## Diagnóstico do Motion Test
 
 ### Problema percebido
 
