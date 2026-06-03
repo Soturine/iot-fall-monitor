@@ -299,30 +299,61 @@ float clampConfidence(float value) {
   return value;
 }
 
-void addSensorContextToEventPayload(JsonDocument& doc, unsigned long nowMs) {
-  const bool sensorSampleFresh = hasFreshSensorSample(nowMs);
+void addDeviceIdentityToPayload(JsonDocument& doc) {
+  doc["device_uid"] = DeviceSettings::technicalDeviceUid();
+  doc["device_id"] = DeviceSettings::effectiveDeviceId(runtimeConfig());
+}
+
+void addBatteryFieldsToPayload(JsonDocument& doc) {
+  const int batteryPercent = batteryLevelPercent();
+  doc["battery_level"] = batteryPercent;
+  doc["battery_percent"] = batteryPercent;
+}
+
+void addNetworkFieldsToPayload(JsonDocument& doc) {
+  const long rssi = connectivityManager.wifiRssi();
+  doc["wifi_rssi"] = rssi;
+  doc["rssi"] = rssi;
+}
+
+void addSensorDiagnosticsToPayload(JsonDocument& doc,
+                                   unsigned long nowMs,
+                                   bool sensorSampleFresh) {
   doc["sensor_ready"] = sensorReady;
   doc["sensor_valid"] = sensorSampleFresh;
   doc["sensor_read_ok"] = lastSensorReadSucceeded;
   doc["sensor_sample_age_ms"] = latestSensorSampleAgeMs(nowMs);
-  doc["sample_age_ms"] = latestSensorSampleAgeMs(nowMs);
   doc["sensor_failures"] = sensor.consecutiveFailureCount();
   doc["i2c_error_count"] = sensor.totalI2cErrorCount();
   doc["i2c_recovery_count"] = sensor.i2cRecoveryCount();
   doc["i2c_last_error"] = sensor.lastI2cError();
+}
 
-  if (!sensorSampleFresh) {
-    return;
-  }
-
+void addLatestReadingFieldsToPayload(JsonDocument& doc, bool includeMagnitudes = true) {
   doc["ax"] = latestReading.accelXG;
   doc["ay"] = latestReading.accelYG;
   doc["az"] = latestReading.accelZG;
   doc["gx"] = latestReading.gyroXDegPerSec;
   doc["gy"] = latestReading.gyroYDegPerSec;
   doc["gz"] = latestReading.gyroZDegPerSec;
+  if (includeMagnitudes) {
+    doc["accel_magnitude"] = latestReading.accelMagnitudeG;
+    doc["gyro_magnitude"] = latestReading.gyroMagnitudeDegPerSec;
+  }
   doc["pitch_deg"] = latestReading.pitchDeg;
   doc["roll_deg"] = latestReading.rollDeg;
+}
+
+void addSensorContextToEventPayload(JsonDocument& doc, unsigned long nowMs) {
+  const bool sensorSampleFresh = hasFreshSensorSample(nowMs);
+  addSensorDiagnosticsToPayload(doc, nowMs, sensorSampleFresh);
+  doc["sample_age_ms"] = latestSensorSampleAgeMs(nowMs);
+
+  if (!sensorSampleFresh) {
+    return;
+  }
+
+  addLatestReadingFieldsToPayload(doc, false);
 }
 
 void addAlertTuningToEventPayload(JsonDocument& doc) {
@@ -409,8 +440,7 @@ String buildEventPayload(const char* eventType,
   // Mantem o formato do payload centralizado em um unico ponto.
   StaticJsonDocument<3072> doc;
   const unsigned long nowMs = millis();
-  doc["device_uid"] = DeviceSettings::technicalDeviceUid();
-  doc["device_id"] = DeviceSettings::effectiveDeviceId(runtimeConfig());
+  addDeviceIdentityToPayload(doc);
   doc["event_type"] = eventType;
   doc["event_uuid"] = eventUuid;
   doc["event_sequence"] = eventSequence;
@@ -420,8 +450,7 @@ String buildEventPayload(const char* eventType,
   doc["accel_magnitude"] = accelMagnitudeG;
   doc["gyro_magnitude"] = gyroMagnitudeDegPerSec;
   doc["immobility_confirmed"] = immobilityConfirmed;
-  doc["battery_level"] = batteryLevelPercent();
-  doc["battery_percent"] = batteryLevelPercent();
+  addBatteryFieldsToPayload(doc);
   doc["algorithm"] = fallAlert != nullptr
                          ? fallAlert->algorithmVersion
                          : AppConfig::ALERT_DECISION_ENGINE_VERSION;
@@ -505,8 +534,7 @@ String buildStatusPayload() {
   const unsigned long nowMs = millis();
   const bool sensorSampleFresh = hasFreshSensorSample(nowMs);
   StaticJsonDocument<768> doc;
-  doc["device_uid"] = DeviceSettings::technicalDeviceUid();
-  doc["device_id"] = DeviceSettings::effectiveDeviceId(runtimeConfig());
+  addDeviceIdentityToPayload(doc);
   doc["event_type"] = "device_status";
   doc["timestamp"] = currentTimestampSeconds();
   if (sensorSampleFresh) {
@@ -514,20 +542,11 @@ String buildStatusPayload() {
     doc["gyro_magnitude"] = latestReading.gyroMagnitudeDegPerSec;
   }
   doc["immobility_confirmed"] = false;
-  doc["battery_level"] = batteryLevelPercent();
-  doc["battery_percent"] = batteryLevelPercent();
-  doc["wifi_rssi"] = connectivityManager.wifiRssi();
-  doc["rssi"] = connectivityManager.wifiRssi();
+  addBatteryFieldsToPayload(doc);
+  addNetworkFieldsToPayload(doc);
   doc["buffered_events"] = eventBuffer.size();
   doc["sample_seq"] = sensorSampleSeq;
-  doc["sensor_ready"] = sensorReady;
-  doc["sensor_valid"] = sensorSampleFresh;
-  doc["sensor_read_ok"] = lastSensorReadSucceeded;
-  doc["sensor_sample_age_ms"] = latestSensorSampleAgeMs(nowMs);
-  doc["sensor_failures"] = sensor.consecutiveFailureCount();
-  doc["i2c_error_count"] = sensor.totalI2cErrorCount();
-  doc["i2c_recovery_count"] = sensor.i2cRecoveryCount();
-  doc["i2c_last_error"] = sensor.lastI2cError();
+  addSensorDiagnosticsToPayload(doc, nowMs, sensorSampleFresh);
 
   if (doc.overflowed()) {
     AppLog::warn("[status] payload JSON overflowed before serialization.");
@@ -542,34 +561,15 @@ String buildTelemetryPayload() {
   const unsigned long nowMs = millis();
   const bool sensorSampleFresh = hasFreshSensorSample(nowMs);
   StaticJsonDocument<896> doc;
-  doc["device_uid"] = DeviceSettings::technicalDeviceUid();
-  doc["device_id"] = DeviceSettings::effectiveDeviceId(runtimeConfig());
+  addDeviceIdentityToPayload(doc);
   doc["timestamp"] = currentTimestampSeconds();
   if (sensorSampleFresh) {
-    doc["ax"] = latestReading.accelXG;
-    doc["ay"] = latestReading.accelYG;
-    doc["az"] = latestReading.accelZG;
-    doc["gx"] = latestReading.gyroXDegPerSec;
-    doc["gy"] = latestReading.gyroYDegPerSec;
-    doc["gz"] = latestReading.gyroZDegPerSec;
-    doc["accel_magnitude"] = latestReading.accelMagnitudeG;
-    doc["gyro_magnitude"] = latestReading.gyroMagnitudeDegPerSec;
-    doc["pitch_deg"] = latestReading.pitchDeg;
-    doc["roll_deg"] = latestReading.rollDeg;
+    addLatestReadingFieldsToPayload(doc);
   }
-  doc["battery_level"] = batteryLevelPercent();
-  doc["battery_percent"] = batteryLevelPercent();
-  doc["wifi_rssi"] = connectivityManager.wifiRssi();
-  doc["rssi"] = connectivityManager.wifiRssi();
+  addBatteryFieldsToPayload(doc);
+  addNetworkFieldsToPayload(doc);
   doc["sample_seq"] = sensorSampleSeq;
-  doc["sensor_ready"] = sensorReady;
-  doc["sensor_valid"] = sensorSampleFresh;
-  doc["sensor_read_ok"] = lastSensorReadSucceeded;
-  doc["sensor_sample_age_ms"] = latestSensorSampleAgeMs(nowMs);
-  doc["sensor_failures"] = sensor.consecutiveFailureCount();
-  doc["i2c_error_count"] = sensor.totalI2cErrorCount();
-  doc["i2c_recovery_count"] = sensor.i2cRecoveryCount();
-  doc["i2c_last_error"] = sensor.lastI2cError();
+  addSensorDiagnosticsToPayload(doc, nowMs, sensorSampleFresh);
 
   if (doc.overflowed()) {
     AppLog::warn("[telemetry] payload JSON overflowed before serialization.");
