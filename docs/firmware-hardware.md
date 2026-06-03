@@ -74,31 +74,35 @@ Defaults atuais relevantes:
 - `FALL_FFT_EXPERIMENTAL_ENABLED = false`
 - `FALL_FFT_WINDOW_SIZE = 64`
 
-Comandos uteis:
-
-```bash
-platformio run -e esp32dev
-platformio device monitor -b 115200
-```
-
-No Windows, se a `COM` ficar ocupada por um monitor antigo do `PlatformIO`, use:
+Comandos úteis no ambiente local atual (`COM5`, CP210x):
 
 ```powershell
-.\scripts\free-serial-port.ps1 -Port COM4
+cd C:\Queda
+& "$env:USERPROFILE\.platformio\penv\Scripts\platformio.exe" run
+& "$env:USERPROFILE\.platformio\penv\Scripts\platformio.exe" run -t upload --upload-port COM5
+& "$env:USERPROFILE\.platformio\penv\Scripts\platformio.exe" device monitor --port COM5 --baud 115200
+```
+
+Não assuma mais problema de boot/upload para o ESP32 novo: com o driver CP210x instalado, a placa aparece como `Silicon Labs CP210x USB to UART Bridge` em `COM5` e o upload funciona sem segurar `BOOT`.
+
+No Windows, se a `COM` ficar ocupada por um monitor antigo do `PlatformIO`, ajuste a porta do comando abaixo:
+
+```powershell
+.\scripts\free-serial-port.ps1 -Port COM5
 ```
 
 Configuracao desejada do sensor no boot:
 
 - barramento `I2C` a `100 kHz`
 - leituras de registrador com STOP condition por padrão (`I2C_USE_REPEATED_START = false`)
-- `WHO_AM_I` compatível com `0x68` (`MPU6050`) e fallback para `0x69` quando necessário
+- `WHO_AM_I` compatível com `0x68` (`MPU6050`), `0x70` (`MPU6500`) e `0x71` (`MPU9250`), com fallback de endereço para `0x69` quando necessário
 - acelerômetro em faixa `+-8 g`
 - giroscópio em faixa `+-500 dps`
 - `DLPF` configurado para reduzir ruído de bancada
 
-Depois de escrever os registradores, o firmware lê `ACCEL_CONFIG` e `GYRO_CONFIG` de volta e usa a faixa efetiva para converter raw em unidade física. Se o acelerômetro permanecer em `+-2 g`, o divisor usado será `16384 LSB/g`; se `+-8 g` for realmente aplicado, será `4096 LSB/g`. Isso evita repouso aparecendo como `4 g` por divisor incompatível.
+Depois de escrever os registradores, o firmware lê `ACCEL_CONFIG` e `GYRO_CONFIG` de volta e usa a faixa efetiva para converter raw em unidade física. Se o acelerômetro permanecer em `+-2 g`, o divisor usado será `16384 LSB/g`; se `+-8 g` for realmente aplicado, será `4096 LSB/g`. Isso evita repouso aparecendo como `4 g` por divisor incompatível. Em alguns módulos `MPU6500/MPU9250`, o readback pode permanecer em `0x00`; nesse caso a build aceita `+-2g/+-250dps` como faixa real em vez de tentar reconfigurar indefinidamente. Durante recoveries, se o readback falhar depois de uma escala efetiva já ter sido aceita, o firmware preserva a escala anterior para não gerar picos falsos.
 
-O sensor é considerado pronto quando o firmware encontra um `WHO_AM_I` compatível e consegue fazer uma leitura raw básica. Falhas de readback de escala ou calibração não deixam mais `sensor_ready=0`: o firmware registra o motivo, usa divisor fallback coerente e continua publicando telemetria sem offsets.
+O sensor é considerado pronto quando o firmware encontra um `WHO_AM_I` compatível e consegue fazer uma leitura raw básica. Falhas de readback de escala ou calibração não deixam mais `sensor_ready=0`: o firmware registra o motivo, usa divisor fallback coerente e continua publicando telemetria sem offsets. Pacote raw totalmente zerado (`ax=ay=az=gx=gy=gz=0`) é descartado e não vira amostra válida. Se `sensor_ready=0` por falha de boot, o loop tenta `sensor.begin()` novamente a cada `SENSOR_BEGIN_RETRY_INTERVAL_MS`.
 
 ### Estabilidade I2C do MPU6050
 
@@ -111,6 +115,14 @@ O erro serial `requestFrom(): i2cWriteReadNonStop returned Error -1` costuma apa
 - `SENSOR_I2C_RECOVERY_TOTAL_ERROR_THRESHOLD = 64`
 
 Quando houver falhas consecutivas ou volume alto de falhas intermitentes desde o último recovery, o firmware registra um resumo throttled, reinicia o barramento I2C, reconfigura o MPU6050 e não recalibra em loop. Se o recovery falhar, a última amostra válida fica preservada por uma janela curta. O status MQTT continua levando diagnóstico do sensor; a telemetria periódica só é publicada quando houver amostra válida e fresca.
+
+No Serial Monitor, procure:
+
+- `[i2c] scan found address=0x68`
+- `[sensor] probe ok address=0x68 who_am_i=0x70 model=MPU6500`
+- `[sensor] range effective accepted ... accel=+-2g gyro=+-250dps` quando o chip não aceitar a faixa desejada
+- `[sensor] read ok ... raw_magnitude_g=... corrected_magnitude_g=... filtered_magnitude_g=...`
+- `[sensor] read failed reason=raw_all_zero` ou `i2c_read_failed` quando a leitura não deve alimentar telemetria
 
 Checklist físico antes de investigar software:
 
@@ -176,6 +188,7 @@ O portal local do ESP32 agora cobre:
 - botoes `Testar backend` e `Testar MQTT`
 - visualização do perfil resumido do paciente sincronizado
 - pré-calibração experimental de alertas com sensibilidade, thresholds, janela, cooldown, publicação de eventos e buzzer
+- botão `Testar buzzer`, que aciona um pulso curto não bloqueante quando o buzzer está habilitado na configuração atual
 
 Capturas reais do portal devem ser salvas em [assets](assets/README.md), especialmente `assets/screenshots/esp32-portal-v0.8.26.png` quando a tela for capturada do ESP32 rodando. Não há link direto neste documento enquanto a imagem real não existir no repositório.
 
@@ -208,8 +221,11 @@ A seção de pré-calibração do portal permite testar o fluxo real sem recompi
 - cooldown de alerta em `ms`
 - habilitar/desabilitar publicação de eventos experimentais
 - habilitar/desabilitar buzzer local
+- testar buzzer local com pulso curto pelo portal
 
 O modo `normal` preserva thresholds conservadores. O modo `teste/demonstração` baixa os thresholds para validação de bancada e pode gerar falsos positivos; use apenas com movimentos controlados do conjunto `ESP32 + MPU6050`, nunca com queda real de pessoa. As configurações ficam em `NVS` e, quando salvas pelo portal de manutenção, a sensibilidade passa a valer no loop atual sem reiniciar Wi-Fi/MQTT.
+
+O botão `Testar buzzer` usa a configuração atualmente carregada. Se `Habilitar buzzer local para alerta` estiver desligado, o firmware registra `[buzzer] skipped reason=disabled event=portal_test` e o portal orienta habilitar, salvar e testar novamente.
 
 ### Como forcar SETUP_MODE em bancada
 
@@ -225,13 +241,17 @@ Depois do teste, volte `FORCE_SETUP_MODE_ON_BOOT = false` para restaurar o compo
 
 ### Observacao importante sobre upload
 
-Se a placa ainda exigir segurar `BOOT` durante o upload, isso indica que ela não está entrando automaticamente em modo de download. Nesta rodada, a serial e o log ficaram acessíveis, mas o auto-reset para upload ainda permaneceu dependente do hardware/driver da placa.
+No ESP32 novo usado nesta rodada, o driver CP210x foi instalado, a placa aparece como `Silicon Labs CP210x USB to UART Bridge` em `COM5` e o upload funcionou sem segurar `BOOT`. Portanto, o diagnóstico atual não deve assumir problema de boot/upload; o foco é IMU/I2C, interpretação da telemetria e buzzer.
 
-Estado validado nesta bancada:
+Comandos validados para a bancada atual:
 
-- `COM4` voltou a aceitar upload depois que a porta foi liberada
-- a gravação da build nova funcionou quando `BOOT` foi mantido pressionado
-- o problema restante não e mais "porta ocupada", e sim auto-reset/entrada automática em bootloader
+```powershell
+cd C:\Queda
+& "$env:USERPROFILE\.platformio\penv\Scripts\platformio.exe" run -t upload --upload-port COM5
+& "$env:USERPROFILE\.platformio\penv\Scripts\platformio.exe" device monitor --port COM5 --baud 115200
+```
+
+Se outra placa voltar a exigir `BOOT`, trate como limitação daquele hardware/driver específico, não como premissa do projeto.
 
 ## Captive portal e acesso pelo celular
 
@@ -359,7 +379,9 @@ Na prática:
 
 - boot, Wi-Fi connecting, MQTT connecting, setup mode e warning visual não devem acionar buzzer
 - o alarme real por queda/SOS e o alerta experimental de bancada usam o buzzer apenas quando ele está habilitado na pré-calibração do portal
-- o buzzer é não bloqueante e registra `[buzzer] alert pulse start` e `[buzzer] alert pulse end`
+- o buzzer é não bloqueante e registra `[buzzer] alert pulse start reason=...` e `[buzzer] alert pulse end reason=...`
+- o boot registra `[buzzer] enabled=... pin=... active_high=...`; quando habilitado, dispara um autoteste curto `boot_autotest`
+- o botão do portal registra `[buzzer] test pulse start reason=portal_test` e `[buzzer] test pulse end reason=portal_test`
 - o teste de bancada deixa de ficar habilitado por padrão em uso normal
 - se a placa usar buzzer ativo-low, a inversao agora pode ser tratada em `include/app_config.h` sem mexer na logica do alarme
 

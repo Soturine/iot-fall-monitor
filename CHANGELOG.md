@@ -9,6 +9,30 @@
 - testar classificação de movimentos com múltiplas runs por classe
 - validar o sistema com ESP32 real, MPU6050, backend, MQTT e dashboard em cenário ponta a ponta
 
+## [v0.8.28] - 2026-06-03
+### Adicionado
+- suporte explícito a IMU `MPU6050`, `MPU6500` e `MPU9250` conforme `WHO_AM_I`
+- logs de magnitude `raw_magnitude_g`, `corrected_magnitude_g` e `filtered_magnitude_g` para validar repouso próximo de `1 g`
+- logs de buzzer com `enabled`, `pin`, `active_high`, motivo do pulso, início/fim e skip por `disabled` ou `no_alert_event`
+- botão `Testar buzzer` no portal ESP32 para pulso curto não bloqueante usando a configuração atual
+
+### Alterado
+- firmware passa a aceitar a faixa efetiva lida em `ACCEL_CONFIG`/`GYRO_CONFIG` quando o sensor permanece em `+-2g/+-250dps`, sem tentar reconfigurar indefinidamente em recoveries
+- recovery I2C preserva a última escala efetiva conhecida quando o readback de `ACCEL_CONFIG`/`GYRO_CONFIG` falha, evitando magnitudes falsas por fallback temporário para `+-8g`
+- documentação passa a considerar o ESP32 novo com CP210x em `COM5`, upload funcional sem segurar `BOOT` e PlatformIO pelo caminho completo no Windows
+- versão alinhada para `0.8.28` em packages da raiz, backend, frontend e locks existentes
+
+### Corrigido
+- pacote raw totalmente zerado (`ax=ay=az=gx=gy=gz=0`) deixa de ser tratado como leitura válida
+- falha de leitura I2C preserva `sensor_read_ok=false` e motivo atual do erro, evitando amostra falsa ou stale marcada como boa
+- re-tentativa periódica de `sensor.begin()` recupera IMU que falhou no boot sem reiniciar o ESP32
+- fluxo local do buzzer fica rastreável para `movement_detected`, `fall_suspected`, `fall_detected`, SOS, autoteste de boot e teste pelo portal
+
+### Limitações conhecidas
+- buzzer depende do tipo físico do módulo: buzzer ativo funciona com `digitalWrite`; buzzer passivo pode exigir PWM/LEDC ou driver externo
+- alerta criado apenas no backend ainda não aciona hardware local sem um futuro tópico de comando para o ESP32
+- validação clínica continua fora de escopo; testes devem ser feitos apenas com movimento controlado de bancada
+
 ## [v0.8.27] - 2026-06-02
 ### Adicionado
 - seção de pré-calibração experimental no portal do ESP32 para sensibilidade, thresholds, janela, cooldown, publicação de eventos e buzzer

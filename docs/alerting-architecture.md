@@ -23,6 +23,8 @@ ESP32 detecta queda, queda suspeita, movimento intenso ou SOS
 
 O alerta atual e interno ao sistema: ele persiste em MySQL e aparece em realtime no painel. Ainda não existe envio externo de SMS, WhatsApp, e-mail, push ou webhook.
 
+O buzzer é hardware local do ESP32. Ele toca quando o firmware detecta localmente `movement_detected`, `fall_suspected`, `fall_detected` ou SOS e a pré-calibração do portal está com `Habilitar buzzer local para alerta` ligada. Se o backend criar um alerta a partir de uma regra futura sem evento local equivalente, o ESP32 não tem como tocar sem um comando MQTT de retorno. A evolução prevista é publicar em `queda/devices/{deviceId}/commands` um payload como `{ "type": "buzzer_alert", "reason": "fall_detected" }`.
+
 ## Registro visual do fluxo
 
 Screenshots e GIFs reais do fluxo de alertas devem ser armazenados em [assets](assets/README.md). A `v0.8.26` adicionou a captura real [alerts-v0.8.26.png](assets/screenshots/alerts-v0.8.26.png), feita com o frontend rodando localmente.
@@ -261,6 +263,8 @@ O evento recebe:
 O payload bruto do firmware também fica preservado em `raw_payload_json`, incluindo `event_uuid`, `event_sequence`, `sample_seq`, `decision_source`, `algorithm_version`, `fall_reason`, `alert_settings`, `features`, `features_time_domain`, `features_frequency_domain`, thresholds e demais campos enviados.
 
 O `evidenceSummary` do backend continua sendo o resumo das amostras realmente persistidas em `telemetry_logs`, mas agora também incorpora um bloco `firmwareDecision` com a decisão local e as features enviadas. Isso evita duplicar a decisão: o firmware decide o alarme local/buzzer, enquanto o backend audita a decisão e relaciona as amostras persistidas.
+
+Na `v0.8.28`, o firmware também registra o motivo do buzzer (`reason=movement_detected`, `fall_suspected`, `fall_detected`, `sos_pressed`, `portal_test` ou `boot_autotest`) e quando ele foi pulado por `disabled` ou `no_alert_event`. Esses logs são a primeira evidência para separar falha de regra, configuração desligada e problema físico do buzzer.
 
 Responsabilidades atuais:
 

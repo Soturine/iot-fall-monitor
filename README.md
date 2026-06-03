@@ -6,9 +6,13 @@ O objetivo do repositório é integrar hardware embarcado, ingestão de eventos,
 
 ## Baseline Atual
 
-Baseline atual do repositório: `v0.8.27`.
+Baseline atual do repositório: `v0.8.28`.
 
-A baseline `v0.8.27` conecta o fluxo real de telemetria do ESP32 a eventos e alertas mais visíveis: movimentos intensos e quedas suspeitas podem gerar `movement_detected`/`fall_suspected` pelo firmware, com motivo, thresholds, `sample_seq`, diagnóstico do MPU6050/I2C e cooldown. `fall_detected` continua sendo a queda confirmada pela FSM local com imobilidade.
+A baseline `v0.8.28` estabiliza a camada física da IMU no ESP32 novo com CP210x em `COM5`: o firmware identifica `MPU6050`, `MPU6500` e `MPU9250` por `WHO_AM_I`, aceita a faixa efetiva lida quando o chip permanece em `+-2g/+-250dps`, descarta leituras raw totalmente zeradas e registra magnitude raw/corrigida para diagnosticar se o repouso está perto de `1 g`.
+
+Esta baseline também deixa o buzzer auditável: o Serial Monitor mostra `enabled`, `pin`, `active_high`, razão do pulso, pulso de alerta iniciado/finalizado e skip por `disabled` ou `no_alert_event`. O portal ESP32 ganhou o botão `Testar buzzer`, usando o estado atual salvo da pré-calibração; se o buzzer estiver desabilitado, o log e o portal informam isso claramente.
+
+A baseline anterior `v0.8.27` conecta o fluxo real de telemetria do ESP32 a eventos e alertas mais visíveis: movimentos intensos e quedas suspeitas podem gerar `movement_detected`/`fall_suspected` pelo firmware, com motivo, thresholds, `sample_seq`, diagnóstico do MPU6050/I2C e cooldown. `fall_detected` continua sendo a queda confirmada pela FSM local com imobilidade.
 
 O portal local do ESP32 agora possui uma seção de pré-calibração experimental para sensibilidade de alerta, thresholds de aceleração/giroscópio, janela, cooldown, publicação de eventos e buzzer. O modo normal segue conservador; o modo teste/demonstração é voltado apenas a bancada controlada, sem testar queda em pessoa.
 
@@ -51,6 +55,8 @@ O modelo atual deixou de ser um painel global único e passou a trabalhar com or
 - confiabilidade de eventos críticos MQTT com `event_uuid`, `sample_seq`, fila local e deduplicação no backend
 - pré-calibração experimental de alertas pelo portal do ESP32, com thresholds persistidos em `NVS`
 - eventos `fall_suspected` e `movement_detected` para teste ponta a ponta de alerta real em bancada
+- identificação explícita de `MPU6050`, `MPU6500` e `MPU9250` por `WHO_AM_I`
+- descarte de pacote raw totalmente zerado para não publicar amostra falsa
 - recovery I2C também por volume de falhas intermitentes, além de falhas consecutivas
 - vínculo técnico entre queda detectada e janela de telemetria relacionada
 - evidência estruturada do firmware para `fall_detected`, com versão do algoritmo, janela, picos, imobilidade e features no domínio do tempo
@@ -69,7 +75,7 @@ O modelo atual deixou de ser um painel global único e passou a trabalhar com or
 - separação entre saúde do socket do navegador e saúde operacional do dispositivo
 - status comportamental/postural heurístico experimental
 - estados explícitos para sensor inválido, telemetria desatualizada, movimento leve/intenso, queda, SOS manual e calibração pendente
-- suporte a buzzer e modo opcional de teste de movimento em bancada
+- suporte a buzzer, logs de diagnóstico e botão `Testar buzzer` no portal ESP32
 - scripts Windows para setup, banco, start, stop e smoke test
 
 ## Capturas de Tela
@@ -240,11 +246,11 @@ Para validar telemetria real do ESP32, deixe `mqtt:watch` aberto, reinicie a pla
 
 No frontend, o gráfico principal de `Sinais recentes do sensor` mostra `Aceleração resultante (g)`. Valores inválidos, `NaN`, infinitos ou fora de escala operacional visual são filtrados apenas no gráfico; MQTT, backend, banco e payloads continuam preservados.
 
-Para validar a escala física do MPU6050, deixe o ESP32 parado sobre a mesa ao reiniciar. O Serial Monitor deve mostrar a faixa efetiva (`accel=+-2g`, `+-4g`, `+-8g` ou `+-16g`), o divisor `lsb_per_g` usado e leituras convertidas com `accel_magnitude` perto de `1.00 g` em repouso. Se aparecer algo perto de `4 g`, há erro de escala ou movimento durante a calibração.
+Para validar a escala física da IMU, deixe o ESP32 parado sobre a mesa ao reiniciar. O Serial Monitor deve mostrar o modelo (`MPU6050`, `MPU6500` ou `MPU9250`), a faixa efetiva (`accel=+-2g`, `+-4g`, `+-8g` ou `+-16g`), o divisor `lsb_per_g` usado e leituras convertidas com `raw_magnitude_g`, `corrected_magnitude_g` e `filtered_magnitude_g` perto de `1.00 g` em repouso. Se aparecer algo perto de `4 g`, há erro de escala ou movimento durante a calibração.
 
 Se a calibração ou o readback de escala falhar, o firmware deve continuar operando com fallback: procure `ready=1`, `calibrated=0` e `continuing_without_offsets` no Serial Monitor. Se não houver amostra válida, o `status` continua saindo com diagnóstico e a telemetria é pulada com motivo claro, como `sensor_not_ready`, `no_valid_sample` ou `stale_sample`.
 
-Se aparecer erro repetido do Wire como `i2cWriteReadNonStop returned Error -1`, valide primeiro o hardware do barramento: GND comum, VCC correto no módulo, SDA/SCL nos pinos configurados, fios curtos, contato da protoboard e alimentacao estável. A build atual usa `I2C_CLOCK_HZ = 100000`, `I2C_USE_REPEATED_START = false`, retry curto e recovery do barramento para reduzir falhas transitórias sem travar Wi-Fi/MQTT.
+Se aparecer erro repetido do Wire como `i2cWriteReadNonStop returned Error -1`, valide primeiro o hardware do barramento: GND comum, VCC correto no módulo, SDA/SCL nos pinos configurados, fios curtos, contato da protoboard e alimentação estável. A build atual usa `I2C_CLOCK_HZ = 100000`, `I2C_USE_REPEATED_START = false`, retry curto, descarte de raw all-zero e recovery do barramento para reduzir falhas transitórias sem travar Wi-Fi/MQTT.
 
 O fluxo local esperado usa:
 
@@ -395,7 +401,7 @@ O frontend exibe esse status de forma discreta no dashboard, na lista de disposi
 - Os thresholds de queda, imobilidade e postura ainda precisam de validação prática com hardware real.
 - A leitura de bateria do firmware real ainda pode ser placeholder se não houver circuito de medição dedicado.
 - O fluxo padrão continua usando `mqtt://`; `mqtts://` existe como preparação opt-in e depende de configuração coerente.
-- O buzzer fica desabilitado por padrão em bancada; para teste manual ou alarme sonoro real, revise `BUZZER_ACTIVE_HIGH` conforme a polaridade do módulo e habilite o buzzer na pré-calibração do portal ESP32.
+- O buzzer fica desabilitado por padrão em bancada; para teste manual ou alarme sonoro real, revise `BUZZER_ACTIVE_HIGH` conforme a polaridade do módulo, habilite o buzzer na pré-calibração do portal ESP32 e use o botão `Testar buzzer`.
 - O portal local do ESP32 não substitui o dashboard principal.
 - O portal local do ESP32 não possui autenticação local própria.
 - O pairing depende de o backend estar acessível ao ESP32 pela rede atual.

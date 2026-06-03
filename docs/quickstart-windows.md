@@ -445,13 +445,22 @@ Para validar `telemetria real -> evento MQTT -> alerta -> frontend -> buzzer` se
 3. suba `npm run dev --prefix frontend`
 4. abra `npm run mqtt:watch --prefix backend`
 5. abra `/devices/1` no frontend
-6. reinicie o ESP32 com Serial Monitor em `115200`
-7. no portal `Q-ESP32-*`, abra a seção de pré-calibração experimental
-8. selecione `teste/demonstração`
-9. confirme que `Publicar eventos MQTT de alerta experimental` está habilitado
-10. habilite o buzzer apenas se o módulo estiver ligado e a polaridade estiver correta
-11. salve a pré-calibração
-12. mova o conjunto `ESP32 + MPU6050` de forma controlada em bancada
+6. grave e monitore o ESP32 novo na `COM5`:
+
+```powershell
+cd C:\Queda
+& "$env:USERPROFILE\.platformio\penv\Scripts\platformio.exe" run -t upload --upload-port COM5
+& "$env:USERPROFILE\.platformio\penv\Scripts\platformio.exe" device monitor --port COM5 --baud 115200
+```
+
+7. confirme no boot `WHO_AM_I`, modelo da IMU, faixa efetiva e logs de buzzer
+8. no portal `Q-ESP32-*`, abra a seção de pré-calibração experimental
+9. selecione `teste/demonstração`
+10. confirme que `Publicar eventos MQTT de alerta experimental` está habilitado
+11. habilite o buzzer apenas se o módulo estiver ligado e a polaridade estiver correta
+12. salve a pré-calibração
+13. clique em `Testar buzzer` para validar o hardware local
+14. mova o conjunto `ESP32 + MPU6050/MPU6500/MPU9250` de forma controlada em bancada
 
 O esperado:
 
@@ -459,7 +468,7 @@ O esperado:
 - watcher mostra `queda/devices/esp32_01/events`
 - backend registra `MQTT event processado` e `alert:new`
 - frontend atualiza ocorrências/alertas sem F5
-- se o buzzer estiver habilitado, aparecem `[buzzer] alert pulse start` e `[buzzer] alert pulse end`
+- se o buzzer estiver habilitado, aparecem `[buzzer] test pulse start/end reason=portal_test` e `[buzzer] alert pulse start/end reason=...`
 - telemetria continua publicando depois do alerta
 
 Volte a sensibilidade para `normal` depois do teste. Não teste queda real em pessoa; use apenas movimento controlado do hardware em bancada.
@@ -542,7 +551,7 @@ Como resolver:
 - revise a seção MQTT do portal
 - acompanhe os logs de ingestão MQTT no backend e procure `telemetry processada`
 
-### `A COM4 está ocupada e o monitor/upload não funciona`
+### `A COM5 está ocupada e o monitor/upload não funciona`
 
 Provável causa:
 
@@ -552,7 +561,7 @@ Provável causa:
 Como resolver:
 
 ```powershell
-.\scripts\free-serial-port.ps1 -Port COM4
+.\scripts\free-serial-port.ps1 -Port COM5
 ```
 
 O projeto agora também executa essa limpeza automaticamente antes do upload via `PlatformIO` no Windows. Mesmo assim, ainda vale rodar o script manualmente quando a IDE ficar com monitor serial preso.
@@ -565,6 +574,8 @@ Se a porta continuar ocupada:
 
 ### `Ainda preciso segurar BOOT para fazer upload`
 
+No ESP32 novo com CP210x em `COM5`, o upload funcionou sem segurar `BOOT`. Portanto, para o hardware atual, trate falhas novas primeiro como problema de porta ocupada, cabo, driver, alimentação ou comando errado antes de assumir problema de boot.
+
 Provável causa:
 
 - a placa não está entrando automaticamente em modo de download
@@ -575,15 +586,15 @@ O que isso significa:
 - problema diferente de porta ocupada
 - o firmware pode estar rodando e emitindo log normalmente, mesmo assim o upload automático falha
 
-Estado atual desta rodada:
+Estado histórico da placa anterior:
 
 - a serial/log do ESP32 ficou acessível
 - o upload voltou a funcionar quando `BOOT` foi mantido pressionado durante o `Connecting...`
-- sem isso, o auto-reset ainda não está confiável na placa atual
+- sem isso, o auto-reset ainda não estava confiável naquela placa
 
-Procedimento prático atual:
+Procedimento prático somente para placas que ainda apresentem esse sintoma:
 
-1. rode `.\scripts\free-serial-port.ps1 -Port COM4`
+1. rode `.\scripts\free-serial-port.ps1 -Port COM5` ou substitua pela `COM` real
 2. inicie o upload
 3. segure `BOOT` durante `Connecting...`
 4. solte quando a gravação efetivamente começar

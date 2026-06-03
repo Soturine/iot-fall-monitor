@@ -104,6 +104,8 @@ Para `fall_detected`, o firmware continua sendo a fonte da decisão local confir
 
 Na `v0.8.27`, o firmware também pode publicar `fall_suspected` e `movement_detected` a partir de uma pré-calibração experimental salva no portal do ESP32. Esses eventos carregam `alert_settings`, `thresholds`, motivo da decisão, amostra do sensor e diagnóstico I2C. Eles servem para validar o fluxo real `telemetria -> evento -> alerta -> frontend -> buzzer` em bancada, sem substituir a FSM de `fall_detected`. O backend cria alertas para esses eventos experimentais, mas eles devem ser tratados como heurística operacional, não como certeza clínica. `sos_pressed` e `manual_sos` continuam podendo criar alerta sem telemetria por serem acionamento manual.
 
+Na `v0.8.28`, o contrato MQTT permanece o mesmo, mas a fronteira física da IMU ficou mais rígida: o firmware aceita `WHO_AM_I=0x68` (`MPU6050`), `0x70` (`MPU6500`) e `0x71` (`MPU9250`), usa a faixa efetiva lida em `ACCEL_CONFIG`/`GYRO_CONFIG`, preserva a última escala efetiva durante recoveries com readback falho, descarta amostra raw totalmente zerada e mantém `sensor_read_ok=false` quando a leitura falha. O buzzer continua sendo decisão local do firmware; alertas criados apenas no backend não acionam hardware sem um futuro comando MQTT de retorno para `queda/devices/{deviceId}/commands`.
+
 ### Confiabilidade por criticidade
 
 `telemetry` é periódica e pode tolerar perda eventual. Eventos críticos do canal `events`, como `fall_detected`, SOS manual e `sensor_fault`, precisam ser rastreáveis. Por isso, a `v0.8.25` adiciona:
@@ -188,9 +190,9 @@ Unidades do contrato:
 - `accel_magnitude`: aceleração resultante em `g`
 - `gyro_magnitude`: giro resultante em `deg/s`
 
-O firmware converte raw do MPU6050 usando a faixa efetiva lida em `ACCEL_CONFIG`/`GYRO_CONFIG`. Em repouso, `accel_magnitude` deve ficar perto de `1.00 g`; valores estáveis perto de `4 g` indicam divisor de escala incorreto ou sensor ainda publicando firmware antigo.
+O firmware converte raw da IMU usando a faixa efetiva lida em `ACCEL_CONFIG`/`GYRO_CONFIG`. Em repouso, `accel_magnitude` deve ficar perto de `1.00 g`; valores estáveis perto de `4 g` indicam divisor de escala incorreto ou sensor ainda publicando firmware antigo. Os logs `raw_magnitude_g`, `corrected_magnitude_g` e `filtered_magnitude_g` ajudam a separar erro de escala, offset e filtro.
 
-Falhas de readback ou calibração não devem interromper o contrato MQTT: o firmware usa fallback de escala, segue sem offsets quando necessário e publica telemetria se a leitura raw I2C estiver funcionando.
+Falhas de readback ou calibração não devem interromper o contrato MQTT: o firmware usa fallback de escala, segue sem offsets quando necessário e publica telemetria se a leitura raw I2C estiver funcionando. Pacotes raw totalmente zerados são tratados como falha e não devem criar telemetria real.
 
 Falhas transitórias de I2C também não devem derrubar Wi-Fi/MQTT. O firmware publica diagnósticos extras em `status` e, quando houver amostra real, também em `telemetry` (`sensor_ready`, `sensor_valid`, `sensor_read_ok`, `sensor_sample_age_ms`, `sensor_failures`, `i2c_error_count`, `i2c_recovery_count`, `i2c_last_error`). Quando a última amostra fica velha demais, o firmware mantém `status` com diagnóstico e pula `telemetry`; o backend também rejeita payloads de `telemetry` sem eixos reais para não criar `telemetry_logs` inválidos.
 
@@ -664,8 +666,8 @@ Elas não disparam notificação externa. No estado atual do projeto, alerta sig
 - o firmware só considera o device realmente saudável quando `Wi-Fi + MQTT` estão simultaneamente ok
 - eventos críticos pendentes ficam primeiro em RAM; um snapshot pequeno em `NVS` pode reduzir perda após reboot rápido, mas não substitui persistência durável
 - o AP curto `Q-ESP32-*` pode ficar sempre ativo em bancada com `SETUP_PORTAL_ALWAYS_ON = true`; com a flag desligada, aparece apenas em `SETUP_MODE` ou quando `FORCE_SETUP_MODE_ON_BOOT = true`
-- para depuração local no Windows, a porta serial também pode ser liberada com `.\scripts\free-serial-port.ps1 -Port COM4` quando um monitor `PlatformIO` antigo ficar preso
-- o fluxo de upload do firmware na placa atual pode ainda exigir `BOOT` manual durante o `Connecting...`; isso não altera o contrato MQTT nem o backend
+- para depuração local no Windows, a porta serial também pode ser liberada com `.\scripts\free-serial-port.ps1 -Port COM5` quando um monitor `PlatformIO` antigo ficar preso; substitua pela `COM` real se usar outra placa
+- o ESP32 novo com CP210x em `COM5` fez upload sem segurar `BOOT`; se outra placa exigir `BOOT`, trate como limitação daquele hardware/driver específico
 - o pairing depende de o backend estar acessível ao ESP32 pela rede atual
 - `localhost` nunca deve ser usado dentro do portal do ESP32 para broker MQTT ou backend API
 
