@@ -164,6 +164,7 @@ constexpr uint16_t SENSOR_I2C_RECOVERY_TOTAL_ERROR_THRESHOLD = 64;
 constexpr unsigned long SENSOR_I2C_RECOVERY_COOLDOWN_MS = 5000;
 constexpr unsigned long SENSOR_I2C_ERROR_SUMMARY_INTERVAL_MS = 10000;
 constexpr unsigned long SENSOR_LAST_SAMPLE_MAX_AGE_MS = 6000;
+constexpr unsigned long SENSOR_BEGIN_RETRY_INTERVAL_MS = 10000;
 constexpr bool SERIAL_SENSOR_DEBUG_ENABLED = false;
 constexpr unsigned long SERIAL_SENSOR_DEBUG_INTERVAL_MS = 250;
 constexpr bool SENSOR_ACCEL_CALIBRATION_ENABLED = true;

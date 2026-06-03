@@ -546,10 +546,16 @@ bool SensorMPU6050::refreshScaleFromRegisters() {
     accelLsbPerG_ = accelLsbPerGFromFs(accelFsBits_);
   } else {
     allRead = false;
-    accelFsBits_ = kDesiredAccelFs;
-    accelRangeG_ = accelRangeGFromFs(accelFsBits_);
-    accelLsbPerG_ = accelLsbPerGFromFs(accelFsBits_);
-    AppLog::warn("[sensor] nao foi possivel ler ACCEL_CONFIG; usando divisor esperado para +-8g.");
+    if (scaleReadbackMismatchAccepted_) {
+      AppLog::warnf("[sensor] nao foi possivel ler ACCEL_CONFIG; preservando divisor efetivo anterior accel=+-%ug lsb_per_g=%.0f\n",
+                    static_cast<unsigned>(accelRangeG_),
+                    accelLsbPerG_);
+    } else {
+      accelFsBits_ = kDesiredAccelFs;
+      accelRangeG_ = accelRangeGFromFs(accelFsBits_);
+      accelLsbPerG_ = accelLsbPerGFromFs(accelFsBits_);
+      AppLog::warn("[sensor] nao foi possivel ler ACCEL_CONFIG; usando divisor esperado para +-8g.");
+    }
   }
 
   if (readRegisterWithRetry(*wire_, address_, kRegisterGyroConfig, gyroConfig, "GYRO_CONFIG")) {
@@ -558,10 +564,16 @@ bool SensorMPU6050::refreshScaleFromRegisters() {
     gyroLsbPerDegPerSec_ = gyroLsbPerDegPerSecFromFs(gyroFsBits_);
   } else {
     allRead = false;
-    gyroFsBits_ = kDesiredGyroFs;
-    gyroRangeDegPerSec_ = gyroRangeDegPerSecFromFs(gyroFsBits_);
-    gyroLsbPerDegPerSec_ = gyroLsbPerDegPerSecFromFs(gyroFsBits_);
-    AppLog::warn("[sensor] nao foi possivel ler GYRO_CONFIG; usando divisor esperado para +-500dps.");
+    if (scaleReadbackMismatchAccepted_) {
+      AppLog::warnf("[sensor] nao foi possivel ler GYRO_CONFIG; preservando divisor efetivo anterior gyro=+-%udps lsb_per_dps=%.1f\n",
+                    static_cast<unsigned>(gyroRangeDegPerSec_),
+                    gyroLsbPerDegPerSec_);
+    } else {
+      gyroFsBits_ = kDesiredGyroFs;
+      gyroRangeDegPerSec_ = gyroRangeDegPerSecFromFs(gyroFsBits_);
+      gyroLsbPerDegPerSec_ = gyroLsbPerDegPerSecFromFs(gyroFsBits_);
+      AppLog::warn("[sensor] nao foi possivel ler GYRO_CONFIG; usando divisor esperado para +-500dps.");
+    }
   }
 
   AppLog::infof("[sensor] mpu range accel=+-%ug gyro=+-%udps\n",

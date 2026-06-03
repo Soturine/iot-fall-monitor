@@ -51,6 +51,7 @@ unsigned long lastEventBufferPersistAtMs = 0;
 unsigned long lastSensorHealthLogAtMs = 0;
 unsigned long lastTelemetrySkipLogAtMs = 0;
 unsigned long lastLoopHealthLogAtMs = 0;
+unsigned long lastSensorBeginRetryAtMs = 0;
 unsigned long consecutiveSensorReadFailures = 0;
 uint32_t sensorSampleSeq = 0;
 uint32_t criticalEventSeq = 0;
@@ -1064,6 +1065,42 @@ void logSensorReadFailedIfDue(unsigned long nowMs) {
                 latestReading.valid ? 1U : 0U);
 }
 
+void retrySensorBeginIfDue(unsigned long nowMs) {
+  if (sensorReady) {
+    return;
+  }
+
+  if (lastSensorBeginRetryAtMs > 0U &&
+      (nowMs - lastSensorBeginRetryAtMs) < AppConfig::SENSOR_BEGIN_RETRY_INTERVAL_MS) {
+    return;
+  }
+
+  lastSensorBeginRetryAtMs = nowMs;
+  AppLog::warnf("[sensor] begin retry reason=sensor_not_ready last_error=%s interval_ms=%lu\n",
+                sensor.lastI2cError(),
+                AppConfig::SENSOR_BEGIN_RETRY_INTERVAL_MS);
+
+  sensorReady = sensor.begin();
+  lastSensorReadSucceeded = false;
+  consecutiveSensorReadFailures = sensor.consecutiveFailureCount();
+  latestReading = SensorReading();
+
+  if (sensorReady) {
+    AppLog::infof("[sensor] begin retry ok address=0x%02X who_am_i=0x%02X model=%s accel=+-%ug gyro=+-%udps\n",
+                  sensor.activeAddress(),
+                  sensor.whoAmI(),
+                  sensor.detectedModelName(),
+                  static_cast<unsigned>(sensor.accelRangeG()),
+                  static_cast<unsigned>(sensor.gyroRangeDegPerSec()));
+    return;
+  }
+
+  AppLog::warnf("[sensor] begin retry failed address=0x%02X who_am_i=0x%02X last_error=%s\n",
+                sensor.activeAddress(),
+                sensor.whoAmI(),
+                sensor.lastI2cError());
+}
+
 void logLoopHealthIfDue(unsigned long nowMs) {
   if (!AppConfig::FIRMWARE_LOOP_HEALTH_LOG_ENABLED) {
     return;
@@ -1340,6 +1377,7 @@ void loop() {
   connectivityManager.update();
   logMqttRuntimeContextIfNeeded();
   logLoopHealthIfDue(nowMs);
+  retrySensorBeginIfDue(nowMs);
 
   if (sensorReady && (nowMs - lastSensorSampleAtMs) >= AppConfig::SENSOR_SAMPLE_INTERVAL_MS) {
     lastSensorSampleAtMs = nowMs;
