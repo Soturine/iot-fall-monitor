@@ -42,6 +42,7 @@ export interface DeviceStatus {
   online: boolean;
   wifiRssi: number | null;
   batteryPercent: number | null;
+  batteryPercentSource?: string | null;
   firmwareVersion: string | null;
   sensorReady: boolean | null;
   sensorValid: boolean | null;

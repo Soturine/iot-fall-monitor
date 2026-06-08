@@ -12,10 +12,12 @@ import {
   TELEMETRY_STALE_AFTER_MS,
   evidenceTone,
   expectedTopic,
+  formatBatteryPercent,
   formatBooleanDiagnostic,
   formatEvidenceNumber,
   formatNumberDiagnostic,
   formatTopicValue,
+  humanizeBatteryPercentSource,
   humanizeEvidenceStatus,
 } from "../lib/deviceDiagnostics";
 import { applyTelemetryPatchToDetail } from "../lib/deviceRealtime";
@@ -454,6 +456,11 @@ export function DeviceDetailPage() {
     (event) => event.eventType === "fall_detected" || event.eventType === "fall_suspected",
   );
   const currentState = classifyCurrentState(detail);
+  const batteryLabel = formatBatteryPercent(detail.device.status.batteryPercent);
+  const batterySourceLabel = humanizeBatteryPercentSource(
+    detail.device.status.batteryPercentSource,
+    detail.device.status.batteryPercent,
+  );
   const statusTopic = expectedTopic(detail.device.deviceIdentifier, "status");
   const telemetryTopic = expectedTopic(detail.device.deviceIdentifier, "telemetry");
   const eventsTopic = expectedTopic(detail.device.deviceIdentifier, "events");
@@ -536,8 +543,10 @@ export function DeviceDetailPage() {
                   Bateria
                 </div>
                 <p className="mt-3 font-display text-3xl font-semibold">
-                  {detail.device.status.batteryPercent ?? "--"}
-                  <span className="ml-0.5 text-base font-medium text-white/65">%</span>
+                  {batteryLabel}
+                </p>
+                <p className="mt-1 text-xs font-medium text-white/65">
+                  {batterySourceLabel || "não informado"}
                 </p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
@@ -787,7 +796,8 @@ export function DeviceDetailPage() {
               </p>
               <p className="mt-2 text-xs text-surface-500">
                 RSSI {detail.device.status.wifiRssi ?? "--"} • bateria{" "}
-                {detail.device.status.batteryPercent ?? "--"}% •{" "}
+                {batteryLabel}
+                {batterySourceLabel ? ` ${batterySourceLabel}` : ""} •{" "}
                 {detail.device.status.online
                   ? "telemetria MQTT recente"
                   : "sem telemetria MQTT recente"}

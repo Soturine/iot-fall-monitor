@@ -13,6 +13,10 @@ import { Modal } from "../components/ui/Modal";
 import { useAuth } from "../contexts/AuthContext";
 import { useRealtime } from "../contexts/RealtimeContext";
 import { cn } from "../lib/cn";
+import {
+  formatBatteryPercent,
+  humanizeBatteryPercentSource,
+} from "../lib/deviceDiagnostics";
 import { applyTelemetryPatchToDeviceList } from "../lib/deviceRealtime";
 import {
   deviceBehaviorTone,
@@ -538,6 +542,10 @@ export function DevicesPage() {
         <div className="grid gap-4 xl:grid-cols-2">
           {devices.map((device) => {
             const battery = device.status.batteryPercent;
+            const batterySourceLabel = humanizeBatteryPercentSource(
+              device.status.batteryPercentSource,
+              battery,
+            );
             const batteryTone =
               typeof battery !== "number"
                 ? "text-surface-500"
@@ -654,8 +662,10 @@ export function DevicesPage() {
                       Bateria
                     </p>
                     <p className={cn("mt-2 font-display text-2xl font-semibold", batteryTone)}>
-                      {battery ?? "--"}
-                      <span className="ml-0.5 text-sm font-medium text-surface-500">%</span>
+                      {formatBatteryPercent(battery)}
+                    </p>
+                    <p className="mt-1 text-[11px] text-surface-500">
+                      {batterySourceLabel || "Não informado"}
                     </p>
                     <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-surface-100">
                       <div

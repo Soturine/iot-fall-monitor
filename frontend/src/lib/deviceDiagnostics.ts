@@ -55,6 +55,34 @@ export function formatTopicValue(value: string | null | undefined) {
   return value || "--";
 }
 
+export function humanizeBatteryPercentSource(
+  source: string | null | undefined,
+  value?: number | null,
+) {
+  switch (source) {
+    case "manual":
+      return "manual";
+    case "estimated":
+      return "estimado";
+    case "automatic":
+    case "adc":
+    case "fuel_gauge":
+      return "automático";
+    case "not_configured":
+      return "não informado";
+    default:
+      return typeof value === "number" && Number.isFinite(value)
+        ? "origem não informada"
+        : null;
+  }
+}
+
+export function formatBatteryPercent(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value)
+    ? `${value}%`
+    : "--%";
+}
+
 export function expectedTopic(deviceIdentifier: string, channel: DiagnosticMqttChannel) {
   return `${MQTT_TOPIC_BASE}/${deviceIdentifier}/${channel}`;
 }
