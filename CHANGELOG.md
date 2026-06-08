@@ -9,6 +9,29 @@
 - testar classificação de movimentos com múltiplas runs por classe
 - validar o sistema com ESP32 real, MPU6050, backend, MQTT e dashboard em cenário ponta a ponta
 
+## [v0.8.30] - 2026-06-08
+### Adicionado
+- campo opcional de bateria manual no portal ESP32, persistido em `NVS`, para copiar de forma explícita a porcentagem exibida por módulo externo de bateria
+- `battery_percent_source` nos payloads MQTT do firmware, usando `manual` quando o valor foi configurado e `not_configured` quando não há medição confiável
+- helpers no frontend para exibir bateria como `--%`/`não informado` quando o firmware não publicou valor real ou manual
+- teste de ingestão MQTT cobrindo bateria manual e limpeza do placeholder antigo quando o device informa `battery_percent_source=not_configured`
+
+### Alterado
+- firmware deixa de publicar `battery_level=100` como placeholder fixo; `battery_level`/`battery_percent` só aparecem quando há valor manual configurado
+- backend preserva compatibilidade com payloads antigos, mas limpa bateria stale quando o ESP32 declara que a bateria não está configurada
+- lista e detalhe de dispositivos mostram a origem da bateria (`manual`, `automático`, `estimado` ou `não informado`) sem tratar valor manual como leitura real
+- versão alinhada para `0.8.30` em packages da raiz, backend, frontend e locks existentes
+
+### Documentação
+- `README.md` passa a documentar `v0.8.30` como baseline atual
+- docs técnicos explicam o diagnóstico do ESP32 novo em `COM5`, a estabilidade observada de IMU/I2C por cerca de `75 s` sem erros/recoveries e a diferença entre bateria manual, bateria não informada e leitura automática futura
+- documentação registra que a saída `5V` de placa boost não é suficiente para estimar porcentagem real; leitura automática futura deve usar divisor resistivo no ADC ou fuel gauge como `MAX17048`/`MAX17043`
+
+### Limitações conhecidas
+- a bateria manual é apenas informativa e depende do valor copiado pelo operador no portal ESP32
+- ainda não há medição automática de bateria no firmware; ADC calibrado ou fuel gauge dedicado ficam como evolução futura
+- validação de buzzer, eventos e telemetria continua dependente de teste físico controlado em bancada, sem queda real de pessoa
+
 ## [v0.8.29] - 2026-06-03
 ### Alterado
 - firmware centraliza campos comuns de payload (`device_uid`, `device_id`, bateria, rede, diagnóstico de sensor e leitura mais recente) sem mudar o contrato MQTT de `status`, `telemetry` ou `events`

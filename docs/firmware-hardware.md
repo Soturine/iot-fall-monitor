@@ -104,6 +104,8 @@ Depois de escrever os registradores, o firmware lê `ACCEL_CONFIG` e `GYRO_CONFI
 
 O sensor é considerado pronto quando o firmware encontra um `WHO_AM_I` compatível e consegue fazer uma leitura raw básica. Falhas de readback de escala ou calibração não deixam mais `sensor_ready=0`: o firmware registra o motivo, usa divisor fallback coerente e continua publicando telemetria sem offsets. Pacote raw totalmente zerado (`ax=ay=az=gx=gy=gz=0`) é descartado e não vira amostra válida. Se `sensor_ready=0` por falha de boot, o loop tenta `sensor.begin()` novamente a cada `SENSOR_BEGIN_RETRY_INTERVAL_MS`.
 
+Na `v0.8.30`, o firmware deixou de publicar `battery_level=100` como placeholder fixo. A bateria passa a ser opcional: se o operador preencher a porcentagem manual no portal ESP32, `status`, `telemetry` e `events` publicam `battery_level`, `battery_percent` e `battery_percent_source="manual"`. Se não houver valor configurado, o payload publica apenas `battery_percent_source="not_configured"` e o backend/frontend tratam como bateria não informada.
+
 Na `v0.8.29`, os payloads do firmware foram apenas reorganizados internamente: identidade do device, bateria, RSSI, diagnóstico de sensor e campos da última leitura são preenchidos por helpers comuns em `src/main.cpp`. Isso reduz duplicação entre `events`, `status` e `telemetry`, mas não muda tópicos, nomes de campos nem regras de publicação.
 
 ### Estabilidade I2C do MPU6050
@@ -117,6 +119,8 @@ O erro serial `requestFrom(): i2cWriteReadNonStop returned Error -1` costuma apa
 - `SENSOR_I2C_RECOVERY_TOTAL_ERROR_THRESHOLD = 64`
 
 Quando houver falhas consecutivas ou volume alto de falhas intermitentes desde o último recovery, o firmware registra um resumo throttled, reinicia o barramento I2C, reconfigura o MPU6050 e não recalibra em loop. Se o recovery falhar, a última amostra válida fica preservada por uma janela curta. O status MQTT continua levando diagnóstico do sensor; a telemetria periódica só é publicada quando houver amostra válida e fresca.
+
+Validação de bancada da `v0.8.30`: após compilar, enviar pela `COM5` e monitorar o ESP32 novo por cerca de `75 s`, o Serial Monitor manteve `sensor_ready=1`, `sensor_valid=1`, `sensor_read_ok=1`, `mqtt_connected=1`, `sample_age_ms` baixo, `accel_magnitude=1.00`, `i2c_errors=0` e `recoveries=0`, com `telemetry publish ok` contínuo. Isso é forte evidência de que a instabilidade anterior com milhares de `i2c_read_failed` era física ou de montagem/hardware e não do fluxo MQTT/backend/frontend. Se o erro voltar, investigue primeiro cabo, alimentação, GND comum, protoboard, módulo IMU e contato dos fios antes de refatorar backend ou frontend.
 
 No Serial Monitor, procure:
 
@@ -285,11 +289,33 @@ Como o portal pode existir tanto em `SETUP_MODE` quanto em manutenção paralela
 
 Isso evita prometer que o device já está operando normalmente quando ele ainda está apenas em fase de ajuste/configuração.
 
+### Energia e bateria manual
+
+O portal ESP32 possui o card `Energia e bateria` para informar manualmente uma porcentagem entre `0` e `100`. Esse campo é persistido em `NVS` e serve apenas para copiar o valor exibido por um módulo externo de bateria durante testes de bancada.
+
+Quando o campo está preenchido:
+
+- `battery_level` recebe o valor manual para preservar compatibilidade com clientes antigos
+- `battery_percent` recebe o mesmo valor manual
+- `battery_percent_source` recebe `manual`
+
+Quando o campo fica vazio:
+
+- `battery_level` e `battery_percent` não são publicados pelo firmware
+- `battery_percent_source` recebe `not_configured`
+- o backend limpa placeholder antigo de bateria e o frontend mostra `--%`/`não informado`
+
+Não trate o valor manual como leitura real. Placas de power bank/boost que exibem percentual no próprio módulo não entregam esse percentual automaticamente ao ESP32. A saída `5V` boost também não permite estimar porcentagem real de bateria com segurança, porque ela é regulada. Para medição automática futura, use uma das abordagens abaixo:
+
+- divisor resistivo no `ADC` medindo a tensão da célula Li-ion/LiPo antes do conversor boost, com calibração e proteção adequada
+- fuel gauge dedicado, por exemplo `MAX17048` ou `MAX17043`, ligado por `I2C`
+
 ## Telemetria e snapshot técnico
 
 Nesta baseline, a telemetria continua sendo publicada em alta frequência, mas agora também leva:
 
-- `battery_level`
+- `battery_level`/`battery_percent` somente quando houver valor manual configurado ou leitura automática futura
+- `battery_percent_source`, com `manual` ou `not_configured` nesta versão
 - `wifi_rssi`
 
 Unidades esperadas no payload MQTT:
@@ -309,7 +335,8 @@ No firmware atual, a telemetria periódica continua rodando mesmo com o portal d
 
 O payload real também carrega campos técnicos extras ignorados por clientes antigos:
 
-- `battery_percent` alem de `battery_level`
+- `battery_percent` alem de `battery_level`, quando houver valor manual configurado
+- `battery_percent_source`
 - `rssi` alem de `wifi_rssi`
 - `sensor_ready`
 - `sensor_valid`
@@ -679,7 +706,9 @@ Todos os payloads são `JSON` em `snake_case`.
     "experimental": true,
     "reason": "fft_experimental_disabled"
   },
-  "battery_level": 100
+  "battery_level": 78,
+  "battery_percent": 78,
+  "battery_percent_source": "manual"
 }
 ```
 
@@ -694,7 +723,9 @@ Todos os payloads são `JSON` em `snake_case`.
   "accel_magnitude": 1.01,
   "gyro_magnitude": 8.4,
   "immobility_confirmed": false,
-  "battery_level": 100,
+  "battery_level": 78,
+  "battery_percent": 78,
+  "battery_percent_source": "manual",
   "wifi_rssi": -58,
   "buffered_events": 0
 }
@@ -722,7 +753,7 @@ Todos os payloads são `JSON` em `snake_case`.
 
 Observações relevantes:
 
-- `battery_level` ainda é placeholder
+- `battery_level`/`battery_percent` só aparecem quando houver valor manual configurado ou uma leitura automática futura; sem isso, `battery_percent_source` vem como `not_configured`
 - `telemetry` não entra no `EventBuffer`
 - o modo de teste `MPU6050 + buzzer` não altera payloads
 - os tópicos continuam `queda/devices/{deviceId}/{canal}`

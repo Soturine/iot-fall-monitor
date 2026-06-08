@@ -374,6 +374,8 @@ npm run mqtt:watch --prefix backend
 
 O watcher deve mostrar linhas JSON com `topic`, `bytes`, `json: "ok"` e um resumo com `device_id`, `device_uid`, `timestamp`, RSSI/bateria ou amostras do sensor.
 
+Na `v0.8.30`, bateria só aparece como porcentagem quando o campo manual foi preenchido no portal ESP32 ou quando houver uma leitura automática futura. Sem isso, o firmware informa `battery_percent_source=not_configured` e o dashboard deve mostrar `--%`/`não informado`, não `100%`.
+
 Durante o teste real, deixe esse terminal aberto e reinicie o ESP32 com o Serial Monitor em `115200`. O firmware deve registrar:
 
 ```text
@@ -460,7 +462,8 @@ cd C:\Queda
 11. habilite o buzzer apenas se o módulo estiver ligado e a polaridade estiver correta
 12. salve a pré-calibração
 13. clique em `Testar buzzer` para validar o hardware local
-14. mova o conjunto `ESP32 + MPU6050/MPU6500/MPU9250` de forma controlada em bancada
+14. se quiser validar a bateria no dashboard, preencha `Energia e bateria` com o percentual exibido pelo módulo externo; deixe em branco para validar `--%`/`não informado`
+15. mova o conjunto `ESP32 + MPU6050/MPU6500/MPU9250` de forma controlada em bancada
 
 O esperado:
 

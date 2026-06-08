@@ -68,7 +68,9 @@ O `{deviceId}` do tópico deve bater com o `device_id` operacional do payload se
   "timestamp": 1760000000,
   "online": true,
   "wifi_rssi": -58,
-  "battery_level": 86
+  "battery_level": 78,
+  "battery_percent": 78,
+  "battery_percent_source": "manual"
 }
 ```
 
@@ -78,6 +80,7 @@ Campos usados:
 - `device_uid`: identidade técnica estável quando disponível.
 - `timestamp`: Unix time em segundos; se for implausivel, o backend usa a hora de recebimento.
 - `wifi_rssi`, `battery_level` ou `battery_percent`: atualizam `device_status`.
+- `battery_percent_source`: informa se a bateria veio de valor `manual`, leitura futura `automatic`/`adc`/`fuel_gauge` ou se está `not_configured`.
 
 ### Telemetry
 
@@ -154,7 +157,9 @@ Para queda, essas amostras também viram evidência técnica consultavel quando 
     "available": false,
     "reason": "backend_links_persisted_telemetry"
   },
-  "battery_level": 86
+  "battery_level": 78,
+  "battery_percent": 78,
+  "battery_percent_source": "manual"
 }
 ```
 
@@ -267,6 +272,8 @@ O `evidenceSummary` do backend continua sendo o resumo das amostras realmente pe
 Na `v0.8.28`, o firmware também registra o motivo do buzzer (`reason=movement_detected`, `fall_suspected`, `fall_detected`, `sos_pressed`, `portal_test` ou `boot_autotest`) e quando ele foi pulado por `disabled` ou `no_alert_event`. Esses logs são a primeira evidência para separar falha de regra, configuração desligada e problema físico do buzzer.
 
 Na `v0.8.29`, a arquitetura de alerta não mudou. A alteração foi de manutenção: campos comuns de evento/status/telemetria foram centralizados no firmware e normalizadores repetidos foram centralizados no backend, preservando a decisão local de buzzer e a emissão `alert:new`.
+
+Na `v0.8.30`, alertas e telemetria preservam o mesmo fluxo, mas a bateria deixa de ser placeholder fixo. Eventos críticos podem carregar `battery_percent_source="manual"` quando o valor foi informado no portal ESP32 ou `not_configured` quando não há medição confiável; o backend preserva o payload bruto para auditoria, mas não deve tratar bateria manual como evidência clínica ou leitura automática.
 
 Responsabilidades atuais:
 

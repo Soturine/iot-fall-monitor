@@ -6,9 +6,11 @@ O objetivo do repositório é integrar hardware embarcado, ingestão de eventos,
 
 ## Baseline Atual
 
-Baseline atual do repositório: `v0.8.29`.
+Baseline atual do repositório: `v0.8.30`.
 
-A baseline `v0.8.29` é uma rodada conservadora de qualidade de código e validação da documentação operacional. Ela preserva a lógica de alerta, telemetria, MQTT, Socket.IO e schema, mas reduz duplicações em pontos críticos: payloads comuns do firmware, normalizadores backend e helpers de diagnóstico do detalhe do dispositivo no frontend.
+A baseline `v0.8.30` fecha a leitura falsa de bateria: o firmware deixou de publicar `100%` como placeholder fixo, o portal ESP32 ganhou uma bateria manual opcional persistida em `NVS`, os payloads MQTT passam a indicar `battery_percent_source` e o frontend mostra `--%`/`não informado` quando não existe valor real ou manual. O valor manual é apenas informativo, útil para copiar o percentual exibido por um módulo externo de bateria enquanto a medição automática por ADC ou fuel gauge não existir. Na validação com o ESP32 novo em `COM5`, a telemetria permaneceu estável por cerca de `75 s` com `i2c_errors=0`, `recoveries=0`, `sensor_read_ok=1` e `accel_magnitude=1.00`, indicando que a instabilidade anterior do barramento era física ou de montagem/hardware.
+
+A baseline anterior `v0.8.29` é uma rodada conservadora de qualidade de código e validação da documentação operacional. Ela preserva a lógica de alerta, telemetria, MQTT, Socket.IO e schema, mas reduz duplicações em pontos críticos: payloads comuns do firmware, normalizadores backend e helpers de diagnóstico do detalhe do dispositivo no frontend.
 
 A baseline anterior `v0.8.28` estabiliza a camada física da IMU no ESP32 novo com CP210x em `COM5`: o firmware identifica `MPU6050`, `MPU6500` e `MPU9250` por `WHO_AM_I`, aceita a faixa efetiva lida quando o chip permanece em `+-2g/+-250dps`, descarta leituras raw totalmente zeradas e registra magnitude raw/corrigida para diagnosticar se o repouso está perto de `1 g`.
 
@@ -78,6 +80,7 @@ O modelo atual deixou de ser um painel global único e passou a trabalhar com or
 - status comportamental/postural heurístico experimental
 - estados explícitos para sensor inválido, telemetria desatualizada, movimento leve/intenso, queda, SOS manual e calibração pendente
 - suporte a buzzer, logs de diagnóstico e botão `Testar buzzer` no portal ESP32
+- bateria manual opcional no portal ESP32, com origem explícita no MQTT e exibição `--%` quando não há valor configurado
 - scripts Windows para setup, banco, start, stop e smoke test
 
 ## Capturas de Tela
@@ -401,7 +404,7 @@ O frontend exibe esse status de forma discreta no dashboard, na lista de disposi
 - O projeto não possui GPS.
 - O sistema não fornece diagnóstico médico ou clínico definitivo.
 - Os thresholds de queda, imobilidade e postura ainda precisam de validação prática com hardware real.
-- A leitura de bateria do firmware real ainda pode ser placeholder se não houver circuito de medição dedicado.
+- A bateria exibida no site só deve ser considerada informativa quando a origem for `manual`; sem valor manual ou circuito dedicado, o frontend mostra `--%`/`não informado`.
 - O fluxo padrão continua usando `mqtt://`; `mqtts://` existe como preparação opt-in e depende de configuração coerente.
 - O buzzer fica desabilitado por padrão em bancada; para teste manual ou alarme sonoro real, revise `BUZZER_ACTIVE_HIGH` conforme a polaridade do módulo, habilite o buzzer na pré-calibração do portal ESP32 e use o botão `Testar buzzer`.
 - O portal local do ESP32 não substitui o dashboard principal.

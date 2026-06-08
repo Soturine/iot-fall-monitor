@@ -94,7 +94,9 @@ Exemplo de `fall_detected`:
     "experimental": true,
     "reason": "fft_experimental_disabled"
   },
-  "battery_level": 100
+  "battery_level": 78,
+  "battery_percent": 78,
+  "battery_percent_source": "manual"
 }
 ```
 
@@ -107,6 +109,8 @@ Na `v0.8.27`, o firmware também pode publicar `fall_suspected` e `movement_dete
 Na `v0.8.28`, o contrato MQTT permanece o mesmo, mas a fronteira física da IMU ficou mais rígida: o firmware aceita `WHO_AM_I=0x68` (`MPU6050`), `0x70` (`MPU6500`) e `0x71` (`MPU9250`), usa a faixa efetiva lida em `ACCEL_CONFIG`/`GYRO_CONFIG`, preserva a última escala efetiva durante recoveries com readback falho, descarta amostra raw totalmente zerada e mantém `sensor_read_ok=false` quando a leitura falha. O buzzer continua sendo decisão local do firmware; alertas criados apenas no backend não acionam hardware sem um futuro comando MQTT de retorno para `queda/devices/{deviceId}/commands`.
 
 Na `v0.8.29`, o contrato MQTT continua inalterado. A mudança foi apenas interna: campos comuns de `status`, `telemetry` e `events` passaram a ser montados por helpers compartilhados no firmware para reduzir divergência entre payloads. Os nomes de campos, tópicos, canais Socket.IO e regras de persistência permanecem os mesmos.
+
+Na `v0.8.30`, a bateria deixa de ser placeholder. Quando o portal ESP32 tem uma porcentagem manual configurada, o firmware publica `battery_level`, `battery_percent` e `battery_percent_source="manual"` em `status`, `telemetry` e `events`. Quando não há valor configurado, publica `battery_percent_source="not_configured"` e omite os campos numéricos; o backend limpa bateria stale e o frontend mostra `--%`/`não informado`.
 
 ### Confiabilidade por criticidade
 
@@ -157,7 +161,9 @@ O GIF do fluxo ESP32/evento -> MQTT -> backend -> dashboard ainda deve ser captu
   "accel_magnitude": 1.01,
   "gyro_magnitude": 8.4,
   "immobility_confirmed": false,
-  "battery_level": 100,
+  "battery_level": 78,
+  "battery_percent": 78,
+  "battery_percent_source": "manual",
   "wifi_rssi": -58,
   "buffered_events": 0
 }
@@ -180,7 +186,9 @@ O GIF do fluxo ESP32/evento -> MQTT -> backend -> dashboard ainda deve ser captu
   "gyro_magnitude": 6.4,
   "pitch_deg": -3.1,
   "roll_deg": 2.7,
-  "battery_level": 100,
+  "battery_level": 78,
+  "battery_percent": 78,
+  "battery_percent_source": "manual",
   "wifi_rssi": -58
 }
 ```
@@ -197,6 +205,14 @@ O firmware converte raw da IMU usando a faixa efetiva lida em `ACCEL_CONFIG`/`GY
 Falhas de readback ou calibração não devem interromper o contrato MQTT: o firmware usa fallback de escala, segue sem offsets quando necessário e publica telemetria se a leitura raw I2C estiver funcionando. Pacotes raw totalmente zerados são tratados como falha e não devem criar telemetria real.
 
 Falhas transitórias de I2C também não devem derrubar Wi-Fi/MQTT. O firmware publica diagnósticos extras em `status` e, quando houver amostra real, também em `telemetry` (`sensor_ready`, `sensor_valid`, `sensor_read_ok`, `sensor_sample_age_ms`, `sensor_failures`, `i2c_error_count`, `i2c_recovery_count`, `i2c_last_error`). Quando a última amostra fica velha demais, o firmware mantém `status` com diagnóstico e pula `telemetry`; o backend também rejeita payloads de `telemetry` sem eixos reais para não criar `telemetry_logs` inválidos.
+
+Para bateria, `battery_percent_source` informa a origem:
+
+- `manual`: valor informado pelo operador no portal ESP32, apenas informativo
+- `not_configured`: nenhum valor confiável disponível; backend/frontend devem mostrar bateria como não informada
+- `automatic`, `adc` ou `fuel_gauge`: reservados para leitura automática futura
+
+Payloads antigos com apenas `battery_level` ou `battery_percent` continuam aceitos. A `v0.8.30` apenas impede que o firmware real publique `100%` fixo quando não existe medição.
 
 ### Visualizacao da telemetria no frontend
 
@@ -664,7 +680,7 @@ Elas não disparam notificação externa. No estado atual do projeto, alerta sig
 ## Observações operacionais importantes
 
 - `telemetry` continua fora do `EventBuffer` do firmware
-- `battery_level` do firmware real ainda é placeholder
+- bateria do firmware real só é publicada quando existe valor manual no portal ou leitura automática futura; sem isso, `battery_percent_source=not_configured`
 - o firmware só considera o device realmente saudável quando `Wi-Fi + MQTT` estão simultaneamente ok
 - eventos críticos pendentes ficam primeiro em RAM; um snapshot pequeno em `NVS` pode reduzir perda após reboot rápido, mas não substitui persistência durável
 - o AP curto `Q-ESP32-*` pode ficar sempre ativo em bancada com `SETUP_PORTAL_ALWAYS_ON = true`; com a flag desligada, aparece apenas em `SETUP_MODE` ou quando `FORCE_SETUP_MODE_ON_BOOT = true`
