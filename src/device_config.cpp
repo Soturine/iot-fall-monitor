@@ -304,6 +304,18 @@ unsigned long clampAlertCooldownMs(unsigned long value) {
                            AppConfig::ALERT_NORMAL_COOLDOWN_MS);
 }
 
+uint8_t clampBatteryPercent(long value) {
+  if (value < 0) {
+    return 0;
+  }
+
+  if (value > 100) {
+    return 100;
+  }
+
+  return static_cast<uint8_t>(value);
+}
+
 void applyAlertSensitivityPreset(AlertTuningConfig& alertTuning, const String& preset) {
   const String normalized = normalizeAlertSensitivityPreset(preset);
   alertTuning.sensitivityPreset = normalized;

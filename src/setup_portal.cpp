@@ -44,6 +44,42 @@ unsigned long parseUnsignedLongOrDefault(const String& value, unsigned long fall
   return static_cast<unsigned long>(parsed);
 }
 
+bool parseOptionalBatteryPercent(const String& value,
+                                 bool* manualSet,
+                                 uint8_t* manualPercent) {
+  String normalized = value;
+  normalized.trim();
+  if (normalized.isEmpty()) {
+    if (manualSet != nullptr) {
+      *manualSet = false;
+    }
+    if (manualPercent != nullptr) {
+      *manualPercent = 0;
+    }
+    return true;
+  }
+
+  for (size_t index = 0; index < normalized.length(); ++index) {
+    const char current = normalized.charAt(index);
+    if (current < '0' || current > '9') {
+      return false;
+    }
+  }
+
+  const long parsed = normalized.toInt();
+  if (parsed < 0 || parsed > 100) {
+    return false;
+  }
+
+  if (manualSet != nullptr) {
+    *manualSet = true;
+  }
+  if (manualPercent != nullptr) {
+    *manualPercent = DeviceSettings::clampBatteryPercent(parsed);
+  }
+  return true;
+}
+
 String sensitivityLabel(const String& preset) {
   const String normalized = DeviceSettings::normalizeAlertSensitivityPreset(preset);
   if (normalized == AppConfig::ALERT_SENSITIVITY_LOW) {
@@ -396,6 +432,8 @@ void SetupPortal::handleSaveSettings() {
       server_.hasArg("alert_window_ms") ||
       server_.hasArg("alert_cooldown_ms") ||
       server_.hasArg("alert_form");
+  const bool updatesPower = server_.hasArg("power_form") ||
+                            server_.hasArg("battery_percent_manual");
 
   if (server_.hasArg("device_id")) {
     updated.deviceId = server_.arg("device_id");
@@ -465,6 +503,23 @@ void SetupPortal::handleSaveSettings() {
     updated.alertTuning.eventsEnabled = server_.hasArg("alert_events_enabled");
   }
 
+  if (updatesPower) {
+    bool manualSet = false;
+    uint8_t manualPercent = 0;
+    if (!parseOptionalBatteryPercent(
+            server_.arg("battery_percent_manual"),
+            &manualSet,
+            &manualPercent)) {
+      flashMessage_ = "Porcentagem manual da bateria deve ficar entre 0 e 100.";
+      flashTone_ = "error";
+      redirectToPortal();
+      return;
+    }
+
+    updated.power.manualBatteryPercentSet = manualSet;
+    updated.power.manualBatteryPercent = manualPercent;
+  }
+
   if (updatesMqtt && !DeviceSettings::hasValidMqttConfig(updated)) {
     flashMessage_ =
         "Broker MQTT invalido. Use host/IP real do broker e nunca localhost no ESP32.";
@@ -491,6 +546,12 @@ void SetupPortal::handleSaveSettings() {
   } else if (updatesAlert && !updatesMqtt) {
     flashMessage_ =
         "Pre-calibracao de alerta salva em NVS. Os novos thresholds valem no loop atual.";
+    flashTone_ = "success";
+  } else if (updatesPower && !updatesMqtt) {
+    flashMessage_ =
+        updated.power.manualBatteryPercentSet
+            ? "Bateria manual salva em NVS. O proximo status MQTT publicara origem manual."
+            : "Bateria manual removida. O site mostrara bateria como nao informada.";
     flashTone_ = "success";
   } else {
     flashMessage_ =
@@ -988,6 +1049,26 @@ void SetupPortal::appendMqttCard(String& html) const {
   html += "</div>";
 }
 
+void SetupPortal::appendPowerCard(String& html) const {
+  html += "<div class='card'><h2>Energia e bateria</h2>";
+  html += "<p class='muted'>Enquanto nao houver leitura automatica por ADC ou fuel gauge, copie manualmente a porcentagem exibida no modulo de bateria. Esse valor e apenas informativo.</p>";
+  html += "<form method='post' action='/save' class='grid'>";
+  html += "<input type='hidden' name='power_form' value='1'>";
+  html += "<div><label>Porcentagem manual da bateria</label><input name='battery_percent_manual' type='number' min='0' max='100' step='1' value='";
+  html += config_.power.manualBatteryPercentSet ? String(config_.power.manualBatteryPercent) : "";
+  html += "' placeholder='Ex.: 78'></div>";
+  html += "<p class='hint'>Atual: ";
+  if (config_.power.manualBatteryPercentSet) {
+    html += String(config_.power.manualBatteryPercent);
+    html += "% manual";
+  } else {
+    html += "nao informado";
+  }
+  html += ". Deixe em branco para remover o valor manual.</p>";
+  html += "<div class='row'><button class='primary' type='submit'>Salvar bateria</button></div></form>";
+  html += "</div>";
+}
+
 void SetupPortal::appendAlertTuningCard(String& html) const {
   const auto& alert = config_.alertTuning;
   html += "<div class='card'><h2>Pre-calibracao experimental de alertas</h2>";
@@ -1077,6 +1158,7 @@ String SetupPortal::renderPage() const {
   appendOperationalHealthCard(html);
   appendWifiCard(html);
   appendMqttCard(html);
+  appendPowerCard(html);
   appendAlertTuningCard(html);
   appendPairingCard(html);
   appendRestartCard(html);

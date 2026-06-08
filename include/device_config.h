@@ -45,6 +45,11 @@ struct AlertTuningConfig {
   bool eventsEnabled = AppConfig::ALERT_EVENT_PUBLICATION_ENABLED_DEFAULT;
 };
 
+struct PowerConfig {
+  bool manualBatteryPercentSet = false;
+  uint8_t manualBatteryPercent = 0;
+};
+
 struct DeviceConfig {
   bool loadedFromNvs = false;
   String deviceId;
@@ -52,6 +57,7 @@ struct DeviceConfig {
   String deviceSyncToken;
   PatientProfileSummary patientProfile;
   AlertTuningConfig alertTuning;
+  PowerConfig power;
   WifiNetworkConfig wifiNetworks[kMaxWifiNetworks];
   size_t wifiNetworkCount = 0;
 };
@@ -82,6 +88,7 @@ float clampAlertAccelThreshold(float value);
 float clampAlertGyroThreshold(float value);
 unsigned long clampAlertAnalysisWindowMs(unsigned long value);
 unsigned long clampAlertCooldownMs(unsigned long value);
+uint8_t clampBatteryPercent(long value);
 
 bool upsertWifiNetwork(DeviceConfig& config,
                        const String& ssid,

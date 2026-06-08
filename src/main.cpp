@@ -65,11 +65,6 @@ unsigned long currentTimestampSeconds() {
   return (now >= 1700000000) ? static_cast<unsigned long>(now) : millis() / 1000UL;
 }
 
-int batteryLevelPercent() {
-  // Placeholder: trocar por leitura ADC quando houver circuito de bateria.
-  return 100;
-}
-
 unsigned long latestSensorSampleAgeMs(unsigned long nowMs) {
   if (!latestReading.valid || nowMs < latestReading.timestampMs) {
     return 0U;
@@ -305,9 +300,17 @@ void addDeviceIdentityToPayload(JsonDocument& doc) {
 }
 
 void addBatteryFieldsToPayload(JsonDocument& doc) {
-  const int batteryPercent = batteryLevelPercent();
+  const auto& powerConfig = runtimeConfig().power;
+  if (!powerConfig.manualBatteryPercentSet) {
+    doc["battery_percent_source"] = "not_configured";
+    return;
+  }
+
+  const uint8_t batteryPercent =
+      DeviceSettings::clampBatteryPercent(powerConfig.manualBatteryPercent);
   doc["battery_level"] = batteryPercent;
   doc["battery_percent"] = batteryPercent;
+  doc["battery_percent_source"] = "manual";
 }
 
 void addNetworkFieldsToPayload(JsonDocument& doc) {

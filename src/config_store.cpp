@@ -33,6 +33,8 @@ constexpr char kAlertWindowKey[] = "alert_window";
 constexpr char kAlertCooldownKey[] = "alert_cooldown";
 constexpr char kAlertBuzzerKey[] = "alert_buzzer";
 constexpr char kAlertEventsKey[] = "alert_events";
+constexpr char kBatteryManualSetKey[] = "bat_manual_set";
+constexpr char kBatteryManualPercentKey[] = "bat_manual_pct";
 constexpr char kPendingEventCountKey[] = "evt_count";
 
 String wifiSsidKey(size_t index) {
@@ -122,6 +124,12 @@ DeviceSettings::DeviceConfig ConfigStore::load() {
       preferences.getBool(kAlertBuzzerKey, config.alertTuning.buzzerEnabled);
   config.alertTuning.eventsEnabled =
       preferences.getBool(kAlertEventsKey, config.alertTuning.eventsEnabled);
+  config.power.manualBatteryPercentSet =
+      preferences.getBool(kBatteryManualSetKey, config.power.manualBatteryPercentSet);
+  config.power.manualBatteryPercent =
+      DeviceSettings::clampBatteryPercent(
+          preferences.getUChar(kBatteryManualPercentKey,
+                               config.power.manualBatteryPercent));
 
   const size_t count = preferences.getUChar(kWifiCountKey, 0);
   config.wifiNetworkCount = 0;
@@ -195,6 +203,10 @@ bool ConfigStore::save(const DeviceSettings::DeviceConfig& config) {
                            config.alertTuning.cooldownMs));
   preferences.putBool(kAlertBuzzerKey, config.alertTuning.buzzerEnabled);
   preferences.putBool(kAlertEventsKey, config.alertTuning.eventsEnabled);
+  preferences.putBool(kBatteryManualSetKey, config.power.manualBatteryPercentSet);
+  preferences.putUChar(kBatteryManualPercentKey,
+                       DeviceSettings::clampBatteryPercent(
+                           config.power.manualBatteryPercent));
   preferences.putUChar(kWifiCountKey, static_cast<uint8_t>(config.wifiNetworkCount));
 
   for (size_t index = 0; index < DeviceSettings::kMaxWifiNetworks; ++index) {

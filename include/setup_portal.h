@@ -67,6 +67,7 @@ class SetupPortal {
   void appendOperationalHealthCard(String& html) const;
   void appendWifiCard(String& html) const;
   void appendMqttCard(String& html) const;
+  void appendPowerCard(String& html) const;
   void appendAlertTuningCard(String& html) const;
   void appendPairingCard(String& html) const;
   void appendRestartCard(String& html) const;
