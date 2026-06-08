@@ -22,11 +22,29 @@ const { createAlertForEvent } = require("./alertService");
 const { emitScopedEvent } = require("../socket/scopedEmitter");
 const { runWithKeyedLock } = require("../utils/keyedLock");
 
+function normalizeBatteryPercentSource(value) {
+  if (!value) {
+    return null;
+  }
+
+  const normalized = String(value).trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+
+  if (["manual", "estimated", "automatic", "adc", "fuel_gauge", "not_configured"].includes(normalized)) {
+    return normalized;
+  }
+
+  return null;
+}
+
 function buildStatusUpdateFromPayload(payload, receivedAt, diagnostics = {}) {
   return {
     online: payload.online === undefined ? true : toBoolean(payload.online),
     wifiRssi: toNullableNumber(payload.wifi_rssi),
     batteryPercent: toNullableNumber(payload.battery_percent ?? payload.battery_level),
+    batteryPercentSource: normalizeBatteryPercentSource(payload.battery_percent_source),
     firmwareVersion: payload.firmware_version ? String(payload.firmware_version) : null,
     lastSeenAt: receivedAt,
     sensorReady: payload.sensor_ready,
@@ -197,6 +215,8 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
           sensorValid: payload.sensor_valid === undefined ? null : toBoolean(payload.sensor_valid),
           sensorReadOk: payload.sensor_read_ok === undefined ? null : toBoolean(payload.sensor_read_ok),
           sampleAgeMs: toNullableNumber(payload.sensor_sample_age_ms),
+          batteryPercent: toNullableNumber(payload.battery_percent ?? payload.battery_level),
+          batteryPercentSource: normalizeBatteryPercentSource(payload.battery_percent_source),
           i2cLastError: payload.i2c_last_error || null,
           correlationId,
         });

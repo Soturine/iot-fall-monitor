@@ -90,6 +90,7 @@ function buildHarness(options = {}) {
         online: fields.online ?? true,
         wifiRssi: fields.wifiRssi ?? null,
         batteryPercent: fields.batteryPercent ?? null,
+        batteryPercentSource: fields.batteryPercentSource ?? null,
         firmwareVersion: fields.firmwareVersion ?? null,
         lastSeenAt: fields.lastSeenAt instanceof Date
           ? fields.lastSeenAt.toISOString()
@@ -307,16 +308,41 @@ test("status atualiza device_status e emite device:status no escopo correto", as
         device_uid: "legacy:esp32_01",
         timestamp: Math.floor(Date.now() / 1000),
         wifi_rssi: -58,
-        battery_level: 86,
+        battery_percent: 78,
+        battery_percent_source: "manual",
       }),
       io: {},
     });
 
     assert.equal(calls.status.length, 1);
+    assert.equal(calls.status[0].fields.batteryPercent, 78);
+    assert.equal(calls.status[0].fields.batteryPercentSource, "manual");
     assert.equal(calls.emits.length, 1);
     assert.equal(calls.emits[0].eventName, "device:status");
+    assert.equal(calls.emits[0].payload.status.batteryPercent, 78);
+    assert.equal(calls.emits[0].payload.status.batteryPercentSource, "manual");
     assert.deepEqual(calls.emits[0].scope, { organizationId: 1, patientId: 2 });
     assert.ok(calls.emits[0].diagnostics.correlationId);
+  });
+});
+
+test("status sem bateria configurada limpa placeholder antigo", async () => {
+  await withHarness({}, async ({ calls, handleMqttMessage }) => {
+    await handleMqttMessage({
+      topicInfo: topicInfo("status"),
+      payloadText: JSON.stringify({
+        device_id: "esp32_01",
+        timestamp: Math.floor(Date.now() / 1000),
+        battery_percent_source: "not_configured",
+      }),
+      io: {},
+    });
+
+    assert.equal(calls.status.length, 1);
+    assert.equal(calls.status[0].fields.batteryPercent, null);
+    assert.equal(calls.status[0].fields.batteryPercentSource, "not_configured");
+    assert.equal(calls.emits[0].payload.status.batteryPercent, null);
+    assert.equal(calls.emits[0].payload.status.batteryPercentSource, "not_configured");
   });
 });
 

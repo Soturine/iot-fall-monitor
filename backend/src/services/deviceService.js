@@ -85,6 +85,7 @@ function mapDeviceRow(row) {
       online: toBoolean(row.online),
       wifiRssi: row.wifiRssi ?? row.wifi_rssi ?? null,
       batteryPercent: row.batteryPercent ?? row.battery_percent ?? null,
+      batteryPercentSource: row.batteryPercentSource ?? row.battery_percent_source ?? null,
       firmwareVersion: row.firmwareVersion || row.firmware_version || null,
       sensorReady: toNullableBoolean(row.sensorReady ?? row.sensor_ready),
       sensorValid: toNullableBoolean(row.sensorValid ?? row.sensor_valid),
@@ -1094,6 +1095,7 @@ async function upsertDeviceStatus(deviceId, fields, scope = null, executor = nul
     online: fields.online === undefined ? true : Boolean(fields.online),
     wifiRssi: toNullableNumber(fields.wifiRssi),
     batteryPercent: toNullableNumber(fields.batteryPercent),
+    batteryPercentSource: toNullableString(fields.batteryPercentSource, 32),
     firmwareVersion: fields.firmwareVersion ? String(fields.firmwareVersion) : null,
     sensorReady: toNullableBoolean(fields.sensorReady),
     sensorValid: toNullableBoolean(fields.sensorValid),
@@ -1110,6 +1112,8 @@ async function upsertDeviceStatus(deviceId, fields, scope = null, executor = nul
     lastEventAt: fields.lastEventAt || null,
     lastSeenAt: fields.lastSeenAt || null,
   };
+  const clearBatteryPercent =
+      status.batteryPercentSource === "not_configured" && status.batteryPercent == null;
 
   const effectiveScope = scope || (await getDeviceScopeSnapshot(deviceId, executor));
 
@@ -1148,7 +1152,7 @@ async function upsertDeviceStatus(deviceId, fields, scope = null, executor = nul
         device_assignment_history_id = VALUES(device_assignment_history_id),
         online = VALUES(online),
         wifi_rssi = COALESCE(VALUES(wifi_rssi), wifi_rssi),
-        battery_percent = COALESCE(VALUES(battery_percent), battery_percent),
+        battery_percent = IF(? = 1, NULL, COALESCE(VALUES(battery_percent), battery_percent)),
         firmware_version = COALESCE(VALUES(firmware_version), firmware_version),
         sensor_ready = COALESCE(VALUES(sensor_ready), sensor_ready),
         sensor_valid = COALESCE(VALUES(sensor_valid), sensor_valid),
@@ -1189,6 +1193,7 @@ async function upsertDeviceStatus(deviceId, fields, scope = null, executor = nul
       status.lastTelemetryAt,
       status.lastEventAt,
       status.lastSeenAt,
+      clearBatteryPercent ? 1 : 0,
     ],
   );
 
@@ -1205,6 +1210,13 @@ async function upsertDeviceStatus(deviceId, fields, scope = null, executor = nul
 
     if (status.batteryPercent != null) {
       statusPatch.batteryPercent = status.batteryPercent;
+    }
+
+    if (status.batteryPercentSource) {
+      statusPatch.batteryPercentSource = status.batteryPercentSource;
+      if (clearBatteryPercent) {
+        statusPatch.batteryPercent = null;
+      }
     }
 
     if (status.firmwareVersion) {
@@ -1269,7 +1281,14 @@ async function upsertDeviceStatus(deviceId, fields, scope = null, executor = nul
     };
   }
 
-  return getDeviceStatusSnapshot(deviceId, executor);
+  const snapshot = await getDeviceStatusSnapshot(deviceId, executor);
+  if (status.batteryPercentSource) {
+    snapshot.status.batteryPercentSource = status.batteryPercentSource;
+    if (clearBatteryPercent) {
+      snapshot.status.batteryPercent = null;
+    }
+  }
+  return snapshot;
 }
 
 async function listDevices(filters = {}, accessContext) {
