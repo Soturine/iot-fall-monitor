@@ -6,31 +6,11 @@ O objetivo do repositório é integrar hardware embarcado, ingestão de eventos,
 
 ## Baseline Atual
 
-Baseline atual do repositório: `v0.8.31`.
+Baseline atual do repositório: `v0.9.0`.
 
-A baseline `v0.8.31` fecha bloqueios operacionais da demo sem apagar histórico: adiciona migração incremental de `alert_actions`, timeout e retry visível no frontend, desvinculação de paciente, reset administrativo de claim e arquivamento lógico de paciente. O gráfico mantém `60` amostras recentes e eventos experimentais `movement_detected` passam a ser apenas informativos, sem alerta ativo ou buzzer; o alarme local fica reservado para queda confirmada e SOS.
+A `v0.9.0` integra uma demo acadêmica controlada sem substituir o comportamento conservador: o portal alterna entre modos Normal e Demo, a FSM continua exigindo impacto, mudança de orientação e imobilidade, e o buzzer permanece reservado para queda confirmada e SOS. A versão também adiciona identidade própria ao frontend e uma estimativa experimental de bateria por tempo, recalibrada manualmente e aprendida gradualmente.
 
-A baseline anterior `v0.8.30` fecha a leitura falsa de bateria: o firmware deixou de publicar `100%` como placeholder fixo, o portal ESP32 ganhou uma bateria manual opcional persistida em `NVS`, os payloads MQTT passam a indicar `battery_percent_source` e o frontend mostra `--%`/`não informado` quando não existe valor real ou manual. O valor manual é apenas informativo, útil para copiar o percentual exibido por um módulo externo de bateria enquanto a medição automática por ADC ou fuel gauge não existir. Na validação com o ESP32 novo em `COM5`, a telemetria permaneceu estável por cerca de `75 s` com `i2c_errors=0`, `recoveries=0`, `sensor_read_ok=1` e `accel_magnitude=1.00`, indicando que a instabilidade anterior do barramento era física ou de montagem/hardware.
-
-A baseline anterior `v0.8.29` é uma rodada conservadora de qualidade de código e validação da documentação operacional. Ela preserva a lógica de alerta, telemetria, MQTT, Socket.IO e schema, mas reduz duplicações em pontos críticos: payloads comuns do firmware, normalizadores backend e helpers de diagnóstico do detalhe do dispositivo no frontend.
-
-A baseline anterior `v0.8.28` estabiliza a camada física da IMU no ESP32 novo com CP210x em `COM5`: o firmware identifica `MPU6050`, `MPU6500` e `MPU9250` por `WHO_AM_I`, aceita a faixa efetiva lida quando o chip permanece em `+-2g/+-250dps`, descarta leituras raw totalmente zeradas e registra magnitude raw/corrigida para diagnosticar se o repouso está perto de `1 g`.
-
-Esta baseline também deixa o buzzer auditável: o Serial Monitor mostra `enabled`, `pin`, `active_high`, razão do pulso, pulso de alerta iniciado/finalizado e skip por `disabled` ou `no_alert_event`. O portal ESP32 ganhou o botão `Testar buzzer`, usando o estado atual salvo da pré-calibração; se o buzzer estiver desabilitado, o log e o portal informam isso claramente.
-
-A baseline anterior `v0.8.27` conecta o fluxo real de telemetria do ESP32 a eventos e alertas mais visíveis: movimentos intensos e quedas suspeitas podem gerar `movement_detected`/`fall_suspected` pelo firmware, com motivo, thresholds, `sample_seq`, diagnóstico do MPU6050/I2C e cooldown. `fall_detected` continua sendo a queda confirmada pela FSM local com imobilidade.
-
-O portal local do ESP32 agora possui uma seção de pré-calibração experimental para sensibilidade de alerta, thresholds de aceleração/giroscópio, janela, cooldown, publicação de eventos e buzzer. O modo normal segue conservador; o modo teste/demonstração é voltado apenas a bancada controlada, sem testar queda em pessoa.
-
-A baseline anterior `v0.8.26` adiciona documentação visual real da interface web, com screenshots capturados do projeto rodando localmente em `docs/assets/screenshots`.
-
-A baseline anterior `v0.8.25` adiciona confiabilidade incremental para eventos críticos MQTT. Telemetria continua sendo dado periódico e pode tolerar perda eventual; eventos como `fall_detected`, SOS manual (`sos_pressed`/`manual_sos`) e `sensor_fault` passam a ter rastreabilidade com `event_uuid`, `event_sequence` e `sample_seq`.
-
-O firmware mantém uma fila circular local em RAM para eventos críticos do canal `events`, tenta reenviar no flush após reconexão MQTT e registra logs claros de publish, fila, flush e descarte por limite. O backend deduplica eventos reenviados por `event_uuid`, preservando compatibilidade com payloads antigos sem esse campo.
-
-Limitação importante: a garantia principal é a fila em RAM, que não deve ser tratada como persistência durável contra perda de energia. A build mantém um snapshot pequeno e opcional em `NVS`, mas `SPIFFS`/`LittleFS` permanecem como evolução futura para um journal mais robusto.
-
-A baseline mantém o frontend premium/redesign, telemetria MQTT mais confiável, diagnóstico do `MPU6050`, `FallFeatureExtractor`, evidência estruturada para `fall_detected` e o placeholder experimental de FFT/Fourier sem substituir a decisão principal atual. Para a experiência local prevista nesta fase, o projeto está estabilizado para `Node.js 20+`.
+O sistema é um projeto IoT full-stack com ESP32, MPU6050, MQTT, Node.js, MySQL, Socket.IO, React, JWT, histórico, exportação PDF/JSON, modo demo e estimativa de bateria por calibração manual. O histórico completo de versões fica em [CHANGELOG.md](CHANGELOG.md).
 
 ## Visão Geral
 
@@ -84,7 +64,28 @@ O modelo atual deixou de ser um painel global único e passou a trabalhar com or
 - estados explícitos para sensor inválido, telemetria desatualizada, movimento leve/intenso, queda, SOS manual e calibração pendente
 - suporte a buzzer, logs de diagnóstico e botão `Testar buzzer` no portal ESP32
 - bateria manual opcional no portal ESP32, com origem explícita no MQTT e exibição `--%` quando não há valor configurado
+- bateria estimada por tempo com taxa inicial de `33.5 min/%`, histórico e aprendizado suavizado por calibrações manuais
+- modos Normal e Demo apresentação, sem transformar movimento isolado em queda confirmada
 - scripts Windows para setup, banco, start, stop e smoke test
+
+## Modo Demo
+
+O portal ESP32 oferece `Modo de operação`:
+
+- **Normal:** leitura interna a `50 ms`, telemetria MQTT a `2000 ms`, impacto `2.2 g`, giro `120 dps`, orientação `45°` e imobilidade `2000 ms`.
+- **Demo apresentação:** leitura interna a `25 ms`, telemetria MQTT a `500 ms`, impacto `1.7 g`, giro `100 dps`, orientação `30°` e imobilidade `1000 ms`.
+
+A leitura interna rápida alimenta o detector; a publicação MQTT moderada mantém gráfico e backend fluidos sem atualizar o site a cada amostra. Eventos críticos continuam imediatos. Para demonstrar, use somente a caixinha/sensor em cama, almofada ou superfície macia: aplique movimento controlado, vire/deite e deixe imóvel. Nunca teste queda com pessoa nem jogue o sensor com força.
+
+## Estimativa de Bateria
+
+O campo `Bateria atual (%)` do portal cria uma calibração manual. O backend estima o percentual pelo tempo decorrido, iniciando em `33.5 min/%` (aproximadamente `56 h` no cenário observado), e aprende gradualmente com novas calibrações válidas usando suavização `70/30`.
+
+Essa informação não é medição elétrica real. Calibrações com aumento de percentual, tempo curto ou taxa fora de `5..120 min/%` não alteram a taxa aprendida. Para aplicar a estrutura incremental em banco existente, sem reset:
+
+```powershell
+npm run db:migrate:battery-estimation --prefix backend
+```
 
 ## Capturas de Tela
 
@@ -425,7 +426,7 @@ O frontend exibe esse status de forma discreta no dashboard, na lista de disposi
 - O projeto não possui GPS.
 - O sistema não fornece diagnóstico médico ou clínico definitivo.
 - Os thresholds de queda, imobilidade e postura ainda precisam de validação prática com hardware real.
-- A bateria exibida no site só deve ser considerada informativa quando a origem for `manual`; sem valor manual ou circuito dedicado, o frontend mostra `--%`/`não informado`.
+- A bateria exibida no site é uma estimativa experimental por tempo quando a origem for `manual`/`manual_estimated`; sem calibração manual ou circuito dedicado, o frontend mostra `--%`/`não informado`.
 - O fluxo padrão continua usando `mqtt://`; `mqtts://` existe como preparação opt-in e depende de configuração coerente.
 - O buzzer fica desabilitado por padrão em bancada; para teste manual ou alarme sonoro real, revise `BUZZER_ACTIVE_HIGH` conforme a polaridade do módulo, habilite o buzzer na pré-calibração do portal ESP32 e use o botão `Testar buzzer`.
 - O portal local do ESP32 não substitui o dashboard principal.

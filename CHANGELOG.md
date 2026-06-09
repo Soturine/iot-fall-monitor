@@ -9,6 +9,30 @@
 - testar classificação de movimentos com múltiplas runs por classe
 - validar o sistema com ESP32 real, MPU6050, backend, MQTT e dashboard em cenário ponta a ponta
 
+## [v0.9.0] - 2026-06-09
+### Adicionado
+- modo de operação `Normal`/`Demo apresentação` persistido em NVS e configurável pelo portal ESP32
+- perfil demo opt-in com leitura interna a `25 ms`, telemetria MQTT a `500 ms` e FSM de queda mais amigável para bancada
+- evidência de decisão com modo, etapas de impacto/orientação/imobilidade, thresholds e intervalos efetivos
+- estimativa experimental de bateria por tempo, iniciada em `33.5 min/%`, com histórico e aprendizado suavizado por calibrações manuais
+- migração idempotente `db:migrate:battery-estimation`, sem resetar banco ou histórico
+- título e favicon próprios do Monitor de Quedas
+
+### Alterado
+- modo normal preserva leitura a `50 ms`, telemetria a `2000 ms` e thresholds conservadores
+- detalhe/lista de dispositivos passam a exibir modo do detector e contexto da bateria estimada
+- detalhe em modo demo mantém até `120` amostras recentes para visualização mais fluida
+- README reorganizado para descrever o sistema atual, mantendo histórico detalhado neste changelog
+
+### Segurança e limitações
+- buzzer continua reservado a `fall_detected` confirmado e SOS; `movement_detected` e `fall_suspected` não acionam alarme local
+- modo demo é experimental e não representa calibração clínica
+- bateria continua sendo estimativa por tempo, não medição elétrica real; ADC/fuel gauge permanece evolução futura
+- FFT/Fourier continua experimental e desligada como decisão principal
+
+### Validação
+- `platformio run`, checks e testes backend, lint e build frontend executados durante a rodada
+
 ## [v0.8.31] - 2026-06-09
 ### Adicionado
 - migração idempotente `db:migrate:alert-actions`, aplicável em banco existente sem reset ou perda de histórico

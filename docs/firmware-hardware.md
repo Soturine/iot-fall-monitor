@@ -778,7 +778,7 @@ O que entra no payload quando a queda e confirmada:
 
 O buzzer continua vinculado a decisões locais críticas do firmware: `fall_detected` confirmado pela FSM e SOS manual quando habilitado. Desde a `v0.8.31`, `movement_detected` e `fall_suspected` experimentais são auditáveis, mas não acionam o buzzer. A nova camada de features/FFT não substitui a decisão principal.
 
-Para uma apresentação mais fluida, `FIRMWARE_DEMO_TELEMETRY_ENABLED=true` reduz o intervalo de telemetria de `2000 ms` para `1000 ms`. A flag fica desligada por padrão porque aumenta a carga de MQTT, backend e banco.
+Para uma apresentação mais fluida, selecione `Demo apresentação` no portal. Esse perfil reduz a leitura interna de `50 ms` para `25 ms` e a telemetria de `2000 ms` para `500 ms`; o modo Normal continua sendo o padrão conservador.
 
 ## Parametros atuais de calibração do `fall_detector`
 
@@ -916,3 +916,11 @@ O esperado é `MQTT handshake OK`. Depois disso, o botão `Testar MQTT` do porta
 | `ESP32-WROOM-32` | Datasheet oficial | <https://documentation.espressif.com/esp32-wroom-32_datasheet_en.html> |
 | `ESP32 DevKitC` | Guia da placa | <https://docs.espressif.com/projects/esp-dev-kits/en/latest/esp32/esp32-devkitc/user_guide.html> |
 | `MPU6050` | Datasheet oficial | <https://invensense.tdk.com/wp-content/uploads/2015/02/MPU-6000-Datasheet.pdf> |
+
+## Perfis v0.9.0 e bateria estimada
+
+O modo `Normal` usa leitura interna de `50 ms`, telemetria MQTT de `2000 ms` e FSM conservadora (`2.2 g`, `120 dps`, `45°`, `2000 ms` de imobilidade). O modo `Demo apresentação` é opt-in no portal e usa `25 ms`, `500 ms`, `1.7 g`, `100 dps`, `30°` e `1000 ms`. O I2C permanece em `100 kHz`; se o modo demo aumentar erros, volte ao Normal.
+
+A leitura interna rápida alimenta o detector, mas não publica MQTT a cada amostra. `movement_detected` e `fall_suspected` continuam sem buzzer; somente `fall_detected` confirmado e SOS podem acionar o alarme local.
+
+O card `Energia e bateria` registra uma calibração manual em NVS com percentual, horário e sequência. O backend inicia a estimativa em `33.5 min/%`, aproximadamente `56 h` no cenário observado entre `100% às 01:37` e `96% às 03:51`. A taxa aprende com novas calibrações plausíveis, mas continua sendo estimativa por tempo, não medição elétrica real.

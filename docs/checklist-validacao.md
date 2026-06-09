@@ -183,3 +183,16 @@ O pareamento não deve ser alterado nesta rodada. Para validar sem refatorar:
 - [ ] Avaliar TLS MQTT e persistência durável de eventos críticos.
 - [ ] Validar visualmente a impressão PDF nos navegadores usados na apresentação.
 - [ ] QR Code permanece fora do escopo.
+
+## Checklist v0.9.0
+
+- [ ] Portal inicia em modo Normal após configuração padrão.
+- [ ] Modo Demo altera status para `detector_mode=demo`, leitura para `25 ms` e telemetria para `500 ms`.
+- [ ] Giro isolado gera no máximo movimento; impacto sem imobilidade não vira queda confirmada.
+- [ ] Queda controlada da caixinha em cama/almofada exige impacto, orientação e imobilidade.
+- [ ] `movement_detected` e `fall_suspected` não acionam buzzer.
+- [ ] `fall_detected` confirmado e SOS acionam buzzer quando habilitado.
+- [ ] Nova bateria manual cria uma calibração; status repetido não duplica histórico.
+- [ ] Estimativa nunca fica abaixo de `0%` ou acima de `100%`.
+- [ ] Executar `npm run db:migrate:battery-estimation --prefix backend` duas vezes sem perda de dados.
+- [ ] Título da aba é `Monitor de Quedas | HealthTech IoT` e favicon não é o padrão Vite.

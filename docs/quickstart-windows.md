@@ -516,6 +516,15 @@ Quando terminar:
 .\scripts\stop-all.ps1
 ```
 
+### Aplicar v0.9.0 sem resetar o banco
+
+```powershell
+npm run db:migrate:alert-actions --prefix backend
+npm run db:migrate:battery-estimation --prefix backend
+```
+
+Não rode `db:init` em banco com dados que precisam ser preservados. Depois, abra o portal ESP32 para escolher `Normal` ou `Demo apresentação` e recalibrar `Bateria atual (%)`.
+
 ## 15. Erros comuns
 
 ### `Login falhou com o usuário demo`

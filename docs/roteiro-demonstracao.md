@@ -217,3 +217,15 @@ Se o dashboard não atualizar:
 - confirme logs do backend
 - confirme Socket.IO conectado
 - confirme organização ativa e vínculo do dispositivo
+
+## Roteiro v0.9.0
+
+1. Entre com JWT e mostre o device vinculado sem alterar pareamento.
+2. Abra o portal ESP32 e compare os modos Normal e Demo apresentação.
+3. Ative Demo e mostre no detalhe `25 ms` de leitura, `500 ms` de MQTT e gráfico mais fluido.
+4. Em cama, almofada ou superfície macia, deixe a caixinha parada, aplique impacto controlado, vire/deite e aguarde ao menos `1 s`.
+5. Mostre a diferença entre Movimento intenso, Queda suspeita e Queda confirmada.
+6. Explique que o buzzer só toca para queda confirmada/SOS.
+7. Confirme/resolva um alerta e exporte JSON/PDF.
+8. Informe uma bateria manual no portal e mostre percentual estimado, autonomia, última calibração e taxa aprendida.
+9. Reforce: não testar queda com pessoa, não jogar o sensor com força, bateria não é medição elétrica real e FFT continua experimental.

@@ -719,3 +719,17 @@ Elas não disparam notificação externa. No estado atual do projeto, alerta sig
 - não existe ainda fluxo completo de unpair entre organizações pela UI
 - o portal do ESP32 salva `BACKEND_API_BASE_URL`, mas não faz autenticação local própria
 - se um caregiver não tiver assignments explícitos, o backend hoje ainda devolve a organização ativa inteira para ele
+
+## Integração v0.9.0
+
+`status` e `telemetry` passam a carregar `detector_mode`, `sample_interval_ms` e `telemetry_interval_ms`. Eventos de detecção incluem também `impact_detected`, `orientation_change_detected`, `immobility_detected`, thresholds efetivos e motivo final. O backend preserva esses campos em `raw_payload_json` e `evidence_summary_json`; o frontend apenas apresenta a decisão do firmware.
+
+Para bateria, o firmware publica `battery_manual_percent`, `battery_manual_updated_at`, `battery_calibration_sequence` e a taxa inicial. O backend registra cada sequência uma única vez em `battery_calibrations`, calcula a estimativa e persiste o snapshot em `device_status`. Payload antigo sem sequência continua aceito no fluxo legado.
+
+Aplicação incremental em banco existente:
+
+```powershell
+npm run db:migrate:battery-estimation --prefix backend
+```
+
+A migração usa verificações de schema, `ALTER TABLE ... ADD COLUMN` somente quando necessário e `CREATE TABLE IF NOT EXISTS`; não executa `DROP`, `TRUNCATE`, `DELETE` ou `db:init`.
