@@ -1,5 +1,6 @@
 const { asyncHandler } = require("../utils/asyncHandler");
 const {
+  archivePatient,
   createPatient,
   getPatientById,
   listPatients,
@@ -7,8 +8,17 @@ const {
 } = require("../services/patientService");
 
 const list = asyncHandler(async (req, res) => {
-  const items = await listPatients(req.access);
+  const items = await listPatients(req.access, req.query);
   res.json({ items });
+});
+
+const archive = asyncHandler(async (req, res) => {
+  const patient = await archivePatient(
+    Number(req.params.id),
+    req.access,
+    req.user.id,
+  );
+  res.json({ patient });
 });
 
 const getById = asyncHandler(async (req, res) => {
@@ -27,6 +37,7 @@ const update = asyncHandler(async (req, res) => {
 });
 
 module.exports = {
+  archive,
   create,
   getById,
   list,

@@ -6,6 +6,7 @@ const {
   deleteDevice,
   getDeviceById,
   listDevices,
+  resetDeviceClaim,
   updateDevice,
 } = require("../services/deviceService");
 const { createPairingSession } = require("../services/pairingService");
@@ -50,6 +51,20 @@ const assignPatient = asyncHandler(async (req, res) => {
   res.json({ device });
 });
 
+const resetClaim = asyncHandler(async (req, res) => {
+  const result = await resetDeviceClaim(
+    Number(req.params.id),
+    req.access,
+    req.user.id,
+  );
+
+  emitScopedEvent(req.app.get("io"), "device:status", result.device, {
+    organizationId: result.previousScope.organizationId,
+    patientId: result.previousScope.patientId,
+  });
+  res.json({ device: result.device });
+});
+
 const createPairing = asyncHandler(async (req, res) => {
   const session = await createPairingSession(req.access, req.body, req.user.id);
   res.status(201).json({ session });
@@ -62,5 +77,6 @@ module.exports = {
   getById,
   list,
   remove,
+  resetClaim,
   update,
 };

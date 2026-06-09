@@ -15,11 +15,30 @@ const { assertRole, buildScopeFilter, canAccessScope } = require("./scopeService
 
 const RECENT_CRITICAL_ALERT_DEDUP_WINDOW_SECONDS = 20;
 const ALERT_EXPORT_MAX_RECORDS = 500;
+const ALERT_ACTIONS_MIGRATION_COMMAND = "npm run db:migrate:alert-actions --prefix backend";
 const RECENT_DEDUP_EVENT_TYPES = new Set([
   "fall_detected",
   "fall_suspected",
   "movement_detected",
 ]);
+
+function mapAlertActionsSchemaError(error) {
+  if (
+    error?.code === "ER_NO_SUCH_TABLE" &&
+    String(error?.message || "").includes("alert_actions")
+  ) {
+    return new HttpError(
+      503,
+      `A tabela alert_actions ainda nao foi aplicada. Rode ${ALERT_ACTIONS_MIGRATION_COMMAND} sem resetar o banco.`,
+      {
+        code: "ALERT_ACTIONS_MIGRATION_REQUIRED",
+        migrationCommand: ALERT_ACTIONS_MIGRATION_COMMAND,
+      },
+    );
+  }
+
+  return error;
+}
 
 async function findRecentOpenCriticalAlert(event, executor = null) {
   if (
@@ -452,24 +471,29 @@ async function getAlertById(alertId, accessContext, executor = null) {
     throw new HttpError(404, "Alerta não encontrado.");
   }
 
-  const actionRows = await execute(
-    executor,
-    `
-      SELECT
-        aa.id,
-        aa.action_type,
-        aa.note,
-        aa.created_at,
-        u.id AS userId,
-        u.name AS userName,
-        u.email AS userEmail
-      FROM alert_actions aa
-      INNER JOIN users u ON u.id = aa.user_id
-      WHERE aa.alert_id = ?
-      ORDER BY aa.created_at DESC
-    `,
-    [alertId],
-  );
+  let actionRows;
+  try {
+    actionRows = await execute(
+      executor,
+      `
+        SELECT
+          aa.id,
+          aa.action_type,
+          aa.note,
+          aa.created_at,
+          u.id AS userId,
+          u.name AS userName,
+          u.email AS userEmail
+        FROM alert_actions aa
+        INNER JOIN users u ON u.id = aa.user_id
+        WHERE aa.alert_id = ?
+        ORDER BY aa.created_at DESC
+      `,
+      [alertId],
+    );
+  } catch (error) {
+    throw mapAlertActionsSchemaError(error);
+  }
 
   return {
     ...alert,
@@ -513,117 +537,121 @@ async function updateAlertStatus(alertId, actionType, userId, note, accessContex
     "Seu papel atual não pode alterar alertas.",
   );
 
-  return transaction(async (connection) => {
-    const lockedRow = await one(
-      connection,
-      `
-        SELECT
-          a.id,
-          a.organization_id,
-          a.patient_id,
-          a.status
-        FROM alerts a
-        WHERE a.id = ?
-        FOR UPDATE
-      `,
-      [alertId],
-    );
-
-    if (!lockedRow) {
-      throw new HttpError(404, "Alerta não encontrado.");
-    }
-
-    if (
-      !canAccessScope(
-        accessContext,
-        lockedRow.organization_id ? Number(lockedRow.organization_id) : null,
-        lockedRow.patient_id ? Number(lockedRow.patient_id) : null,
-      )
-    ) {
-      throw new HttpError(404, "Alerta não encontrado.");
-    }
-
-    const currentStatus = lockedRow.status;
-    const nextStatus = resolveNextStatus(currentStatus, actionType);
-
-    const updates = {
-      acknowledge: {
-        status: nextStatus,
-        acknowledgedBy: userId,
-      },
-      cancel: {
-        status: nextStatus,
-        canceledBy: userId,
-      },
-      resolve: {
-        status: nextStatus,
-        resolvedBy: userId,
-      },
-    }[actionType];
-
-    const result = await execute(
-      connection,
-      `
-        UPDATE alerts
-        SET
-          status = ?,
-          acknowledged_by = COALESCE(?, acknowledged_by),
-          acknowledged_at = CASE WHEN ? IS NOT NULL THEN UTC_TIMESTAMP() ELSE acknowledged_at END,
-          canceled_by = COALESCE(?, canceled_by),
-          canceled_at = CASE WHEN ? IS NOT NULL THEN UTC_TIMESTAMP() ELSE canceled_at END,
-          resolved_by = COALESCE(?, resolved_by),
-          resolved_at = CASE WHEN ? IS NOT NULL THEN UTC_TIMESTAMP() ELSE resolved_at END,
-          updated_at = UTC_TIMESTAMP()
-        WHERE id = ?
-          AND status = ?
-      `,
-      [
-        updates.status,
-        updates.acknowledgedBy || null,
-        updates.acknowledgedBy || null,
-        updates.canceledBy || null,
-        updates.canceledBy || null,
-        updates.resolvedBy || null,
-        updates.resolvedBy || null,
-        alertId,
-        currentStatus,
-      ],
-    );
-
-    if (result.affectedRows !== 1) {
-      throw new HttpError(
-        409,
-        "O estado do alerta mudou antes da sua ação ser concluída. Recarregue a fila e tente novamente.",
+  try {
+    return await transaction(async (connection) => {
+      const lockedRow = await one(
+        connection,
+        `
+          SELECT
+            a.id,
+            a.organization_id,
+            a.patient_id,
+            a.status
+          FROM alerts a
+          WHERE a.id = ?
+          FOR UPDATE
+        `,
+        [alertId],
       );
-    }
 
-    await execute(
-      connection,
-      `
-        INSERT INTO alert_actions (alert_id, user_id, action_type, note)
-        VALUES (?, ?, ?, ?)
-      `,
-      [alertId, userId, actionType, note ? String(note).trim() : null],
-    );
+      if (!lockedRow) {
+        throw new HttpError(404, "Alerta não encontrado.");
+      }
 
-    await createAuditLog(
-      {
-        organizationId: accessContext.activeOrganizationId,
-        userId,
-        action: `alert.${actionType}`,
-        entityType: "alert",
-        entityId: alertId,
-        metadata: {
-          before: currentStatus,
-          after: nextStatus,
-          note: note || null,
+      if (
+        !canAccessScope(
+          accessContext,
+          lockedRow.organization_id ? Number(lockedRow.organization_id) : null,
+          lockedRow.patient_id ? Number(lockedRow.patient_id) : null,
+        )
+      ) {
+        throw new HttpError(404, "Alerta não encontrado.");
+      }
+
+      const currentStatus = lockedRow.status;
+      const nextStatus = resolveNextStatus(currentStatus, actionType);
+
+      const updates = {
+        acknowledge: {
+          status: nextStatus,
+          acknowledgedBy: userId,
         },
-      },
-      connection,
-    );
+        cancel: {
+          status: nextStatus,
+          canceledBy: userId,
+        },
+        resolve: {
+          status: nextStatus,
+          resolvedBy: userId,
+        },
+      }[actionType];
 
-    return getAlertById(alertId, accessContext, connection);
-  });
+      const result = await execute(
+        connection,
+        `
+          UPDATE alerts
+          SET
+            status = ?,
+            acknowledged_by = COALESCE(?, acknowledged_by),
+            acknowledged_at = CASE WHEN ? IS NOT NULL THEN UTC_TIMESTAMP() ELSE acknowledged_at END,
+            canceled_by = COALESCE(?, canceled_by),
+            canceled_at = CASE WHEN ? IS NOT NULL THEN UTC_TIMESTAMP() ELSE canceled_at END,
+            resolved_by = COALESCE(?, resolved_by),
+            resolved_at = CASE WHEN ? IS NOT NULL THEN UTC_TIMESTAMP() ELSE resolved_at END,
+            updated_at = UTC_TIMESTAMP()
+          WHERE id = ?
+            AND status = ?
+        `,
+        [
+          updates.status,
+          updates.acknowledgedBy || null,
+          updates.acknowledgedBy || null,
+          updates.canceledBy || null,
+          updates.canceledBy || null,
+          updates.resolvedBy || null,
+          updates.resolvedBy || null,
+          alertId,
+          currentStatus,
+        ],
+      );
+
+      if (result.affectedRows !== 1) {
+        throw new HttpError(
+          409,
+          "O estado do alerta mudou antes da sua ação ser concluída. Recarregue a fila e tente novamente.",
+        );
+      }
+
+      await execute(
+        connection,
+        `
+          INSERT INTO alert_actions (alert_id, user_id, action_type, note)
+          VALUES (?, ?, ?, ?)
+        `,
+        [alertId, userId, actionType, note ? String(note).trim() : null],
+      );
+
+      await createAuditLog(
+        {
+          organizationId: accessContext.activeOrganizationId,
+          userId,
+          action: `alert.${actionType}`,
+          entityType: "alert",
+          entityId: alertId,
+          metadata: {
+            before: currentStatus,
+            after: nextStatus,
+            note: note || null,
+          },
+        },
+        connection,
+      );
+
+      return getAlertById(alertId, accessContext, connection);
+    });
+  } catch (error) {
+    throw mapAlertActionsSchemaError(error);
+  }
 }
 
 module.exports = {

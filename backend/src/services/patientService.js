@@ -176,7 +176,7 @@ async function hydrateCaregivers(connection, patients) {
   }));
 }
 
-async function listPatients(accessContext) {
+async function listPatients(accessContext, filters = {}) {
   if (!accessContext.activeOrganizationId && !accessContext.isPlatformAdmin) {
     throw new HttpError(400, "Nenhuma organização ativa foi selecionada.");
   }
@@ -185,6 +185,10 @@ async function listPatients(accessContext) {
     organizationColumn: "p.organization_id",
     patientColumn: "p.id",
   });
+
+  if (String(filters.includeArchived || "").toLowerCase() !== "true") {
+    clauses.push("p.status = 'active'");
+  }
 
   const rows = await execute(
     null,
@@ -413,7 +417,57 @@ async function updatePatient(patientId, data, accessContext, actorId) {
   });
 }
 
+async function archivePatient(patientId, accessContext, actorId) {
+  assertRole(
+    accessContext,
+    ["organization_admin"],
+    "Somente administradores da organizacao podem arquivar pacientes.",
+  );
+
+  return transaction(async (connection) => {
+    const current = await getPatientById(patientId, accessContext, connection);
+
+    if (current.currentDevice) {
+      throw new HttpError(
+        409,
+        "Desvincule o dispositivo atual antes de arquivar o paciente.",
+      );
+    }
+
+    await execute(
+      connection,
+      `
+        UPDATE patients
+        SET status = 'archived', updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `,
+      [patientId],
+    );
+
+    const archived = await getPatientById(patientId, accessContext, connection);
+
+    await createAuditLog(
+      {
+        organizationId: accessContext.activeOrganizationId,
+        userId: actorId,
+        action: "patient.archive",
+        entityType: "patient",
+        entityId: patientId,
+        metadata: {
+          beforeStatus: current.status,
+          afterStatus: archived.status,
+          historyPreserved: true,
+        },
+      },
+      connection,
+    );
+
+    return archived;
+  });
+}
+
 module.exports = {
+  archivePatient,
   createPatient,
   getPatientById,
   listPatients,

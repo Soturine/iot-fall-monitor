@@ -1445,7 +1445,7 @@ async function getDeviceById(deviceId, accessContext) {
       WHERE device_id = ?
         ${patientScoped ? `AND patient_id IN (${patientPlaceholders})` : ""}
       ORDER BY created_at DESC
-      LIMIT 30
+      LIMIT 60
     `,
     [deviceId, ...patientParams],
   );
@@ -1717,6 +1717,80 @@ async function assignDeviceToPatient(deviceId, data, accessContext, actorId) {
   });
 }
 
+async function resetDeviceClaim(deviceId, accessContext, actorId) {
+  assertRole(
+    accessContext,
+    ["organization_admin"],
+    "Somente administradores da organizacao podem resetar o pareamento.",
+  );
+
+  if (!accessContext.activeOrganizationId) {
+    throw new HttpError(400, "Nenhuma organizacao ativa foi selecionada.");
+  }
+
+  return transaction(async (connection) => {
+    const current = await ensureScopedDevice(deviceId, accessContext, connection);
+    const previousScope = {
+      organizationId: current.organization?.id || null,
+      patientId: current.currentPatient?.id || null,
+    };
+
+    await setDevicePatientAssignment(
+      {
+        deviceId,
+        organizationId: accessContext.activeOrganizationId,
+        patientId: null,
+        reason: "reset_claim_demo",
+        notes: "Claim resetado administrativamente; historico preservado.",
+        actorId,
+      },
+      connection,
+    );
+
+    await execute(
+      connection,
+      `
+        UPDATE devices
+        SET
+          organization_id = NULL,
+          current_patient_id = NULL,
+          current_assignment_history_id = NULL,
+          claim_status = 'unclaimed',
+          claimed_at = NULL,
+          claimed_by_user_id = NULL,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `,
+      [deviceId],
+    );
+
+    await syncDeviceScopeToStatus(deviceId, connection);
+    const device = await getDeviceStatusSnapshot(deviceId, connection);
+
+    await createAuditLog(
+      {
+        organizationId: previousScope.organizationId,
+        userId: actorId,
+        action: "device.reset_claim",
+        entityType: "device",
+        entityId: deviceId,
+        metadata: {
+          previousScope,
+          deviceUid: current.deviceUid,
+          deviceIdentifier: current.deviceIdentifier,
+          historyPreserved: true,
+        },
+      },
+      connection,
+    );
+
+    return {
+      device,
+      previousScope,
+    };
+  });
+}
+
 async function deleteDevice(deviceId, actorId, accessContext) {
   assertRole(
     accessContext,
@@ -1859,6 +1933,7 @@ module.exports = {
   listDeviceStatus,
   mapTelemetryRow,
   markDevicesOffline,
+  resetDeviceClaim,
   setDevicePatientAssignment,
   syncDeviceScopeToStatus,
   upsertDeviceStatus,

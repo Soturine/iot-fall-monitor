@@ -12,6 +12,7 @@ router.get("/:id", deviceController.getById);
 router.put("/:id", deviceController.update);
 router.delete("/:id", deviceController.remove);
 router.post("/:id/assign-patient", deviceController.assignPatient);
+router.post("/:id/reset-claim", deviceController.resetClaim);
 router.get("/:id/events", eventController.listByDevice);
 
 module.exports = router;

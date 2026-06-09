@@ -130,6 +130,33 @@ test("getAlertById expoe resumo de evidencia do evento", async () => {
   }
 });
 
+test("getAlertById orienta migration quando alert_actions esta ausente", async () => {
+  const missingTableError = Object.assign(
+    new Error("Table 'queda_monitor.alert_actions' doesn't exist"),
+    { code: "ER_NO_SUCH_TABLE" },
+  );
+  const fakePool = {
+    one: async () => alertRow(),
+    execute: async () => {
+      throw missingTableError;
+    },
+    transaction: async (work) => work({}),
+  };
+  const { module: alertService, restore } = loadAlertService(fakePool);
+
+  try {
+    await assert.rejects(
+      () => alertService.getAlertById(10, access),
+      (error) =>
+        error.statusCode === 503 &&
+        error.details?.migrationCommand ===
+          "npm run db:migrate:alert-actions --prefix backend",
+    );
+  } finally {
+    restore();
+  }
+});
+
 test("createAlertForEvent reaproveita alerta existente sem duplicar", async () => {
   let insertCalls = 0;
   const fakePool = {
