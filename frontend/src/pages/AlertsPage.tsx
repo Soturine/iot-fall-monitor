@@ -1,5 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useState } from "react";
-import { Eye, ShieldCheck, ShieldOff, Siren, Undo2 } from "lucide-react";
+import { Download, Eye, Printer, ShieldCheck, ShieldOff, Siren, Undo2 } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { Badge } from "../components/ui/Badge";
@@ -10,6 +10,7 @@ import { LoadingState } from "../components/ui/LoadingState";
 import { Modal } from "../components/ui/Modal";
 import { useAuth } from "../contexts/AuthContext";
 import { useRealtime } from "../contexts/RealtimeContext";
+import { downloadAlertReportJson, printAlertReport } from "../lib/alertReport";
 import {
   formatDateTime,
   humanizeAlertStatus,
@@ -18,7 +19,7 @@ import {
   statusTone,
 } from "../lib/format";
 import { api, getErrorMessage } from "../services/api";
-import type { AlertRecord, Device, EventRecord } from "../types/api";
+import type { AlertRecord, AlertReport, Device, EventRecord } from "../types/api";
 
 export function AlertsPage() {
   const { socket } = useRealtime();
@@ -28,6 +29,7 @@ export function AlertsPage() {
   const [devices, setDevices] = useState<Device[]>([]);
   const [selectedAlert, setSelectedAlert] = useState<AlertRecord | null>(null);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState<"json" | "pdf" | null>(null);
   const [filters, setFilters] = useState({
     status: "",
     severity: "",
@@ -149,6 +151,48 @@ export function AlertsPage() {
     }
   }
 
+  async function loadAlertReport() {
+    const response = await api.get<AlertReport>("/alerts/export", {
+      params: filters,
+    });
+    return response.data;
+  }
+
+  async function exportJson() {
+    setExporting("json");
+
+    try {
+      const report = await loadAlertReport();
+      downloadAlertReportJson(report);
+      toast.success(`${report.total} alertas exportados em JSON.`);
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setExporting(null);
+    }
+  }
+
+  async function exportPdf() {
+    const printWindow = window.open("", "_blank");
+
+    if (!printWindow) {
+      toast.error("Permita pop-ups para abrir a visualização imprimível.");
+      return;
+    }
+
+    setExporting("pdf");
+
+    try {
+      const report = await loadAlertReport();
+      printAlertReport(printWindow, report);
+    } catch (error) {
+      printWindow.close();
+      toast.error(getErrorMessage(error));
+    } finally {
+      setExporting(null);
+    }
+  }
+
   if (loading && !alerts.length && !events.length) {
     return <LoadingState label="Carregando fila de alertas..." />;
   }
@@ -180,12 +224,34 @@ export function AlertsPage() {
               quando aplicável, os assignments de caregiver permitem reduzir o escopo.
             </p>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {criticalCount > 0 ? (
-              <Badge tone="critical">{criticalCount} críticos</Badge>
-            ) : null}
-            <Badge tone="danger" dot>{openCount} abertos</Badge>
-            <Badge tone="warning" dot>{ackCount} em atendimento</Badge>
+          <div className="flex flex-col items-start gap-3 lg:items-end">
+            <div className="flex flex-wrap gap-2">
+              {criticalCount > 0 ? (
+                <Badge tone="critical">{criticalCount} críticos</Badge>
+              ) : null}
+              <Badge tone="danger" dot>{openCount} abertos</Badge>
+              <Badge tone="warning" dot>{ackCount} em atendimento</Badge>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                disabled={Boolean(exporting)}
+                onClick={exportJson}
+                title="Baixar alertas filtrados em JSON"
+                variant="secondary"
+              >
+                <Download className="h-4 w-4" />
+                {exporting === "json" ? "Exportando..." : "Exportar JSON"}
+              </Button>
+              <Button
+                disabled={Boolean(exporting)}
+                onClick={exportPdf}
+                title="Abrir relatório para imprimir ou salvar em PDF"
+                variant="secondary"
+              >
+                <Printer className="h-4 w-4" />
+                {exporting === "pdf" ? "Preparando..." : "Exportar PDF"}
+              </Button>
+            </div>
           </div>
         </div>
 

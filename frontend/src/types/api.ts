@@ -295,6 +295,42 @@ export interface AlertRecord {
   actions?: AlertAction[];
 }
 
+export interface AlertReportItem {
+  alertId: number;
+  status: string;
+  patientName: string | null;
+  deviceName: string | null;
+  deviceIdentifier: string;
+  eventType: string;
+  severity: string;
+  message: string;
+  intensity: number | null;
+  immobility: boolean;
+  evidenceStatus: EvidenceStatus;
+  eventTime: string | null;
+  createdAt: string | null;
+  acknowledgedBy: string | null;
+  acknowledgedAt: string | null;
+  canceledBy: string | null;
+  canceledAt: string | null;
+  resolvedBy: string | null;
+  resolvedAt: string | null;
+}
+
+export interface AlertReport {
+  generatedAt: string;
+  organization: Organization | null;
+  filters: {
+    status: string | null;
+    severity: string | null;
+    deviceId: number | null;
+    startDate: string | null;
+    endDate: string | null;
+  };
+  total: number;
+  items: AlertReportItem[];
+}
+
 export interface DashboardSummary {
   organization: Organization | null;
   metrics: {
