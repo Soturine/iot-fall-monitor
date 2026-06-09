@@ -172,7 +172,7 @@ if (-not $SkipMock) {
   Start-Sleep -Seconds 8
 
   if (Test-ProcessAlive $mockProcess.Id) {
-    Stop-Process -Id $mockProcess.Id -Force -ErrorAction SilentlyContinue
+    Stop-ProcessTree -ProcessId $mockProcess.Id
     try {
       Wait-Process -Id $mockProcess.Id -Timeout 5 -ErrorAction Stop
     } catch {

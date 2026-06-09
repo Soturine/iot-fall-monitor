@@ -452,6 +452,30 @@ function Test-ProcessAlive {
   return [bool](Get-Process -Id $ProcessId -ErrorAction SilentlyContinue)
 }
 
+function Stop-ProcessTree {
+  param([int]$ProcessId)
+
+  $processes = @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)
+  $processIds = @($ProcessId)
+
+  do {
+    $children = @(
+      $processes |
+        Where-Object {
+          $_.ParentProcessId -in $processIds -and
+          $_.ProcessId -notin $processIds
+        } |
+        Select-Object -ExpandProperty ProcessId
+    )
+    $newChildren = @($children | Where-Object { $_ -notin $processIds })
+    $processIds += $newChildren
+  } while ($newChildren.Count -gt 0)
+
+  foreach ($currentProcessId in ($processIds | Sort-Object -Descending)) {
+    Stop-Process -Id $currentProcessId -Force -ErrorAction SilentlyContinue
+  }
+}
+
 function Start-TrackedWindowProcess {
   param(
     [string]$Key,
@@ -540,10 +564,10 @@ function Stop-TrackedProcess {
   $process = Get-Process -Id $processId -ErrorAction SilentlyContinue
   if ($process) {
     try {
-      Stop-Process -Id $processId -ErrorAction Stop
+      Stop-ProcessTree -ProcessId $processId
       Start-Sleep -Milliseconds 500
     } catch {
-      Stop-Process -Id $processId -Force -ErrorAction SilentlyContinue
+      Stop-ProcessTree -ProcessId $processId
     }
   }
 
