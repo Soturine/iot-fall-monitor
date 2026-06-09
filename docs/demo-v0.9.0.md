@@ -25,6 +25,19 @@ A configuração nova/factory inicia em **Demo apresentação**. Se o dispositiv
 
 Demo facilita a apresentação acadêmica, mas não representa calibração clínica.
 
+## Evidências visuais reais
+
+- [Device online e diagnóstico MQTT](assets/screenshots/device-detail-online-v0.9.0.png)
+- [Gráfico com 120 amostras](assets/screenshots/device-detail-telemetry-v0.9.0.png)
+- [Modo Demo, leitura 25 ms e MQTT 500 ms](assets/screenshots/demo-mode-v0.9.0.png)
+- [Portal ESP32 online](assets/screenshots/esp32-maintenance-overview-v0.9.0.png)
+- [Saúde operacional do ESP32](assets/screenshots/esp32-maintenance-health-v0.9.0.png)
+- [Configuração MQTT e identidade](assets/screenshots/esp32-maintenance-mqtt-config-v0.9.0.png)
+- [Energia e modo Demo](assets/screenshots/esp32-maintenance-battery-demo-v0.9.0.png)
+- [Queda confirmada real](assets/screenshots/alerts-fall-confirmed-v0.9.0.png)
+
+A captura de bateria estimada e o GIF realtime continuam pendentes até existirem dados e gravação reais adequados.
+
 ## Sequência sugerida
 
 1. Mostre login JWT e o escopo da organização.

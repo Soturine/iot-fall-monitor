@@ -91,9 +91,33 @@ npm run db:migrate:battery-estimation --prefix backend
 
 ## Capturas de Tela
 
-A documentação visual principal está sendo atualizada para a `v0.9.0`. Nesta rodada, frontend, backend e portal ESP32 não estavam acessíveis simultaneamente para uma captura verificável; por isso nenhum mockup, imagem simulada ou screenshot antigo foi apresentado como captura atual.
+As imagens abaixo são capturas reais da `v0.9.0`, registradas em 9 de junho de 2026 com ESP32, MQTT, backend e frontend operando. Nenhum mockup ou screenshot antigo foi apresentado como captura atual.
 
-Os nomes esperados, capturas históricas reais e o checklist para produzir os novos assets ficam em [docs/assets/README.md](docs/assets/README.md). O README só passará a incorporar imagens `v0.9.0` quando os arquivos reais existirem no repositório.
+### Device online e modo Demo
+
+![Detalhe do device online v0.9.0](docs/assets/screenshots/device-detail-online-v0.9.0.png)
+
+Device real online, organização ativa, Modo Demo, telemetria recente e tópicos MQTT observados.
+
+### Telemetria com 120 amostras
+
+![Telemetria e modo Demo v0.9.0](docs/assets/screenshots/demo-mode-v0.9.0.png)
+
+Gráfico real com `120` amostras e snapshot exibindo leitura a `25 ms` e publicação MQTT a `500 ms`.
+
+### Portal ESP32 operacional
+
+![Portal ESP32 operacional v0.9.0](docs/assets/screenshots/esp32-maintenance-overview-v0.9.0.png)
+
+Portal real com estado `ONLINE`, AP de manutenção ativo, Wi-Fi station, MQTT e backend operando em paralelo.
+
+### Queda confirmada
+
+![Queda confirmada real v0.9.0](docs/assets/screenshots/alerts-fall-confirmed-v0.9.0.png)
+
+Tela real de alertas contendo a queda com imobilidade confirmada recebida do firmware.
+
+O inventário completo, as capturas adicionais do portal e os assets ainda pendentes ficam em [docs/assets/README.md](docs/assets/README.md).
 
 ## Arquitetura
 

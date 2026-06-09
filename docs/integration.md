@@ -140,7 +140,14 @@ flowchart TD
 
 ### Assets visuais
 
-Capturas reais da integração web/MQTT ficam em [assets](assets/README.md). As imagens `v0.8.26` permanecem como histórico real; os screenshots `v0.9.0` de modo Demo, bateria, portal e device online só serão referenciados quando forem capturados do projeto rodando. O GIF do fluxo ESP32/evento -> MQTT -> backend -> dashboard também permanece pendente até existir uma captura real.
+Capturas reais da integração web/MQTT ficam em [assets](assets/README.md). A `v0.9.0` possui evidências visuais do device online, tópicos MQTT observados, gráfico com `120` amostras, Modo Demo, portal ESP32 operacional e queda confirmada. O GIF do fluxo ESP32/evento -> MQTT -> backend -> dashboard permanece pendente até existir uma gravação real em velocidade legível.
+
+Imagens principais:
+
+- [device online e diagnóstico MQTT](assets/screenshots/device-detail-online-v0.9.0.png)
+- [telemetria real com 120 amostras](assets/screenshots/device-detail-telemetry-v0.9.0.png)
+- [portal ESP32 operacional](assets/screenshots/esp32-maintenance-overview-v0.9.0.png)
+- [queda confirmada real](assets/screenshots/alerts-fall-confirmed-v0.9.0.png)
 
 ### `status`
 

@@ -11,10 +11,11 @@
 ### Documentação
 - README e docs passam a explicar o default acadêmico, a compatibilidade de payloads sem bateria e a captura visual real esperada para a `v0.9.0`
 - adicionados guias dedicados da demo `v0.9.0` e da estimativa experimental de bateria
+- adicionadas capturas reais da `v0.9.0` com device online, 120 amostras, Modo Demo, portal ESP32 operacional e queda confirmada
 
 ### Pendente / Faltando
 - capturar GIF real do fluxo ESP32/evento -> MQTT -> backend -> dashboard atualizando
-- capturar screenshots reais `v0.9.0` do portal ESP32, lista/detalhe do dispositivo, bateria estimada e modo Demo
+- capturar screenshot real da bateria estimada após uma calibração manual válida
 - ativar FFT como decisão real somente após calibração e validação com dados reais
 - implementar sessões completas de calibração por SOS
 - testar classificação de movimentos com múltiplas runs por classe

@@ -197,7 +197,13 @@ O portal local do ESP32 agora cobre:
 - pré-calibração experimental de alertas com sensibilidade, thresholds, janela, cooldown, publicação de eventos e buzzer
 - botão `Testar buzzer`, que aciona um pulso curto não bloqueante quando o buzzer está habilitado na configuração atual
 
-Capturas reais do portal devem ser salvas em [assets](assets/README.md). Para a `v0.9.0`, estão previstos os arquivos `esp32-maintenance-overview-v0.9.0.png`, `esp32-maintenance-health-v0.9.0.png`, `esp32-maintenance-mqtt-config-v0.9.0.png` e `esp32-maintenance-battery-demo-v0.9.0.png`. Não há link direto enquanto a imagem real não existir no repositório.
+Capturas reais do portal `v0.9.0` estão disponíveis em [assets](assets/README.md):
+
+- [visão geral ONLINE e AP de manutenção](assets/screenshots/esp32-maintenance-overview-v0.9.0.png)
+- [saúde operacional com Wi-Fi, MQTT e backend](assets/screenshots/esp32-maintenance-health-v0.9.0.png)
+- [MQTT e identidade sem credenciais preenchidas](assets/screenshots/esp32-maintenance-mqtt-config-v0.9.0.png)
+- [energia e Modo Demo](assets/screenshots/esp32-maintenance-battery-demo-v0.9.0.png)
+- [pré-calibração e thresholds Demo](assets/screenshots/esp32-portal-v0.9.0.png)
 
 Fluxo oficial:
 
