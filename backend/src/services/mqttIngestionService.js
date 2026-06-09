@@ -47,6 +47,7 @@ function buildStatusUpdateFromPayload(payload, receivedAt, diagnostics = {}, bat
     batteryPercent: toNullableNumber(payload.battery_percent ?? payload.battery_level),
     batteryPercentSource: normalizeBatteryPercentSource(payload.battery_percent_source),
     ...batteryStatus,
+    batteryCalibrationCount: batteryStatus.batteryCalibrationCount ?? 0,
     firmwareVersion: payload.firmware_version ? String(payload.firmware_version) : null,
     detectorMode: payload.detector_mode ? String(payload.detector_mode) : null,
     sampleIntervalMs: toNullableNumber(payload.sample_interval_ms),

@@ -91,6 +91,7 @@ function buildHarness(options = {}) {
         wifiRssi: fields.wifiRssi ?? null,
         batteryPercent: fields.batteryPercent ?? null,
         batteryPercentSource: fields.batteryPercentSource ?? null,
+        batteryCalibrationCount: fields.batteryCalibrationCount ?? 0,
         firmwareVersion: fields.firmwareVersion ?? null,
         lastSeenAt: fields.lastSeenAt instanceof Date
           ? fields.lastSeenAt.toISOString()
@@ -364,9 +365,12 @@ test("telemetry grava amostra, atualiza status e emite telemetry:new", async () 
     });
 
     assert.equal(calls.telemetry.length, 1);
+    assert.equal(calls.status.length, 1);
+    assert.equal(calls.status[0].fields.batteryCalibrationCount, 0);
     assert.equal(calls.emits[0].eventName, "telemetry:new");
     assert.equal(calls.emits[0].payload.deviceId, 5);
     assert.equal(calls.emits[0].payload.organizationId, 1);
+    assert.equal(calls.emits[0].payload.deviceStatusPatch.batteryCalibrationCount, 0);
   });
 });
 

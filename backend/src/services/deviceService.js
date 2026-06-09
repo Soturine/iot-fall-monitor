@@ -1124,7 +1124,7 @@ async function upsertDeviceStatus(deviceId, fields, scope = null, executor = nul
     batteryMinutesPerPercent: toNullableNumber(fields.batteryMinutesPerPercent),
     batteryEstimatedRemainingMinutes:
       toNullableNumber(fields.batteryEstimatedRemainingMinutes),
-    batteryCalibrationCount: toNullableNumber(fields.batteryCalibrationCount),
+    batteryCalibrationCount: toNullableNumber(fields.batteryCalibrationCount) ?? 0,
     clearBatteryEstimate: Boolean(fields.clearBatteryEstimate),
     firmwareVersion: fields.firmwareVersion ? String(fields.firmwareVersion) : null,
     detectorMode: toNullableString(fields.detectorMode, 16),
