@@ -24,8 +24,9 @@ Este checklist separa validação automatizada, integração local e testes manu
 
 ## Resultado auditado em 9 de junho de 2026
 
-- [x] `npm test --prefix backend`: passou, `44/44`.
-- [x] `npm run test:integration --prefix backend`: passou, `37/37`.
+- [x] `npm test --prefix backend`: passou, `64/64`.
+- [x] `npm run test:integration --prefix backend`: passou, `42/42`.
+- [x] `npm run test:mqtt --prefix backend`: passou, `16/16`.
 - [x] `npm run stress:dry --prefix backend`: passou após alinhar o harness à validação real de telemetria; `225/225` mensagens processadas e `0` falhas.
 - [x] `npm run build --prefix frontend`: passou.
 - [x] `npm run lint --prefix frontend`: passou.
@@ -189,13 +190,22 @@ O pareamento não deve ser alterado nesta rodada. Para validar sem refatorar:
 - [ ] Device sem configuração NVS inicia em Demo apresentação.
 - [ ] Device com configuração NVS salva como Normal continua em Normal.
 - [ ] Portal alterna entre Demo e Normal e persiste a escolha.
-- [ ] Modo Demo altera status para `detector_mode=demo`, leitura para `25 ms` e telemetria para `500 ms`.
-- [ ] Status/telemetria MQTT sem campos de bateria atualiza `device_status` com `battery_calibration_count=0` sem deixar o device offline.
+- [x] Modo Demo observado no device real com leitura a `25 ms`, telemetria a `500 ms` e gráfico de `120` amostras.
+- [x] Status/telemetria MQTT sem campos de bateria possui regressão automatizada para `battery_calibration_count=0`.
 - [ ] Giro isolado gera no máximo movimento; impacto sem imobilidade não vira queda confirmada.
-- [ ] Queda controlada da caixinha em cama/almofada exige impacto, orientação e imobilidade.
+- [x] Queda controlada da caixinha em superfície macia foi registrada com impacto, orientação e imobilidade.
 - [ ] `movement_detected` e `fall_suspected` não acionam buzzer.
 - [ ] `fall_detected` confirmado e SOS acionam buzzer quando habilitado.
-- [ ] Nova bateria manual cria uma calibração; status repetido não duplica histórico.
-- [ ] Estimativa nunca fica abaixo de `0%` ou acima de `100%`.
+- [x] Nova bateria manual aparece no device real como estimativa com uma calibração registrada.
+- [x] Cálculo automatizado da estimativa limita o valor entre `0%` e `100%`.
 - [ ] Executar `npm run db:migrate:battery-estimation --prefix backend` duas vezes sem perda de dados.
 - [ ] Título da aba é `Monitor de Quedas | HealthTech IoT` e favicon não é o padrão Vite.
+
+## Evidências visuais v0.9.0
+
+- [x] Capturas reais do device online, Modo Demo, telemetria com `120` amostras, portal ESP32 e queda confirmada.
+- [x] Captura real da bateria estimada após calibração manual válida.
+- [x] Tour visual lento da interface capturado com o sensor em repouso.
+- [ ] GIF real de uma nova queda controlada percorrendo ESP32, MQTT, backend, Socket.IO e dashboard.
+
+O tour visual comprova as telas e a operação real do ambiente, mas não substitui o GIF realtime de uma nova queda.

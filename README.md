@@ -117,25 +117,29 @@ Portal real com estado `ONLINE`, AP de manutenção ativo, Wi-Fi station, MQTT e
 
 Tela real de alertas contendo a queda com imobilidade confirmada recebida do firmware.
 
+### Bateria estimada
+
+![Bateria estimada real v0.9.0](docs/assets/screenshots/battery-estimation-v0.9.0.png)
+
+Card real do device online com `95%` estimados, origem por calibração manual, autonomia aproximada de `53 h` e Modo Demo ativo.
+
+### Tour visual da interface
+
+![Tour real da interface v0.9.0](docs/assets/gifs/ui-tour-v0.9.0.gif)
+
+Tour lento capturado do projeto rodando, com o sensor em repouso. Ele demonstra as telas e a operação real da interface, mas não representa uma nova queda em tempo real.
+
 O inventário completo, as capturas adicionais do portal e os assets ainda pendentes ficam em [docs/assets/README.md](docs/assets/README.md).
 
 ## Arquitetura
 
-```text
-ESP32 + MPU6050
-      |
-      | MQTT
-      v
-Broker MQTT
-      |
-      v
-Backend Node.js + Express + Socket.IO
-      |
-      v
-MySQL
-      |
-      v
-Frontend React + Vite
+```mermaid
+flowchart LR
+    A[ESP32 + MPU6050] -->|status, telemetry e events| B[Broker MQTT]
+    B --> C[Backend Node.js + Express]
+    C --> D[(MySQL)]
+    C -->|Socket.IO| E[Frontend React + Vite]
+    E -->|JWT + X-Organization-Id| C
 ```
 
 ### Camadas
@@ -432,6 +436,7 @@ O frontend exibe esse status de forma discreta no dashboard, na lista de disposi
 
 - [docs/demo-v0.9.0.md](docs/demo-v0.9.0.md): roteiro curto específico da demo acadêmica, incluindo modo Demo, telemetria e segurança de bancada.
 - [docs/battery-estimation.md](docs/battery-estimation.md): cálculo, aprendizado `70/30`, limites e validação da bateria estimada.
+- [docs/database-model.md](docs/database-model.md): diagrama Mermaid das principais entidades, relações e trilhas de rastreabilidade.
 - [docs/roteiro-demonstracao.md](docs/roteiro-demonstracao.md): sequência curta para apresentar arquitetura, segurança, telemetria, alerta e limitações.
 - [docs/checklist-validacao.md](docs/checklist-validacao.md): matriz de testes automatizados e checklist manual de JWT, multi-tenant, MQTT, Socket.IO, banco, alertas e hardware.
 - [docs/integration.md](docs/integration.md): integração entre firmware, backend, banco, MQTT, pareamento e tempo real.
@@ -445,6 +450,7 @@ O frontend exibe esse status de forma discreta no dashboard, na lista de disposi
 - [backend/README.md](backend/README.md): detalhes do backend, rotas, scripts e ingestão.
 - [frontend/README.md](frontend/README.md): detalhes do frontend, telas e comportamento em tempo real.
 - [docs/assets/README.md](docs/assets/README.md): inventário de capturas reais e checklist dos assets visuais pendentes.
+- [RELEASE_NOTES_v0.9.0.md](RELEASE_NOTES_v0.9.0.md): resumo oficial, evidências, validações e limitações da release.
 - [CHANGELOG.md](CHANGELOG.md): histórico de versões, limitações e próximos passos.
 
 ## Licença

@@ -140,7 +140,7 @@ flowchart TD
 
 ### Assets visuais
 
-Capturas reais da integração web/MQTT ficam em [assets](assets/README.md). A `v0.9.0` possui evidências visuais do device online, tópicos MQTT observados, gráfico com `120` amostras, Modo Demo, portal ESP32 operacional e queda confirmada. O GIF do fluxo ESP32/evento -> MQTT -> backend -> dashboard permanece pendente até existir uma gravação real em velocidade legível.
+Capturas reais da integração web/MQTT ficam em [assets](assets/README.md). A `v0.9.0` possui evidências visuais do device online, tópicos MQTT observados, gráfico com `120` amostras, Modo Demo, portal ESP32 operacional, bateria estimada e queda confirmada. Também existe um tour visual lento da interface capturado com o sensor em repouso. O GIF de uma nova queda percorrendo ESP32/evento -> MQTT -> backend -> dashboard permanece pendente até existir uma gravação real em velocidade legível.
 
 Imagens principais:
 
@@ -148,6 +148,8 @@ Imagens principais:
 - [telemetria real com 120 amostras](assets/screenshots/device-detail-telemetry-v0.9.0.png)
 - [portal ESP32 operacional](assets/screenshots/esp32-maintenance-overview-v0.9.0.png)
 - [queda confirmada real](assets/screenshots/alerts-fall-confirmed-v0.9.0.png)
+- [bateria estimada real](assets/screenshots/battery-estimation-v0.9.0.png)
+- [tour real da interface com sensor em repouso](assets/gifs/ui-tour-v0.9.0.gif)
 
 ### `status`
 

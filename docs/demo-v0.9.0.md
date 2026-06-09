@@ -35,8 +35,10 @@ Demo facilita a apresentação acadêmica, mas não representa calibração clí
 - [Configuração MQTT e identidade](assets/screenshots/esp32-maintenance-mqtt-config-v0.9.0.png)
 - [Energia e modo Demo](assets/screenshots/esp32-maintenance-battery-demo-v0.9.0.png)
 - [Queda confirmada real](assets/screenshots/alerts-fall-confirmed-v0.9.0.png)
+- [Bateria estimada real](assets/screenshots/battery-estimation-v0.9.0.png)
+- [Tour lento da interface com o sensor em repouso](assets/gifs/ui-tour-v0.9.0.gif)
 
-A captura de bateria estimada e o GIF realtime continuam pendentes até existirem dados e gravação reais adequados.
+A bateria estimada e o tour visual já possuem evidências reais. O tour foi capturado com o sensor em repouso: a linha estável demonstra operação coerente da telemetria, mas não representa uma nova queda. O GIF realtime de uma nova queda controlada continua pendente.
 
 ## Sequência sugerida
 
@@ -51,6 +53,19 @@ A captura de bateria estimada e o GIF realtime continuam pendentes até existire
 9. Exporte JSON/PDF e apresente a bateria estimada.
 
 Nunca teste queda com pessoa e não jogue o sensor com força.
+
+## Alternativa sem movimento físico
+
+Quando não for apropriado movimentar o hardware durante a banca:
+
+1. mostre login, dashboard, device online e Modo Demo
+2. apresente a bateria estimada e sua última calibração
+3. mostre o gráfico estável em repouso e explique a telemetria recente
+4. use o tour visual real para percorrer as telas
+5. abra o alerta de queda confirmada já registrado e sua evidência
+6. demonstre histórico, ações e exportação JSON/PDF
+
+Em repouso, a linha do gráfico tende a permanecer estável; o objetivo da captura/GIF é demonstrar operação real da interface e atualização da telemetria.
 
 ## Plano B
 

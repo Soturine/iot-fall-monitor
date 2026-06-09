@@ -17,6 +17,19 @@ Ambiente de desenvolvimento recomendado nesta fase:
 
 - `Node.js 20+`
 
+## Baseline v0.9.0
+
+O backend da `v0.9.0` preserva JWT, escopo multi-tenant, contratos MQTT e emissões Socket.IO, e acrescenta suporte ao Modo Demo e à estimativa experimental de bateria:
+
+- aceita `detector_mode`, `sample_interval_ms` e `telemetry_interval_ms` no snapshot do device
+- processa payloads MQTT antigos ou sem bateria sem deixar o device offline
+- normaliza `battery_calibration_count` ausente para `0`, compatível com a coluna `NOT NULL`
+- registra calibrações manuais e calcula bateria estimada por tempo com taxa inicial de `33.5 min/%`
+- aprende gradualmente a taxa com suavização `70/30`, descartando calibrações inconsistentes
+- mantém telemetria, evento crítico, alerta e realtime como responsabilidades separadas
+
+A bateria exibida é uma estimativa operacional, não uma medição elétrica real.
+
 ## Estrutura
 
 ```text
@@ -285,6 +298,14 @@ A partir da v0.8.25, eventos críticos MQTT podem trazer `event_uuid`, `event_se
 
 O contrato legado continua aceito: payloads antigos sem `event_uuid` seguem o fluxo anterior e ainda contam com a janela curta de deduplicação de alertas. A fila local do firmware é em RAM, então reenvios cobrem reconexões MQTT, mas não sobrevivem a perda de energia; persistência em SPIFFS/LittleFS fica como evolução futura.
 
+### Status, Modo Demo e bateria estimada
+
+O `device_status` separa presença recente, saúde do sensor, perfil do detector e contexto de bateria. Status/telemetria sem campos de bateria continuam válidos; o backend mantém os campos opcionais como `NULL` e usa `0` somente para `battery_calibration_count`.
+
+Quando o portal informa uma nova porcentagem manual, o backend pode registrar uma linha em `battery_calibrations`, calcular a autonomia restante e expor `battery_percent`, origem, última calibração, taxa em `min/%`, minutos restantes e quantidade de calibrações.
+
+O modo do detector e os intervalos efetivos também ficam no snapshot por meio de `detector_mode`, `sample_interval_ms` e `telemetry_interval_ms`.
+
 ## Rotas REST principais
 
 Autenticação:
@@ -334,6 +355,7 @@ Eventos:
 Alertas:
 
 - `GET /api/alerts`
+- `GET /api/alerts/export`
 - `GET /api/alerts/:id`
 - `POST /api/alerts/:id/acknowledge`
 - `POST /api/alerts/:id/cancel`
@@ -367,6 +389,9 @@ Importante:
 - a versão atual do schema recria as tabelas do projeto
 - `npm run db:init` e `.\scripts\init-db.ps1` devem ser tratados como reset de ambiente nesta migração
 - se o backend logar schema desatualizado para evidência, rode `npm run db:migrate:evidence --prefix backend`; esse script e idempotente e não apaga dados
+- para aplicar bateria estimada em banco existente, rode `npm run db:migrate:battery-estimation --prefix backend`; a migração é idempotente e não reseta dados
+
+O diagrama das principais relações está em [docs/database-model.md](../docs/database-model.md).
 
 ## Scripts do backend
 
@@ -387,8 +412,10 @@ Importante:
 - `npm run mqtt:watch`: assina os tópicos reais e imprime mensagens MQTT recebidas no broker
 - `npm run mqtt:publish:test`: publica status/telemetria de teste no contrato esperado pelo backend
 - `npm run db:init`: aplica schema e seed usando `mysql2` e o `backend/.env`
+- `npm run db:migrate:alert-actions`: garante ações de alerta sem resetar dados existentes
 - `npm run db:migrate:evidence`: aplica colunas/tabela de evidência sem resetar dados existentes
 - `npm run db:migrate:sensor-diagnostics`: aplica colunas de diagnóstico do sensor em `device_status` sem resetar dados existentes
+- `npm run db:migrate:battery-estimation`: aplica snapshot e histórico de calibração de bateria sem resetar dados existentes
 
 O smoke test da raiz passou a validar também `GET /api/organization` e `GET /api/patients`, usando o `activeOrganizationId` retornado no login para montar o header `X-Organization-Id`.
 
@@ -413,6 +440,17 @@ Eventos emitidos:
 - `telemetry:new`
 
 O socket também recebe contexto de organização no handshake, e o backend filtra emissão por organização e paciente.
+
+## Validação auditada da v0.9.0
+
+Em 9 de junho de 2026:
+
+- `npm run check --prefix backend`: passou, `87` arquivos JavaScript validados
+- `npm test --prefix backend`: passou, `64/64`
+- `npm run test:integration --prefix backend`: passou, `42/42`
+- `npm run test:mqtt --prefix backend`: passou, `16/16`
+
+As suítes cobrem, entre outros pontos, status sem bateria, normalização de `battery_calibration_count`, cálculo/aprendizado da estimativa, telemetria válida, eventos, alertas, deduplicação e realtime escopado.
 
 ## Observações e limitações
 

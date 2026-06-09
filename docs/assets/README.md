@@ -18,13 +18,14 @@ Em 9 de junho de 2026, as capturas abaixo foram registradas diretamente do proje
 - `screenshots/esp32-maintenance-mqtt-config-v0.9.0.png`: identidade e configuração MQTT sem credenciais preenchidas.
 - `screenshots/esp32-maintenance-battery-demo-v0.9.0.png`: bateria não informada e modo Demo recomendado.
 - `screenshots/esp32-portal-v0.9.0.png`: pré-calibração real com thresholds Demo e buzzer habilitado.
+- `screenshots/battery-estimation-v0.9.0.png`: device online com bateria estimada em `95%`, calibração manual, autonomia e Modo Demo.
+- `gifs/ui-tour-v0.9.0.gif`: tour lento de oito telas reais, capturado com o sensor em repouso.
 
 ## Capturas pendentes
 
-- `screenshots/battery-estimation-v0.9.0.png`
 - `gifs/realtime-fall-demo-v0.9.0.gif`
 
-A bateria estava realmente como `não informada`, então não foi criada uma captura fingindo uma estimativa. O GIF também permanece pendente até ser possível registrar um novo fluxo real sem acelerar demais a reprodução.
+A bateria foi capturada somente após uma calibração manual válida aparecer no device real. O tour da interface não simula movimento nem queda; o GIF realtime de uma nova queda controlada permanece pendente até ser possível registrar o fluxo completo em velocidade legível.
 
 ## Capturas históricas reais
 
@@ -45,7 +46,7 @@ Eles não devem ser apresentados como documentação visual principal da `v0.9.0
 2. Confirme que a tela mostra dados reais do ambiente atual.
 3. No portal ESP32, oculte senhas, tokens, IPs sensíveis e credenciais.
 4. Capture modo Demo, bateria estimada, telemetria recente e saúde operacional.
-5. Para o GIF, registre apenas um fluxo real curto de evento até atualização do dashboard.
+5. Para o GIF de queda, registre apenas um fluxo real curto de evento até atualização do dashboard e preserve tempo suficiente para leitura.
 6. Salve o arquivo com um dos nomes esperados acima.
 7. Confira visualmente que não há dados sensíveis.
 8. Atualize README e docs para referenciar somente arquivos existentes.

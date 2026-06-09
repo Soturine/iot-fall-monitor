@@ -25,6 +25,19 @@ Ao preencher `Bateria atual (%)` no portal, o firmware persiste percentual, hor�
 
 Sem calibração manual, o frontend deve mostrar `--%` ou `não informado`.
 
+## Evidência real v0.9.0
+
+Em 9 de junho de 2026, o device real online apresentou:
+
+- bateria estimada: `95%`
+- última calibração manual: `96%`
+- origem: `manual_estimated`
+- taxa aplicada: `33.5 min/%`
+- autonomia estimada: aproximadamente `53 h` (`3182 min`)
+- calibrações registradas: `1`
+
+A evidência visual está em [battery-estimation-v0.9.0.png](assets/screenshots/battery-estimation-v0.9.0.png). Esses valores comprovam o funcionamento do cálculo e da exibição, não uma medição elétrica real da bateria.
+
 ## Aprendizado gradual
 
 Quando uma nova calibração plausível reduz o percentual após tempo suficiente:

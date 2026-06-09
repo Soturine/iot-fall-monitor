@@ -105,7 +105,7 @@ Abra o detalhe de um dispositivo e mostre:
 - diagnóstico do sensor e I2C
 - gráfico com telemetria recente
 - diferença entre dispositivo online e telemetria válida/recente
-- bateria manual ou `--%` quando não informada
+- bateria estimada, última calibração e autonomia restante
 
 Explique que:
 
@@ -113,7 +113,9 @@ Explique que:
 - MQTT entrega dados do ESP32 ao backend
 - o backend persiste telemetria válida em `telemetry_logs`
 - `telemetry:new` atualiza o frontend por Socket.IO
-- a janela visual mantém 60 amostras recentes
+- a janela visual mantém até `120` amostras recentes em Modo Demo
+
+Em repouso, a linha do gráfico tende a permanecer estável; o objetivo da captura/GIF é demonstrar operação real da interface e atualização da telemetria.
 
 ### 5. Persistência e rastreabilidade
 
@@ -229,3 +231,11 @@ Se o dashboard não atualizar:
 7. Confirme/resolva um alerta e exporte JSON/PDF.
 8. Informe uma bateria manual no portal e mostre percentual estimado, autonomia, última calibração e taxa aprendida.
 9. Reforce: não testar queda com pessoa, não jogar o sensor com força, bateria não é medição elétrica real e FFT continua experimental.
+
+## Alternativa visual sem movimentar o sensor
+
+1. Mostre o device online, Modo Demo, telemetria recente e gráfico estável em repouso.
+2. Apresente a bateria estimada em `95%`, sua origem manual estimada e autonomia aproximada.
+3. Use o [tour visual real](assets/gifs/ui-tour-v0.9.0.gif) para percorrer login, dashboard, pacientes, devices, detalhe, telemetria, alertas e organização.
+4. Abra a queda confirmada já registrada, sem tentar produzir uma nova queda durante a apresentação.
+5. Explique que o tour visual não é o GIF realtime de queda, que permanece uma evidência futura.

@@ -1,49 +1,51 @@
 # Changelog
 
 ## [Unreleased]
-### Corrigido
-- ingestão MQTT e `upsertDeviceStatus` normalizam `battery_calibration_count` ausente para `0`, evitando falha em payloads antigos ou sem bateria
-
-### Alterado
-- configuração nova/factory do firmware inicia em `Demo apresentação`; configurações já salvas em NVS continuam respeitando a escolha Normal ou Demo do usuário
-- portal identifica `Demo apresentação` como recomendado para a banca acadêmica e `Normal` como perfil conservador
-
-### Documentação
-- README e docs passam a explicar o default acadêmico, a compatibilidade de payloads sem bateria e a captura visual real esperada para a `v0.9.0`
-- adicionados guias dedicados da demo `v0.9.0` e da estimativa experimental de bateria
-- adicionadas capturas reais da `v0.9.0` com device online, 120 amostras, Modo Demo, portal ESP32 operacional e queda confirmada
-
 ### Pendente / Faltando
-- capturar GIF real do fluxo ESP32/evento -> MQTT -> backend -> dashboard atualizando
-- capturar screenshot real da bateria estimada após uma calibração manual válida
+- capturar GIF real de uma nova queda controlada percorrendo ESP32/evento -> MQTT -> backend -> dashboard
 - ativar FFT como decisão real somente após calibração e validação com dados reais
 - implementar sessões completas de calibração por SOS
 - testar classificação de movimentos com múltiplas runs por classe
-- validar o sistema com ESP32 real, MPU6050, backend, MQTT e dashboard em cenário ponta a ponta
+- ampliar a validação ponta a ponta com mais cenários, repetições e dataset real
 
 ## [v0.9.0] - 2026-06-09
 ### Adicionado
 - modo de operação `Normal`/`Demo apresentação` persistido em NVS e configurável pelo portal ESP32
-- perfil demo opt-in com leitura interna a `25 ms`, telemetria MQTT a `500 ms` e FSM de queda mais amigável para bancada
+- perfil demo acadêmico com leitura interna a `25 ms`, telemetria MQTT a `500 ms` e FSM de queda mais amigável para bancada
 - evidência de decisão com modo, etapas de impacto/orientação/imobilidade, thresholds e intervalos efetivos
 - estimativa experimental de bateria por tempo, iniciada em `33.5 min/%`, com histórico e aprendizado suavizado por calibrações manuais
 - migração idempotente `db:migrate:battery-estimation`, sem resetar banco ou histórico
 - título e favicon próprios do Monitor de Quedas
+- guias dedicados da demo e da estimativa experimental de bateria
+- capturas reais com device online, 120 amostras, Modo Demo, portal ESP32 operacional, queda confirmada e bateria estimada
+- tour visual real e lento da interface, capturado com o sensor em repouso e sem simular uma nova queda
 
 ### Alterado
 - modo normal preserva leitura a `50 ms`, telemetria a `2000 ms` e thresholds conservadores
+- configuração nova/factory inicia em `Demo apresentação`; configuração Normal ou Demo já salva em NVS continua respeitada
+- portal identifica `Demo apresentação` como recomendado para a banca acadêmica e `Normal` como perfil conservador
 - detalhe/lista de dispositivos passam a exibir modo do detector e contexto da bateria estimada
 - detalhe em modo demo mantém até `120` amostras recentes para visualização mais fluida
 - README reorganizado para descrever o sistema atual, mantendo histórico detalhado neste changelog
+
+### Corrigido
+- ingestão MQTT e `upsertDeviceStatus` normalizam `battery_calibration_count` ausente para `0`, evitando falha em payloads antigos ou sem bateria
+
+### Documentação
+- README e docs explicam o default acadêmico, a compatibilidade de payloads sem bateria e as evidências visuais reais da `v0.9.0`
+- modelo relacional principal documentado em Mermaid sem alterar o schema
+- assets distinguem o tour real da interface do futuro GIF realtime de uma queda controlada
 
 ### Segurança e limitações
 - buzzer continua reservado a `fall_detected` confirmado e SOS; `movement_detected` e `fall_suspected` não acionam alarme local
 - modo demo é experimental e não representa calibração clínica
 - bateria continua sendo estimativa por tempo, não medição elétrica real; ADC/fuel gauge permanece evolução futura
 - FFT/Fourier continua experimental e desligada como decisão principal
+- o tour visual da interface não demonstra uma nova queda; o GIF realtime de queda permanece pendente
 
 ### Validação
-- `platformio run`, checks e testes backend, lint e build frontend executados durante a rodada
+- ESP32 real online com MQTT, Modo Demo, telemetria recente, gráfico de `120` amostras, bateria estimada e queda confirmada registrada
+- checks e testes backend, lint e build frontend executados durante a rodada
 
 ## [v0.8.31] - 2026-06-09
 ### Adicionado

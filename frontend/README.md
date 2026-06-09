@@ -170,6 +170,16 @@ Quando a organização ativa muda, a conexão e refeita para alinhar o escopo do
 
 No refresh/F5, o app reidrata a sessão por `GET /api/me`, descarta apenas uma organização salva inválida e cria o Socket.IO somente depois de token, usuário e organização ativa estarem coerentes.
 
+## Estado visual v0.9.0
+
+- lista e detalhe do device mostram badge **Modo Demo** ou **Modo Normal**
+- em Demo, o detalhe mantém até `120` amostras recentes para leitura fluida
+- bateria calibrada manualmente aparece como estimada, com autonomia, taxa `min/%` e quantidade de calibrações
+- sem calibração, a interface mantém `--%`/`não informado`
+- diagnóstico diferencia device online, telemetria recente e validade do sensor
+
+As evidências reais ficam em [docs/assets](../docs/assets/README.md). O tour visual foi capturado com o sensor em repouso e não deve ser apresentado como um GIF realtime de queda.
+
 ## Relacao com o portal local do ESP32
 
 O portal do ESP32 não substitui o frontend principal.
