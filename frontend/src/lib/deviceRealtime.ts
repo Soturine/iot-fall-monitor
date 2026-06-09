@@ -93,6 +93,6 @@ export function applyTelemetryPatchToDetail(
   return {
     ...detail,
     device: applyTelemetryPatchToDevice(detail.device, telemetryEvent),
-    recentTelemetry: nextTelemetry.slice(-30),
+    recentTelemetry: nextTelemetry.slice(-60),
   };
 }

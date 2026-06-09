@@ -5,6 +5,7 @@ import { getStoredOrganizationId, getStoredToken } from "../lib/storage";
 
 export const api = axios.create({
   baseURL: apiBaseUrl,
+  timeout: 15000,
 });
 
 api.interceptors.request.use((config) => {

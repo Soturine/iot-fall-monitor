@@ -1,12 +1,16 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, BatteryCharging, Link2, Signal, TriangleAlert } from "lucide-react";
-import { Link, useParams } from "react-router-dom";
+import { ArrowLeft, BatteryCharging, Link2, RotateCcw, Signal, TriangleAlert, Unlink } from "lucide-react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import toast from "react-hot-toast";
 
 import { TelemetryChart } from "../components/charts/TelemetryChart";
 import { Badge } from "../components/ui/Badge";
+import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { EmptyState } from "../components/ui/EmptyState";
 import { LoadingState } from "../components/ui/LoadingState";
+import { RequestErrorState } from "../components/ui/RequestErrorState";
+import { useAuth } from "../contexts/AuthContext";
 import { useRealtime } from "../contexts/RealtimeContext";
 import {
   TELEMETRY_STALE_AFTER_MS,
@@ -35,7 +39,7 @@ import {
   severityTone,
   statusTone,
 } from "../lib/format";
-import { api } from "../services/api";
+import { api, getErrorMessage } from "../services/api";
 import type {
   AlertRecord,
   DeviceDetailResponse,
@@ -353,7 +357,9 @@ function DiagnosticMetric({
 
 export function DeviceDetailPage() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const numericId = Number(id);
+  const { activeRole, user } = useAuth();
   const {
     connectionPhase,
     isConnected,
@@ -364,6 +370,11 @@ export function DeviceDetailPage() {
   } = useRealtime();
   const [detail, setDetail] = useState<DeviceDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
+  const [adminAction, setAdminAction] = useState<"unassign" | "reset" | null>(null);
+  const canManageDevice =
+    activeRole === "organization_admin" || user?.globalRole === "platform_admin";
 
   useEffect(() => {
     if (!numericId) {
@@ -375,6 +386,7 @@ export function DeviceDetailPage() {
     const loadDetail = async (showLoading = true) => {
       if (showLoading) {
         setLoading(true);
+        setLoadError("");
       }
 
       try {
@@ -383,9 +395,10 @@ export function DeviceDetailPage() {
         if (active) {
           setDetail(response.data);
         }
-      } catch {
+      } catch (error) {
         if (active && showLoading) {
           setDetail(null);
+          setLoadError(getErrorMessage(error));
         }
       } finally {
         if (active && showLoading) {
@@ -435,13 +448,68 @@ export function DeviceDetailPage() {
       socket.off("alert:new", refreshIfMatches);
       socket.off("alert:updated", refreshIfMatches);
     };
-  }, [numericId, socket]);
+  }, [numericId, reloadKey, socket]);
+
+  async function unassignPatient() {
+    if (
+      !detail?.device.currentPatient ||
+      !window.confirm(
+        "Desvincular o paciente atual? O histórico de vínculo será encerrado e preservado.",
+      )
+    ) {
+      return;
+    }
+
+    setAdminAction("unassign");
+    try {
+      await api.post(`/devices/${numericId}/assign-patient`, {
+        patientId: null,
+        reason: "manual_unassign",
+      });
+      toast.success("Paciente desvinculado com histórico preservado.");
+      setReloadKey((current) => current + 1);
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setAdminAction(null);
+    }
+  }
+
+  async function resetClaim() {
+    if (
+      !window.confirm(
+        "Isso remove o vínculo do dispositivo com a organização atual para permitir demonstrar o pareamento novamente. O histórico será preservado.",
+      )
+    ) {
+      return;
+    }
+
+    setAdminAction("reset");
+    try {
+      await api.post(`/devices/${numericId}/reset-claim`);
+      toast.success("Pareamento resetado. O histórico foi preservado.");
+      navigate("/devices");
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    } finally {
+      setAdminAction(null);
+    }
+  }
 
   if (loading && !detail) {
     return <LoadingState label="Carregando detalhes do dispositivo..." />;
   }
 
   if (!detail) {
+    if (loadError) {
+      return (
+        <RequestErrorState
+          message={loadError}
+          onRetry={() => setReloadKey((current) => current + 1)}
+        />
+      );
+    }
+
     return (
       <EmptyState
         description="Confira se o ID está correto e se o device já foi pareado com a organização atual."
@@ -495,13 +563,37 @@ export function DeviceDetailPage() {
           style={{ backgroundImage: "url(/images/campus-bloco-6-gramado.jpeg)" }}
         />
         <div className="relative">
-          <Link
-            className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-white transition hover:bg-white/20"
-            to="/devices"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Dispositivos
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-white transition hover:bg-white/20"
+              to="/devices"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Dispositivos
+            </Link>
+            {canManageDevice && detail.device.currentPatient ? (
+              <Button
+                disabled={adminAction !== null}
+                onClick={unassignPatient}
+                type="button"
+                variant="secondary"
+              >
+                <Unlink className="h-4 w-4" />
+                {adminAction === "unassign" ? "Desvinculando..." : "Desvincular paciente"}
+              </Button>
+            ) : null}
+            {canManageDevice && detail.device.claimStatus === "claimed" ? (
+              <Button
+                disabled={adminAction !== null}
+                onClick={resetClaim}
+                type="button"
+                variant="danger"
+              >
+                <RotateCcw className="h-4 w-4" />
+                {adminAction === "reset" ? "Resetando..." : "Desparear para demo"}
+              </Button>
+            ) : null}
+          </div>
 
           <div className="mt-6 flex flex-wrap items-start justify-between gap-6">
             <div className="min-w-0">
@@ -822,7 +914,7 @@ export function DeviceDetailPage() {
               {activeAlerts.length ? "Exigem atenção" : "Sem pendências"}
             </Badge>
           </div>
-          <div className="mt-5 space-y-3">
+          <div className="mt-5 max-h-[32rem] space-y-3 overflow-y-auto pr-1">
             {detail.recentAlerts.length ? (
               detail.recentAlerts.map((alert: AlertRecord) => (
                 <div
@@ -853,6 +945,9 @@ export function DeviceDetailPage() {
               />
             )}
           </div>
+          <Link className="mt-4 inline-flex text-sm font-semibold text-teal-700" to="/alerts">
+            Ver histórico completo em Alertas
+          </Link>
         </Card>
 
         <Card>
@@ -912,7 +1007,7 @@ export function DeviceDetailPage() {
           </div>
           <Badge tone="info">{detail.recentEvents.length} registros</Badge>
         </div>
-        <div className="mt-5 space-y-3">
+        <div className="mt-5 max-h-[36rem] space-y-3 overflow-y-auto pr-1">
           {detail.recentEvents.length ? (
             detail.recentEvents.map((event) => (
               <div

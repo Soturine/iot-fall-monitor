@@ -8,6 +8,7 @@ import { Card } from "../components/ui/Card";
 import { EmptyState } from "../components/ui/EmptyState";
 import { LoadingState } from "../components/ui/LoadingState";
 import { Modal } from "../components/ui/Modal";
+import { RequestErrorState } from "../components/ui/RequestErrorState";
 import { useAuth } from "../contexts/AuthContext";
 import { useRealtime } from "../contexts/RealtimeContext";
 import { downloadAlertReportJson, printAlertReport } from "../lib/alertReport";
@@ -29,6 +30,8 @@ export function AlertsPage() {
   const [devices, setDevices] = useState<Device[]>([]);
   const [selectedAlert, setSelectedAlert] = useState<AlertRecord | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
   const [exporting, setExporting] = useState<"json" | "pdf" | null>(null);
   const [filters, setFilters] = useState({
     status: "",
@@ -81,6 +84,7 @@ export function AlertsPage() {
 
     const loadData = async () => {
       setLoading(true);
+      setLoadError("");
 
       try {
         const [alertsResponse, eventsResponse, devicesResponse] = await Promise.all([
@@ -96,6 +100,10 @@ export function AlertsPage() {
         setAlerts(alertsResponse.data.items);
         setEvents(eventsResponse.data.items);
         setDevices(devicesResponse.data.items);
+      } catch (error) {
+        if (active) {
+          setLoadError(getErrorMessage(error));
+        }
       } finally {
         if (active) {
           setLoading(false);
@@ -126,6 +134,7 @@ export function AlertsPage() {
   }, [
     alertParams,
     eventParams,
+    reloadKey,
     socket,
   ]);
 
@@ -157,7 +166,12 @@ export function AlertsPage() {
       setSelectedAlert((current) => (
         current?.id === alertId ? response.data.alert : current
       ));
-      toast.success(`Alerta ${action} com sucesso.`);
+      const actionLabel = {
+        acknowledge: "Atendimento confirmado",
+        resolve: "Alerta resolvido",
+        cancel: "Alerta cancelado",
+      }[action];
+      toast.success(`${actionLabel} com sucesso.`);
     } catch (error) {
       toast.error(getErrorMessage(error));
     }
@@ -209,6 +223,15 @@ export function AlertsPage() {
     return <LoadingState label="Carregando fila de alertas..." />;
   }
 
+  if (loadError && !alerts.length && !events.length) {
+    return (
+      <RequestErrorState
+        message={loadError}
+        onRetry={() => setReloadKey((current) => current + 1)}
+      />
+    );
+  }
+
   const openCount = alerts.filter((alert) => alert.status === "open").length;
   const ackCount = alerts.filter((alert) => alert.status === "acknowledged").length;
   const criticalCount = alerts.filter((a) => a.event.severity === "critical").length;
@@ -222,6 +245,12 @@ export function AlertsPage() {
 
   return (
     <div className="space-y-6">
+      {loadError ? (
+        <RequestErrorState
+          message={loadError}
+          onRetry={() => setReloadKey((current) => current + 1)}
+        />
+      ) : null}
       <Card className="relative overflow-hidden border-white/60 bg-gradient-to-br from-white via-white to-danger-50/40">
         <div className="pointer-events-none absolute -right-24 -top-20 h-72 w-72 rounded-full bg-danger-500/10 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-24 -left-16 h-64 w-64 rounded-full bg-petrol-500/10 blur-3xl" />
@@ -412,7 +441,7 @@ export function AlertsPage() {
                       {canMutateAlerts && alert.status === "open" ? (
                         <Button onClick={() => executeAction(alert.id, "acknowledge")}>
                           <ShieldCheck className="h-4 w-4" />
-                          Acknowledge
+                          Confirmar atendimento
                         </Button>
                       ) : null}
                       {canMutateAlerts && ["open", "acknowledged"].includes(alert.status) ? (
@@ -493,7 +522,7 @@ export function AlertsPage() {
             <div className="flex flex-wrap justify-end gap-3">
               {selectedAlert.status === "open" ? (
                 <Button onClick={() => executeAction(selectedAlert.id, "acknowledge")}>
-                  Acknowledge
+                  Confirmar atendimento
                 </Button>
               ) : null}
               {["open", "acknowledged"].includes(selectedAlert.status) ? (

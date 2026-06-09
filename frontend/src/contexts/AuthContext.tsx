@@ -35,6 +35,7 @@ type AuthContextValue = {
   activeRole: OrganizationRole | null;
   isAuthenticated: boolean;
   loading: boolean;
+  sessionError: string | null;
   login: (email: string, password: string) => Promise<void>;
   register: (
     name: string,
@@ -123,6 +124,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     getStoredOrganizationId(),
   );
   const [loading, setLoading] = useState(Boolean(initialToken));
+  const [sessionError, setSessionError] = useState<string | null>(null);
   const userRef = useRef<User | null>(initialUser);
 
   useEffect(() => {
@@ -193,6 +195,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       }
 
       try {
+        setSessionError(null);
         const response = await api.get<{ user: User }>("/me");
         const nextUser = normalizeUser(response.data.user);
 
@@ -245,8 +248,13 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
         if (axios.isAxiosError(error) && [401, 403].includes(error.response?.status || 0)) {
           applySession(null, null);
-        } else if (!userRef.current) {
-          applySession(null, null);
+        } else {
+          setSessionError(
+            "Não foi possível validar a sessão agora. Verifique o backend e tente novamente.",
+          );
+          if (!userRef.current) {
+            applySession(null, null);
+          }
         }
       } finally {
         if (!cancelled) {
@@ -264,6 +272,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
   async function persistAuth(promise: Promise<{ data: AuthPayload }>) {
     setLoading(true);
+    setSessionError(null);
 
     try {
       const response = await promise;
@@ -275,7 +284,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
       applySession(nextUser, response.data.token);
     } catch (error) {
-      throw new Error(getErrorMessage(error));
+      const message = getErrorMessage(error);
+      setSessionError(message);
+      throw new Error(message);
     } finally {
       setLoading(false);
     }
@@ -303,6 +314,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     activeRole,
     isAuthenticated: Boolean(token && user),
     loading,
+    sessionError,
     async login(email, password) {
       await persistAuth(api.post("/auth/login", { email, password }));
     },

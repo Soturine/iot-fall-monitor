@@ -10,6 +10,7 @@ import { Card } from "../components/ui/Card";
 import { EmptyState } from "../components/ui/EmptyState";
 import { LoadingState } from "../components/ui/LoadingState";
 import { Modal } from "../components/ui/Modal";
+import { RequestErrorState } from "../components/ui/RequestErrorState";
 import { useAuth } from "../contexts/AuthContext";
 import { useRealtime } from "../contexts/RealtimeContext";
 import { cn } from "../lib/cn";
@@ -111,6 +112,8 @@ export function DevicesPage() {
   const [devices, setDevices] = useState<Device[]>([]);
   const [patients, setPatients] = useState<PatientRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [claimStatus, setClaimStatus] = useState("");
@@ -191,6 +194,7 @@ export function DevicesPage() {
 
     const loadData = async () => {
       setLoading(true);
+      setLoadError("");
 
       try {
         const [devicesResponse, patientsResponse] = await Promise.all([
@@ -211,6 +215,10 @@ export function DevicesPage() {
 
         setDevices(devicesResponse.data.items);
         setPatients(patientsResponse.data.items);
+      } catch (error) {
+        if (active) {
+          setLoadError(getErrorMessage(error));
+        }
       } finally {
         if (active) {
           setLoading(false);
@@ -248,7 +256,7 @@ export function DevicesPage() {
       socket.off("alert:new", refresh);
       socket.off("alert:updated", refresh);
     };
-  }, [claimStatus, deferredSearch, socket, status]);
+  }, [claimStatus, deferredSearch, reloadKey, socket, status]);
 
   useEffect(() => {
     if (!pairingModalOpen || !canManageDevices) {
@@ -448,6 +456,15 @@ export function DevicesPage() {
     return <LoadingState label="Buscando dispositivos da organização..." />;
   }
 
+  if (loadError && !devices.length) {
+    return (
+      <RequestErrorState
+        message={loadError}
+        onRetry={() => setReloadKey((current) => current + 1)}
+      />
+    );
+  }
+
   const offlineDevices = devices.filter((device) => !device.status.online).length;
   const realtimeSummary = isConnected
     ? "Socket do painel conectado. Device offline continua significando ausencia recente de status/telemetria MQTT no backend."
@@ -460,6 +477,12 @@ export function DevicesPage() {
 
   return (
     <div className="space-y-6">
+      {loadError ? (
+        <RequestErrorState
+          message={loadError}
+          onRetry={() => setReloadKey((current) => current + 1)}
+        />
+      ) : null}
       <Card className="relative overflow-hidden border-white/60 bg-gradient-to-br from-white via-white to-teal-50/40">
         <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-teal-400/10 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-24 -left-16 h-64 w-64 rounded-full bg-petrol-500/10 blur-3xl" />

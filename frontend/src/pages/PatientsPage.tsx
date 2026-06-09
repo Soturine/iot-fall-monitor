@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Activity, Cpu, Edit3, HeartPulse, Plus, UserRound, Users } from "lucide-react";
+import { Activity, Archive, Cpu, Edit3, HeartPulse, Plus, UserRound, Users } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { Badge } from "../components/ui/Badge";
@@ -19,6 +19,7 @@ function DataTile({ icon, label, value }: { icon: ReactNode; label: string; valu
 import { EmptyState } from "../components/ui/EmptyState";
 import { LoadingState } from "../components/ui/LoadingState";
 import { Modal } from "../components/ui/Modal";
+import { RequestErrorState } from "../components/ui/RequestErrorState";
 import { useAuth } from "../contexts/AuthContext";
 import { formatDateTime } from "../lib/format";
 import { api, getErrorMessage } from "../services/api";
@@ -49,6 +50,9 @@ export function PatientsPage() {
   const [patients, setPatients] = useState<PatientRecord[]>([]);
   const [members, setMembers] = useState<OrganizationMember[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
+  const [includeArchived, setIncludeArchived] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingPatient, setEditingPatient] = useState<PatientRecord | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -62,10 +66,13 @@ export function PatientsPage() {
 
     const loadData = async () => {
       setLoading(true);
+      setLoadError("");
 
       try {
         const [patientsResponse, membersResponse] = await Promise.all([
-          api.get<{ items: PatientRecord[] }>("/patients"),
+          api.get<{ items: PatientRecord[] }>("/patients", {
+            params: { includeArchived: includeArchived || undefined },
+          }),
           api.get<{ items: OrganizationMember[] }>("/organization/members"),
         ]);
 
@@ -75,6 +82,10 @@ export function PatientsPage() {
 
         setPatients(patientsResponse.data.items);
         setMembers(membersResponse.data.items);
+      } catch (error) {
+        if (active) {
+          setLoadError(getErrorMessage(error));
+        }
       } finally {
         if (active) {
           setLoading(false);
@@ -87,7 +98,7 @@ export function PatientsPage() {
     return () => {
       active = false;
     };
-  }, [activeOrganization?.id]);
+  }, [activeOrganization?.id, includeArchived, reloadKey]);
 
   function openCreateModal() {
     setEditingPatient(null);
@@ -149,12 +160,45 @@ export function PatientsPage() {
     }
   }
 
+  async function archivePatient(patient: PatientRecord) {
+    if (
+      !window.confirm(
+        `Arquivar ${patient.fullName}? O histórico será preservado e o paciente deixará de aparecer na lista padrão.`,
+      )
+    ) {
+      return;
+    }
+
+    try {
+      await api.post(`/patients/${patient.id}/archive`);
+      toast.success("Paciente arquivado com histórico preservado.");
+      setReloadKey((current) => current + 1);
+    } catch (error) {
+      toast.error(getErrorMessage(error));
+    }
+  }
+
   if (loading && !patients.length) {
     return <LoadingState label="Carregando pacientes da organização..." />;
   }
 
+  if (loadError && !patients.length) {
+    return (
+      <RequestErrorState
+        message={loadError}
+        onRetry={() => setReloadKey((current) => current + 1)}
+      />
+    );
+  }
+
   return (
     <div className="space-y-6">
+      {loadError ? (
+        <RequestErrorState
+          message={loadError}
+          onRetry={() => setReloadKey((current) => current + 1)}
+        />
+      ) : null}
       {/* Header institucional */}
       <section className="relative overflow-hidden rounded-3xl border border-surface-100 bg-white shadow-soft">
         <img
@@ -187,12 +231,22 @@ export function PatientsPage() {
               </Badge>
             </div>
           </div>
-          {canManagePatients ? (
-            <Button onClick={openCreateModal}>
-              <Plus className="h-4 w-4" />
-              Novo paciente
+          <div className="flex flex-wrap gap-2">
+            <Button
+              onClick={() => setIncludeArchived((current) => !current)}
+              type="button"
+              variant="secondary"
+            >
+              <Archive className="h-4 w-4" />
+              {includeArchived ? "Ocultar arquivados" : "Mostrar arquivados"}
             </Button>
-          ) : null}
+            {canManagePatients ? (
+              <Button onClick={openCreateModal}>
+                <Plus className="h-4 w-4" />
+                Novo paciente
+              </Button>
+            ) : null}
+          </div>
         </div>
       </section>
 
@@ -231,13 +285,24 @@ export function PatientsPage() {
                     </div>
                   </div>
                   {canManagePatients ? (
-                    <Button
-                      aria-label="Editar paciente"
-                      onClick={() => openEditModal(patient)}
-                      variant="secondary"
-                    >
-                      <Edit3 className="h-4 w-4" />
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        aria-label="Editar paciente"
+                        onClick={() => openEditModal(patient)}
+                        variant="secondary"
+                      >
+                        <Edit3 className="h-4 w-4" />
+                      </Button>
+                      {patient.status === "active" ? (
+                        <Button
+                          aria-label="Arquivar paciente"
+                          onClick={() => archivePatient(patient)}
+                          variant="danger"
+                        >
+                          <Archive className="h-4 w-4" />
+                        </Button>
+                      ) : null}
+                    </div>
                   ) : null}
                 </div>
 

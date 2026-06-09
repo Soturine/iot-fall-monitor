@@ -18,7 +18,7 @@ type LoginNavigationState = {
 export function LoginPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { isAuthenticated, login, logout, register, loading } = useAuth();
+  const { isAuthenticated, login, logout, register, loading, sessionError } = useAuth();
   const [mode, setMode] = useState<"login" | "register">("login");
   const [form, setForm] = useState({
     name: "",
@@ -172,6 +172,11 @@ export function LoginPage() {
               <div className="mb-5 rounded-[24px] border border-emerald-100 bg-emerald-50 px-5 py-4 text-sm text-emerald-900">
                 <p className="font-semibold">{statusTitle}</p>
                 <p className="mt-1">{statusMessage}</p>
+              </div>
+            ) : null}
+            {sessionError ? (
+              <div className="mb-5 rounded-[24px] border border-danger-100 bg-danger-50 px-5 py-4 text-sm text-danger-800">
+                {sessionError}
               </div>
             ) : null}
 
