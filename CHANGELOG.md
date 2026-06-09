@@ -1,9 +1,20 @@
 # Changelog
 
 ## [Unreleased]
+### Corrigido
+- ingestão MQTT e `upsertDeviceStatus` normalizam `battery_calibration_count` ausente para `0`, evitando falha em payloads antigos ou sem bateria
+
+### Alterado
+- configuração nova/factory do firmware inicia em `Demo apresentação`; configurações já salvas em NVS continuam respeitando a escolha Normal ou Demo do usuário
+- portal identifica `Demo apresentação` como recomendado para a banca acadêmica e `Normal` como perfil conservador
+
+### Documentação
+- README e docs passam a explicar o default acadêmico, a compatibilidade de payloads sem bateria e a captura visual real esperada para a `v0.9.0`
+- adicionados guias dedicados da demo `v0.9.0` e da estimativa experimental de bateria
+
 ### Pendente / Faltando
 - capturar GIF real do fluxo ESP32/evento -> MQTT -> backend -> dashboard atualizando
-- capturar tela real de detalhe do dispositivo com telemetria quando houver device visível no ambiente local
+- capturar screenshots reais `v0.9.0` do portal ESP32, lista/detalhe do dispositivo, bateria estimada e modo Demo
 - ativar FFT como decisão real somente após calibração e validação com dados reais
 - implementar sessões completas de calibração por SOS
 - testar classificação de movimentos com múltiplas runs por classe

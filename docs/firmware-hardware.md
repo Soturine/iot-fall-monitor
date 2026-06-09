@@ -57,6 +57,7 @@ Plataforma e build:
 
 Defaults atuais relevantes:
 
+- `operationMode = "demo"` em configuração nova/factory; uma escolha já salva em NVS continua prevalecendo
 - `DEFAULT_DEVICE_ID = "esp32_01"`
 - `DEFAULT_MQTT_HOST = "broker.hivemq.com"`
 - `DEFAULT_MQTT_PORT = 1883`
@@ -196,7 +197,7 @@ O portal local do ESP32 agora cobre:
 - pré-calibração experimental de alertas com sensibilidade, thresholds, janela, cooldown, publicação de eventos e buzzer
 - botão `Testar buzzer`, que aciona um pulso curto não bloqueante quando o buzzer está habilitado na configuração atual
 
-Capturas reais do portal devem ser salvas em [assets](assets/README.md), especialmente `assets/screenshots/esp32-portal-v0.8.26.png` quando a tela for capturada do ESP32 rodando. Não há link direto neste documento enquanto a imagem real não existir no repositório.
+Capturas reais do portal devem ser salvas em [assets](assets/README.md). Para a `v0.9.0`, estão previstos os arquivos `esp32-maintenance-overview-v0.9.0.png`, `esp32-maintenance-health-v0.9.0.png`, `esp32-maintenance-mqtt-config-v0.9.0.png` e `esp32-maintenance-battery-demo-v0.9.0.png`. Não há link direto enquanto a imagem real não existir no repositório.
 
 Fluxo oficial:
 
@@ -229,7 +230,7 @@ A seção de pré-calibração do portal permite testar o fluxo real sem recompi
 - habilitar/desabilitar buzzer local
 - testar buzzer local com pulso curto pelo portal
 
-O modo `normal` preserva thresholds conservadores. O modo `teste/demonstração` baixa os thresholds para validação de bancada e pode gerar falsos positivos; use apenas com movimentos controlados do conjunto `ESP32 + MPU6050`, nunca com queda real de pessoa. As configurações ficam em `NVS` e, quando salvas pelo portal de manutenção, a sensibilidade passa a valer no loop atual sem reiniciar Wi-Fi/MQTT.
+O modo `normal` preserva thresholds conservadores. Em configuração nova/factory, a build acadêmica inicia em `Demo apresentação` para facilitar a validação em bancada. O modo demo baixa os thresholds e pode gerar falsos positivos; use apenas com movimentos controlados do conjunto `ESP32 + MPU6050`, nunca com queda real de pessoa. Para operação conservadora, selecione `Normal` no portal. As configurações ficam em `NVS`, a escolha salva do usuário prevalece nos próximos boots e a sensibilidade passa a valer no loop atual sem reiniciar Wi-Fi/MQTT.
 
 O botão `Testar buzzer` usa a configuração atualmente carregada. Se `Habilitar buzzer local para alerta` estiver desligado, o firmware registra `[buzzer] skipped reason=disabled event=portal_test` e o portal orienta habilitar, salvar e testar novamente.
 
@@ -778,7 +779,7 @@ O que entra no payload quando a queda e confirmada:
 
 O buzzer continua vinculado a decisões locais críticas do firmware: `fall_detected` confirmado pela FSM e SOS manual quando habilitado. Desde a `v0.8.31`, `movement_detected` e `fall_suspected` experimentais são auditáveis, mas não acionam o buzzer. A nova camada de features/FFT não substitui a decisão principal.
 
-Para uma apresentação mais fluida, selecione `Demo apresentação` no portal. Esse perfil reduz a leitura interna de `50 ms` para `25 ms` e a telemetria de `2000 ms` para `500 ms`; o modo Normal continua sendo o padrão conservador.
+Para uma apresentação mais fluida, use `Demo apresentação` no portal. Esse perfil reduz a leitura interna de `50 ms` para `25 ms` e a telemetria de `2000 ms` para `500 ms`; a configuração factory acadêmica já inicia em Demo, enquanto Normal permanece disponível como perfil conservador.
 
 ## Parametros atuais de calibração do `fall_detector`
 
@@ -919,7 +920,7 @@ O esperado é `MQTT handshake OK`. Depois disso, o botão `Testar MQTT` do porta
 
 ## Perfis v0.9.0 e bateria estimada
 
-O modo `Normal` usa leitura interna de `50 ms`, telemetria MQTT de `2000 ms` e FSM conservadora (`2.2 g`, `120 dps`, `45°`, `2000 ms` de imobilidade). O modo `Demo apresentação` é opt-in no portal e usa `25 ms`, `500 ms`, `1.7 g`, `100 dps`, `30°` e `1000 ms`. O I2C permanece em `100 kHz`; se o modo demo aumentar erros, volte ao Normal.
+O modo `Normal` usa leitura interna de `50 ms`, telemetria MQTT de `2000 ms` e FSM conservadora (`2.2 g`, `120 dps`, `45°`, `2000 ms` de imobilidade). O modo `Demo apresentação` usa `25 ms`, `500 ms`, `1.7 g`, `100 dps`, `30°` e `1000 ms`. A configuração factory da build acadêmica inicia em Demo; NVS existente continua prevalecendo, então um device já salvo como Normal permanece Normal até a troca explícita no portal. O I2C permanece em `100 kHz`; se o modo demo aumentar erros, volte ao Normal.
 
 A leitura interna rápida alimenta o detector, mas não publica MQTT a cada amostra. `movement_detected` e `fall_suspected` continuam sem buzzer; somente `fall_detected` confirmado e SOS podem acionar o alarme local.
 

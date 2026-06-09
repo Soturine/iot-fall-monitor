@@ -186,8 +186,11 @@ O pareamento não deve ser alterado nesta rodada. Para validar sem refatorar:
 
 ## Checklist v0.9.0
 
-- [ ] Portal inicia em modo Normal após configuração padrão.
+- [ ] Device sem configuração NVS inicia em Demo apresentação.
+- [ ] Device com configuração NVS salva como Normal continua em Normal.
+- [ ] Portal alterna entre Demo e Normal e persiste a escolha.
 - [ ] Modo Demo altera status para `detector_mode=demo`, leitura para `25 ms` e telemetria para `500 ms`.
+- [ ] Status/telemetria MQTT sem campos de bateria atualiza `device_status` com `battery_calibration_count=0` sem deixar o device offline.
 - [ ] Giro isolado gera no máximo movimento; impacto sem imobilidade não vira queda confirmada.
 - [ ] Queda controlada da caixinha em cama/almofada exige impacto, orientação e imobilidade.
 - [ ] `movement_detected` e `fall_suspected` não acionam buzzer.

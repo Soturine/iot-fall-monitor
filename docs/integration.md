@@ -140,15 +140,7 @@ flowchart TD
 
 ### Assets visuais
 
-Capturas reais da integração web/MQTT ficam em [assets](assets/README.md). A `v0.8.26` adicionou screenshots reais de login, dashboard, pacientes, dispositivos, alertas e organização.
-
-Imagens disponíveis:
-
-- [dashboard-v0.8.26.png](assets/screenshots/dashboard-v0.8.26.png)
-- [devices-v0.8.26.png](assets/screenshots/devices-v0.8.26.png)
-- [alerts-v0.8.26.png](assets/screenshots/alerts-v0.8.26.png)
-
-O GIF do fluxo ESP32/evento -> MQTT -> backend -> dashboard ainda deve ser capturado de forma real antes de ser referenciado.
+Capturas reais da integração web/MQTT ficam em [assets](assets/README.md). As imagens `v0.8.26` permanecem como histórico real; os screenshots `v0.9.0` de modo Demo, bateria, portal e device online só serão referenciados quando forem capturados do projeto rodando. O GIF do fluxo ESP32/evento -> MQTT -> backend -> dashboard também permanece pendente até existir uma captura real.
 
 ### `status`
 
@@ -725,6 +717,8 @@ Elas não disparam notificação externa. No estado atual do projeto, alerta sig
 `status` e `telemetry` passam a carregar `detector_mode`, `sample_interval_ms` e `telemetry_interval_ms`. Eventos de detecção incluem também `impact_detected`, `orientation_change_detected`, `immobility_detected`, thresholds efetivos e motivo final. O backend preserva esses campos em `raw_payload_json` e `evidence_summary_json`; o frontend apenas apresenta a decisão do firmware.
 
 Para bateria, o firmware publica `battery_manual_percent`, `battery_manual_updated_at`, `battery_calibration_sequence` e a taxa inicial. O backend registra cada sequência uma única vez em `battery_calibrations`, calcula a estimativa e persiste o snapshot em `device_status`. Payload antigo sem sequência continua aceito no fluxo legado.
+
+Payloads antigos de `status` ou `telemetry` sem qualquer campo de bateria também continuam aceitos. A ingestão e o `deviceService` normalizam `battery_calibration_count` ausente para `0`, evitando enviar `NULL` para a coluna `NOT NULL` e preservando os demais campos opcionais de bateria como nulos quando permitido.
 
 Aplicação incremental em banco existente:
 

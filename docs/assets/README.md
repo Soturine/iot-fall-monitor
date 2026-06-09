@@ -1,43 +1,48 @@
 # Assets visuais reais
 
-Esta pasta guarda capturas reais do projeto Queda rodando localmente ou em hardware real. Não versionar mockups, imagens simuladas ou screenshots editados como se fossem capturas reais.
+Esta pasta guarda somente capturas reais do projeto rodando localmente ou no hardware. Não versionar mockups, imagens simuladas ou screenshots antigas renomeadas como se fossem atuais.
 
-## Estrutura
+## Estado da v0.9.0
 
-- `screenshots/`: imagens estáticas reais da interface web e do portal do ESP32.
-- `gifs/`: GIFs reais de fluxos em tempo real, quando capturados.
+Durante esta rodada, frontend, backend e portal ESP32 não estavam acessíveis simultaneamente para captura verificável. Portanto, nenhum screenshot ou GIF `v0.9.0` foi criado.
 
-## Screenshots capturados na v0.8.26
+Capturas pendentes:
 
-Os arquivos abaixo foram capturados do projeto rodando localmente:
+- `screenshots/devices-v0.9.0.png`
+- `screenshots/device-detail-telemetry-v0.9.0.png`
+- `screenshots/battery-estimation-v0.9.0.png`
+- `screenshots/demo-mode-v0.9.0.png`
+- `screenshots/esp32-portal-v0.9.0.png`
+- `screenshots/esp32-maintenance-overview-v0.9.0.png`
+- `screenshots/esp32-maintenance-health-v0.9.0.png`
+- `screenshots/esp32-maintenance-mqtt-config-v0.9.0.png`
+- `screenshots/esp32-maintenance-battery-demo-v0.9.0.png`
+- `screenshots/device-detail-online-v0.9.0.png`
+- `screenshots/devices-list-v0.9.0.png`
+- `gifs/realtime-fall-demo-v0.9.0.gif`
 
-- `screenshots/login-v0.8.26.png`: login/cadastro.
-- `screenshots/dashboard-v0.8.26.png`: dashboard multi-tenant em estado real do backend local.
-- `screenshots/patients-v0.8.26.png`: pacientes e vínculo com dispositivo.
-- `screenshots/devices-v0.8.26.png`: inventário de dispositivos e estado vazio real do escopo atual.
-- `screenshots/alerts-v0.8.26.png`: tela de alertas e histórico.
-- `screenshots/organization-v0.8.26.png`: organização ativa, membros e permissões.
+Não referencie esses arquivos no README principal antes de eles existirem.
 
-## Screenshots pendentes
+## Capturas históricas reais
 
-Use estes nomes quando as telas forem capturadas:
+Os arquivos abaixo foram capturados do projeto `v0.8.26` rodando localmente e permanecem como histórico:
 
-- `screenshots/device-detail-telemetry-v0.8.26.png`: detalhe do dispositivo com telemetria real ou diagnóstico real.
-- `screenshots/esp32-portal-v0.8.26.png`: portal local real do ESP32.
+- `screenshots/login-v0.8.26.png`
+- `screenshots/dashboard-v0.8.26.png`
+- `screenshots/patients-v0.8.26.png`
+- `screenshots/devices-v0.8.26.png`
+- `screenshots/alerts-v0.8.26.png`
+- `screenshots/organization-v0.8.26.png`
 
-## GIF esperado
+Eles não devem ser apresentados como documentação visual principal da `v0.9.0`.
 
-- `gifs/realtime-alert-flow-v0.8.26.gif`: fluxo real ESP32/evento -> MQTT -> backend -> dashboard atualizando.
+## Checklist para captura manual
 
-## Checklist para capturar
-
-1. Subir broker, backend e frontend.
-2. Abrir o frontend em uma base local real, com usuário e organização de teste.
-3. Usar dados reais do ESP32 ou dados de desenvolvimento claramente identificados como ambiente local.
-4. Remover qualquer dado sensível visível antes de versionar a imagem.
-5. Conferir que o arquivo está em `docs/assets/screenshots/` ou `docs/assets/gifs/`.
-6. Atualizar o README para referenciar apenas arquivos que realmente existam no repositório.
-
-## Estado atual
-
-Na `v0.8.26`, foram adicionados screenshots reais da interface web. O GIF realtime, o detalhe do dispositivo com telemetria e o portal ESP32 continuam pendentes porque exigem execução local com device visível, hardware ou evento real.
+1. Suba broker, backend e frontend e confirme o ESP32 online.
+2. Confirme que a tela mostra dados reais do ambiente atual.
+3. No portal ESP32, oculte senhas, tokens, IPs sensíveis e credenciais.
+4. Capture modo Demo, bateria estimada, telemetria recente e saúde operacional.
+5. Para o GIF, registre apenas um fluxo real curto de evento até atualização do dashboard.
+6. Salve o arquivo com um dos nomes esperados acima.
+7. Confira visualmente que não há dados sensíveis.
+8. Atualize README e docs para referenciar somente arquivos existentes.

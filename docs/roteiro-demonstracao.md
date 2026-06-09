@@ -221,8 +221,8 @@ Se o dashboard não atualizar:
 ## Roteiro v0.9.0
 
 1. Entre com JWT e mostre o device vinculado sem alterar pareamento.
-2. Abra o portal ESP32 e compare os modos Normal e Demo apresentação.
-3. Ative Demo e mostre no detalhe `25 ms` de leitura, `500 ms` de MQTT e gráfico mais fluido.
+2. Abra o portal ESP32, confirme o modo Demo factory ou explique por que uma NVS salva preservou Normal, e compare os dois perfis.
+3. Use Demo e mostre no detalhe `25 ms` de leitura, `500 ms` de MQTT e gráfico mais fluido.
 4. Em cama, almofada ou superfície macia, deixe a caixinha parada, aplique impacto controlado, vire/deite e aguarde ao menos `1 s`.
 5. Mostre a diferença entre Movimento intenso, Queda suspeita e Queda confirmada.
 6. Explique que o buzzer só toca para queda confirmada/SOS.

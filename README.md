@@ -75,6 +75,8 @@ O portal ESP32 oferece `Modo de operação`:
 - **Normal:** leitura interna a `50 ms`, telemetria MQTT a `2000 ms`, impacto `2.2 g`, giro `120 dps`, orientação `45°` e imobilidade `2000 ms`.
 - **Demo apresentação:** leitura interna a `25 ms`, telemetria MQTT a `500 ms`, impacto `1.7 g`, giro `100 dps`, orientação `30°` e imobilidade `1000 ms`.
 
+A build acadêmica inicia em **Demo apresentação** quando o dispositivo ainda não possui configuração salva. Para operação conservadora, selecione **Normal** no portal. Uma escolha já persistida em NVS continua sendo respeitada, portanto um device configurado anteriormente como Normal não é forçado para Demo.
+
 A leitura interna rápida alimenta o detector; a publicação MQTT moderada mantém gráfico e backend fluidos sem atualizar o site a cada amostra. Eventos críticos continuam imediatos. Para demonstrar, use somente a caixinha/sensor em cama, almofada ou superfície macia: aplique movimento controlado, vire/deite e deixe imóvel. Nunca teste queda com pessoa nem jogue o sensor com força.
 
 ## Estimativa de Bateria
@@ -89,45 +91,9 @@ npm run db:migrate:battery-estimation --prefix backend
 
 ## Capturas de Tela
 
-As imagens abaixo são capturas reais da interface `v0.8.26` com backend e frontend rodando localmente. A organização de assets e a lista de capturas pendentes ficam em [docs/assets](docs/assets/README.md).
+A documentação visual principal está sendo atualizada para a `v0.9.0`. Nesta rodada, frontend, backend e portal ESP32 não estavam acessíveis simultaneamente para uma captura verificável; por isso nenhum mockup, imagem simulada ou screenshot antigo foi apresentado como captura atual.
 
-### Login
-
-![Login v0.8.26](docs/assets/screenshots/login-v0.8.26.png)
-
-Tela inicial com acesso protegido, criação de conta e credenciais demo do ambiente local.
-
-### Dashboard
-
-![Dashboard v0.8.26](docs/assets/screenshots/dashboard-v0.8.26.png)
-
-Visão multi-tenant do painel principal com status do socket e estado real retornado pelo backend local.
-
-### Pacientes
-
-![Pacientes v0.8.26](docs/assets/screenshots/patients-v0.8.26.png)
-
-Cadastro assistencial com paciente demo, vínculo de device e informações clínicas básicas.
-
-### Dispositivos
-
-![Dispositivos v0.8.26](docs/assets/screenshots/devices-v0.8.26.png)
-
-Inventário de dispositivos, filtros de status e estado vazio real quando não há devices visíveis no escopo atual.
-
-### Alertas
-
-![Alertas v0.8.26](docs/assets/screenshots/alerts-v0.8.26.png)
-
-Tela de alertas e histórico com filtros operacionais e estado real do ambiente local.
-
-### Organização
-
-![Organização v0.8.26](docs/assets/screenshots/organization-v0.8.26.png)
-
-Gestão de organização ativa, membros e permissões do tenant demo.
-
-Capturas de detalhe do dispositivo com telemetria, portal ESP32 e GIF realtime ainda dependem de uma execução local com device visível, hardware ou evento real. Não use mockups ou imagens simuladas como se fossem screenshots reais.
+Os nomes esperados, capturas históricas reais e o checklist para produzir os novos assets ficam em [docs/assets/README.md](docs/assets/README.md). O README só passará a incorporar imagens `v0.9.0` quando os arquivos reais existirem no repositório.
 
 ## Arquitetura
 
@@ -440,6 +406,8 @@ O frontend exibe esse status de forma discreta no dashboard, na lista de disposi
 
 ## Documentação Complementar
 
+- [docs/demo-v0.9.0.md](docs/demo-v0.9.0.md): roteiro curto específico da demo acadêmica, incluindo modo Demo, telemetria e segurança de bancada.
+- [docs/battery-estimation.md](docs/battery-estimation.md): cálculo, aprendizado `70/30`, limites e validação da bateria estimada.
 - [docs/roteiro-demonstracao.md](docs/roteiro-demonstracao.md): sequência curta para apresentar arquitetura, segurança, telemetria, alerta e limitações.
 - [docs/checklist-validacao.md](docs/checklist-validacao.md): matriz de testes automatizados e checklist manual de JWT, multi-tenant, MQTT, Socket.IO, banco, alertas e hardware.
 - [docs/integration.md](docs/integration.md): integração entre firmware, backend, banco, MQTT, pareamento e tempo real.
@@ -452,6 +420,7 @@ O frontend exibe esse status de forma discreta no dashboard, na lista de disposi
 - [docs/motion-test-bench-report.md](docs/motion-test-bench-report.md): relatório de bancada do motion test e portal AP.
 - [backend/README.md](backend/README.md): detalhes do backend, rotas, scripts e ingestão.
 - [frontend/README.md](frontend/README.md): detalhes do frontend, telas e comportamento em tempo real.
+- [docs/assets/README.md](docs/assets/README.md): inventário de capturas reais e checklist dos assets visuais pendentes.
 - [CHANGELOG.md](CHANGELOG.md): histórico de versões, limitações e próximos passos.
 
 ## Licença
