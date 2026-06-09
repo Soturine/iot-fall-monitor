@@ -5,6 +5,7 @@ const {
   createStressLogger,
   summarizeLatencies,
 } = require("./stressLogger");
+const { validateTelemetryPayload } = require("../../src/services/eventService");
 
 const backendRoot = path.resolve(__dirname, "..", "..");
 
@@ -210,6 +211,7 @@ function buildHarness({ stressLogger, totals, failures, latencies }) {
     },
   };
   const fakeEventService = {
+    validateTelemetryPayload,
     recordEventFromMqtt: async ({ device, payload }) => {
       nextEventId += 1;
       totals.persisted += 1;
