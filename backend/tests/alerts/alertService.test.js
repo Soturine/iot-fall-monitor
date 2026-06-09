@@ -287,3 +287,108 @@ test("getAlertById e updateAlertStatus bloqueiam outra organizacao", async () =>
     restore();
   }
 });
+
+test("exportAlertsReport respeita filtros, escopo e limite maximo", async () => {
+  const calls = [];
+  const fakePool = {
+    execute: async (_executor, sql, params) => {
+      calls.push({ sql, params });
+      return [
+        alertRow({
+          acknowledgedById: 3,
+          acknowledgedByName: "Cuidadora Demo",
+          acknowledged_at: new Date("2026-05-12T21:01:00.000Z"),
+          evidenceStatus: "linked",
+        }),
+      ];
+    },
+    one: async () => null,
+    transaction: async (work) => work({}),
+  };
+  const { module: alertService, restore } = loadAlertService(fakePool);
+
+  try {
+    const report = await alertService.exportAlertsReport(
+      {
+        status: "acknowledged",
+        severity: "critical",
+        deviceId: "5",
+        startDate: "2026-05-01",
+        endDate: "2026-05-31",
+        limit: "9999",
+      },
+      {
+        ...access,
+        activeOrganization: {
+          id: 1,
+          name: "Familia Demo",
+          type: "family",
+          status: "active",
+        },
+      },
+    );
+
+    assert.equal(calls.length, 1);
+    assert.match(calls[0].sql, /a\.organization_id = \?/);
+    assert.match(calls[0].sql, /a\.status = \?/);
+    assert.match(calls[0].sql, /a\.device_id = \?/);
+    assert.match(calls[0].sql, /e\.severity = \?/);
+    assert.match(calls[0].sql, /e\.event_time >= \?/);
+    assert.match(calls[0].sql, /e\.event_time <= \?/);
+    assert.match(calls[0].sql, /LIMIT \?/);
+    assert.equal(calls[0].params.at(-1), 500);
+    assert.deepEqual(calls[0].params.slice(0, 4), [
+      1,
+      "acknowledged",
+      5,
+      "critical",
+    ]);
+
+    assert.equal(report.organization.name, "Familia Demo");
+    assert.deepEqual(report.filters, {
+      status: "acknowledged",
+      severity: "critical",
+      deviceId: 5,
+      startDate: "2026-05-01",
+      endDate: "2026-05-31",
+    });
+    assert.equal(report.total, 1);
+    assert.equal(report.items[0].alertId, 10);
+    assert.equal(report.items[0].acknowledgedBy, "Cuidadora Demo");
+    assert.equal(report.items[0].evidenceStatus, "linked");
+  } finally {
+    restore();
+  }
+});
+
+test("exportAlertsReport respeita pacientes atribuidos no escopo restrito", async () => {
+  const calls = [];
+  const fakePool = {
+    execute: async (_executor, sql, params) => {
+      calls.push({ sql, params });
+      return [];
+    },
+    one: async () => null,
+    transaction: async (work) => work({}),
+  };
+  const { module: alertService, restore } = loadAlertService(fakePool);
+
+  try {
+    const report = await alertService.exportAlertsReport(
+      {},
+      {
+        ...access,
+        activeRole: "caregiver",
+        restrictToAssignedPatients: true,
+        assignedPatientIds: [2, 9],
+      },
+    );
+
+    assert.match(calls[0].sql, /a\.organization_id = \?/);
+    assert.match(calls[0].sql, /a\.patient_id IN \(\?, \?\)/);
+    assert.deepEqual(calls[0].params, [1, 2, 9, 500]);
+    assert.equal(report.total, 0);
+  } finally {
+    restore();
+  }
+});

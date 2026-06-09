@@ -14,6 +14,7 @@ const { createAuditLog } = require("./auditService");
 const { assertRole, buildScopeFilter, canAccessScope } = require("./scopeService");
 
 const RECENT_CRITICAL_ALERT_DEDUP_WINDOW_SECONDS = 20;
+const ALERT_EXPORT_MAX_RECORDS = 500;
 const RECENT_DEDUP_EVENT_TYPES = new Set([
   "fall_detected",
   "fall_suspected",
@@ -354,6 +355,96 @@ async function listAlerts(filters = {}, accessContext) {
   };
 }
 
+function mapAlertReportItem(alert) {
+  return {
+    alertId: alert.id,
+    status: alert.status,
+    patientName: alert.patient?.fullName || null,
+    deviceName: alert.device.name || null,
+    deviceIdentifier: alert.device.deviceIdentifier,
+    eventType: alert.event.eventType,
+    severity: alert.event.severity,
+    message: alert.event.message,
+    intensity: alert.event.intensity,
+    immobility: alert.event.immobility,
+    evidenceStatus: alert.event.evidenceStatus,
+    eventTime: alert.event.eventTime,
+    createdAt: alert.createdAt,
+    acknowledgedBy: alert.acknowledgedBy?.name || null,
+    acknowledgedAt: alert.acknowledgedAt,
+    canceledBy: alert.canceledBy?.name || null,
+    canceledAt: alert.canceledAt,
+    resolvedBy: alert.resolvedBy?.name || null,
+    resolvedAt: alert.resolvedAt,
+  };
+}
+
+async function exportAlertsReport(filters = {}, accessContext) {
+  const { whereSql, params } = buildAlertFilters(filters, accessContext);
+  const rows = await execute(
+    null,
+    `
+      SELECT
+        a.id,
+        a.organization_id AS organizationId,
+        a.patient_id AS patientId,
+        a.status,
+        a.acknowledged_at,
+        a.canceled_at,
+        a.resolved_at,
+        a.created_at,
+        a.updated_at,
+        ack.id AS acknowledgedById,
+        ack.name AS acknowledgedByName,
+        cancel_user.id AS canceledById,
+        cancel_user.name AS canceledByName,
+        resolve_user.id AS resolvedById,
+        resolve_user.name AS resolvedByName,
+        d.id AS deviceId,
+        d.device_uid AS deviceUid,
+        d.device_identifier AS deviceIdentifier,
+        d.name AS deviceName,
+        p.full_name AS patientName,
+        e.id AS eventId,
+        e.event_type AS eventType,
+        e.severity,
+        e.intensity,
+        e.immobility,
+        e.message,
+        e.evidence_status AS evidenceStatus,
+        e.event_time AS eventTime
+      FROM alerts a
+      INNER JOIN events e ON e.id = a.event_id
+      INNER JOIN devices d ON d.id = a.device_id
+      LEFT JOIN patients p ON p.id = a.patient_id
+      LEFT JOIN users ack ON ack.id = a.acknowledged_by
+      LEFT JOIN users cancel_user ON cancel_user.id = a.canceled_by
+      LEFT JOIN users resolve_user ON resolve_user.id = a.resolved_by
+      WHERE ${whereSql}
+      ORDER BY e.event_time DESC, a.id DESC
+      LIMIT ?
+    `,
+    [...params, ALERT_EXPORT_MAX_RECORDS],
+  );
+
+  const reportFilters = {
+    status: filters.status || null,
+    severity: filters.severity || null,
+    deviceId: filters.deviceId ? Number(filters.deviceId) : null,
+    startDate: filters.startDate || null,
+    endDate: filters.endDate || null,
+  };
+  const items = rows.map(mapAlertRow).map(mapAlertReportItem);
+
+  return {
+    generatedAt: new Date().toISOString(),
+    organization: accessContext.activeOrganization || null,
+    filters: reportFilters,
+    total: items.length,
+    items,
+  };
+}
+
 async function getAlertById(alertId, accessContext, executor = null) {
   const alert = await fetchAlertRow(alertId, executor);
 
@@ -537,6 +628,7 @@ async function updateAlertStatus(alertId, actionType, userId, note, accessContex
 
 module.exports = {
   createAlertForEvent,
+  exportAlertsReport,
   getAlertById,
   listAlerts,
   updateAlertStatus,

@@ -5,6 +5,7 @@ const alertController = require("../controllers/alertController");
 const router = express.Router();
 
 router.get("/", alertController.list);
+router.get("/export", alertController.exportReport);
 router.get("/:id", alertController.getById);
 router.post("/:id/acknowledge", alertController.acknowledge);
 router.post("/:id/cancel", alertController.cancel);
