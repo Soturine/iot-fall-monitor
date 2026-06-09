@@ -1,6 +1,17 @@
 # Changelog
 
 ## [Unreleased]
+### Adicionado
+- roteiro de demonstração acadêmica com sequência de apresentação para JWT, multi-tenant, MQTT, banco, Socket.IO, telemetria e alertas
+- checklist de validação com matriz dos testes automatizados e verificações manuais de backend, frontend, hardware e segurança
+
+### Corrigido
+- `stress:dry` volta a processar telemetria após alinhar o harness mockado à função real `validateTelemetryPayload`
+
+### Documentação
+- README e integração passam a diferenciar testes com mocks, smoke com serviços locais reais e validação ponta a ponta com ESP32
+- resultados auditados dos comandos de teste ficam registrados no checklist de validação
+
 ### Pendente / Faltando
 - capturar GIF real do fluxo ESP32/evento -> MQTT -> backend -> dashboard atualizando
 - capturar tela real de detalhe do dispositivo com telemetria quando houver device visível no ambiente local

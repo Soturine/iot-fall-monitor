@@ -245,6 +245,8 @@ npm run mqtt:publish:test --prefix backend
 
 `stress:dry` usa mocks locais para regressão rápida. `stress:real` valida backend `/health`, broker MQTT e MySQL de desenvolvimento antes de publicar MQTT real. Os logs ficam em `backend/logs/stress/` (`*.jsonl`, `summary-*.json`, `failures-*.json`, `report-*.md`) e são ignorados pelo Git.
 
+Para preparar uma banca ou entrega acadêmica, use o [roteiro de demonstração](docs/roteiro-demonstracao.md) e o [checklist de validação](docs/checklist-validacao.md). Os documentos distinguem testes com mocks, smoke com serviços locais reais e validações manuais com ESP32.
+
 `db:migrate:evidence` aplica apenas a migração idempotente das colunas/tabela de evidência sem resetar dados. `db:migrate:sensor-diagnostics` adiciona os campos de saúde do sensor em `device_status` sem reset destrutivo. `mqtt:watch` assina os tópicos reais `queda/devices/+/status`, `telemetry` e `events` para confirmar se o ESP32 está publicando. `mqtt:publish:test` publica status e telemetria válidos no mesmo contrato do firmware, útil para testar backend/dashboard sem hardware.
 
 Para validar telemetria real do ESP32, deixe `mqtt:watch` aberto, reinicie a placa e acompanhe o Serial Monitor. O funcionamento esperado mostra `[mqtt] connected`, `[sensor] read ok`, `[telemetry] publish ok` repetindo no intervalo configurado e linhas novas em `queda/devices/esp32_01/telemetry`. Telemetria simulada vem do `clientId` de teste e serve para validar backend/frontend; telemetria real deve vir do `clientId` configurado no ESP32, como `esp32_01_client`.
@@ -418,6 +420,8 @@ O frontend exibe esse status de forma discreta no dashboard, na lista de disposi
 
 ## Documentação Complementar
 
+- [docs/roteiro-demonstracao.md](docs/roteiro-demonstracao.md): sequência curta para apresentar arquitetura, segurança, telemetria, alerta e limitações.
+- [docs/checklist-validacao.md](docs/checklist-validacao.md): matriz de testes automatizados e checklist manual de JWT, multi-tenant, MQTT, Socket.IO, banco, alertas e hardware.
 - [docs/integration.md](docs/integration.md): integração entre firmware, backend, banco, MQTT, pareamento e tempo real.
 - [docs/alerting-architecture.md](docs/alerting-architecture.md): fluxo real de queda/SOS, persistência, realtime, testes e stress.
 - [docs/firmware-hardware.md](docs/firmware-hardware.md): hardware, pinagem, portal local, payloads, calibração, buzzer e bancada.

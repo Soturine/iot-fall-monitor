@@ -666,6 +666,11 @@ Os testes cobrem:
 
 `stress:real` valida backend `/health`, broker MQTT e banco MySQL de desenvolvimento antes de publicar mensagens MQTT reais e consultar persistência depois do teste. Ele aborta em produção e falha claramente quando algum pré-requisito não estiver disponível.
 
+Para uso acadêmico e preparação de demonstração:
+
+- [roteiro-demonstracao.md](roteiro-demonstracao.md) organiza uma apresentação curta do fluxo ponta a ponta
+- [checklist-validacao.md](checklist-validacao.md) separa validação automatizada, smoke local, integração real e testes manuais com hardware
+
 As suites geram:
 
 ```text

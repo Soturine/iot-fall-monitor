@@ -1,0 +1,159 @@
+# Checklist de Validação
+
+Este checklist separa validação automatizada, integração local e testes manuais com hardware. Marque cada item antes de uma entrega ou demonstração acadêmica.
+
+## Regras de segurança
+
+- [ ] Não executar queda real com uma pessoa.
+- [ ] Usar apenas movimentos controlados do hardware em bancada.
+- [ ] Não commitar `.env`, tokens, credenciais, dumps, logs ou artefatos gerados.
+- [ ] Não executar `dev:init-db` sem confirmar que o reset do banco local é desejado.
+- [ ] Não alterar o fluxo de pareamento durante uma rodada de validação.
+- [ ] Não tratar heurística experimental como diagnóstico clínico.
+
+## Matriz dos comandos automatizados
+
+| Comando | O que valida | Pré-requisitos | O que não valida |
+| --- | --- | --- | --- |
+| `npm test --prefix backend` | Suíte Node completa: alertas, eventos, comportamento, MQTT, Socket.IO escopado e logger de stress | Node e dependências | Broker, MySQL e servidor reais |
+| `npm run test:integration --prefix backend` | Integração leve entre serviços de alertas e ingestão MQTT com mocks controlados | Node e dependências | Rede, broker e banco reais |
+| `npm run stress:dry --prefix backend` | Rajadas, payloads ruins, concorrência por device, alertas e telemetria em processo local | Node e dependências | Throughput real de broker/MySQL/backend |
+| `npm run build --prefix frontend` | TypeScript e build de produção Vite | Dependências frontend | Fluxos manuais no navegador |
+| `npm run lint --prefix frontend` | Regras estáticas do frontend | Dependências frontend | Comportamento em runtime |
+| `npm run dev:smoke` | Backend/frontend reais, login JWT, tenant ativo e endpoints principais; mock MQTT opcional | MySQL, broker, backend e frontend ativos; seed/login válido | ESP32/IMU reais e precisão de queda |
+
+## Resultado auditado em 9 de junho de 2026
+
+- [x] `npm test --prefix backend`: passou, `41/41`.
+- [x] `npm run test:integration --prefix backend`: passou, `34/34`.
+- [x] `npm run stress:dry --prefix backend`: passou após alinhar o harness à validação real de telemetria; `225/225` mensagens processadas e `0` falhas.
+- [x] `npm run build --prefix frontend`: passou.
+- [x] `npm run lint --prefix frontend`: passou.
+- [x] `npm run dev:smoke`: passou após subir broker/backend/frontend com `powershell -ExecutionPolicy Bypass -File .\scripts\start-all.ps1 -NoBrowser`.
+
+O primeiro `dev:smoke` sem serviços ativos falhou corretamente em `/health`. Isso confirma que o script detecta ambiente indisponível em vez de produzir falso positivo.
+
+## Pré-validação do ambiente
+
+```powershell
+cd C:\Queda
+npm run dev:check
+```
+
+- [ ] Node.js `20+` disponível.
+- [ ] Dependências de backend e frontend instaladas.
+- [ ] `backend/.env` e `frontend/.env` existem localmente e não estão versionados.
+- [ ] MySQL acessível.
+- [ ] Portas `4000`, `5173` e `1883` disponíveis ou ocupadas pelos serviços esperados.
+- [ ] `database/schema.sql` e `database/seed.sql` presentes.
+
+## Login JWT e controle de acesso
+
+- [ ] Login válido retorna token JWT.
+- [ ] JWT expira em `7d`.
+- [ ] Rota protegida sem `Authorization: Bearer <token>` retorna `401`.
+- [ ] Token inválido retorna `401`.
+- [ ] Conta desabilitada não acessa o sistema.
+- [ ] `X-Organization-Id` seleciona somente organização permitida.
+- [ ] Usuário sem vínculo com o tenant recebe `403`.
+- [ ] `platform_admin` consegue operar globalmente ou selecionar organização.
+- [ ] `organization_admin` acessa toda a organização ativa.
+- [ ] `caregiver`, `operator` e `viewer` não acessam outra organização.
+- [ ] Quando existem assignments, usuário restrito vê somente pacientes atribuídos.
+- [ ] Após F5, o frontend reidrata sessão via `GET /api/me`.
+
+## MQTT e ingestão
+
+- [ ] Backend assina `queda/devices/+/status`.
+- [ ] Backend assina `queda/devices/+/telemetry`.
+- [ ] Backend assina `queda/devices/+/events`.
+- [ ] Status atualiza `device_status`.
+- [ ] Telemetria válida grava `telemetry_logs`.
+- [ ] Telemetria sem eixos ou com `sensor_valid=false` não grava amostra falsa.
+- [ ] JSON inválido é descartado sem derrubar o backend.
+- [ ] Divergência entre device do tópico e payload gera diagnóstico.
+- [ ] Timestamp inválido/stale usa hora de recebimento quando necessário.
+- [ ] Evento crítico reenviado com mesmo `event_uuid` não cria duplicata.
+- [ ] MQTT reconecta e reassina tópicos após desconexão.
+
+Comandos úteis:
+
+```powershell
+npm run mqtt:test --prefix backend -- 127.0.0.1 1883
+npm run mqtt:watch --prefix backend
+npm run mqtt:publish:test --prefix backend -- --device esp32_01 --count 10
+```
+
+## Socket.IO e multi-tenant
+
+- [ ] Socket sem token é rejeitado.
+- [ ] Socket com token inválido é rejeitado.
+- [ ] Socket recebe `organizationId` ativo.
+- [ ] `platform_admin` global entra na room de plataforma.
+- [ ] Tenant entra na room `scope:org:{organizationId}`.
+- [ ] Usuário restrito entra apenas nas rooms de pacientes atribuídos.
+- [ ] `telemetry:new` atualiza o detalhe do dispositivo sem F5.
+- [ ] `device:status` atualiza presença/diagnóstico.
+- [ ] `alert:new` aparece somente no escopo autorizado.
+- [ ] `alert:updated` reflete acknowledge/resolve/cancel.
+
+## Banco e rastreabilidade
+
+- [ ] `users` não armazena senha em texto puro.
+- [ ] `organizations` e `organization_members` representam tenant e papel.
+- [ ] `devices` possui identidade técnica e estado de claim.
+- [ ] `device_assignment_history` preserva troca de paciente.
+- [ ] `device_status` guarda último estado operacional e diagnóstico.
+- [ ] `telemetry_logs` guarda somente telemetria válida.
+- [ ] `events` preserva `raw_payload_json` e `evidence_summary_json`.
+- [ ] `event_telemetry_evidence` relaciona evento e amostras.
+- [ ] `alerts.event_id` impede alerta duplicado para o mesmo evento.
+- [ ] `alert_actions` registra ações humanas.
+- [ ] `audit_logs` registra operações administrativas relevantes.
+
+## Fluxo de alerta
+
+- [ ] Telemetria real continua chegando antes, durante e depois de evento.
+- [ ] `movement_detected`/`fall_suspected` são apresentados como heurística experimental.
+- [ ] `fall_detected` sem evidência suficiente é auditado, mas não vira alerta confirmado automático.
+- [ ] `fall_detected` com evidência `partial`/`linked` pode criar alerta.
+- [ ] SOS manual continua funcionando sem depender da telemetria.
+- [ ] Backend persiste evento antes de criar alerta.
+- [ ] Frontend apenas exibe a decisão/evidência.
+- [ ] Buzzer local não depende do frontend.
+- [ ] Cooldown/deduplicação evitam spam de alerta.
+
+## Hardware ESP32, IMU e buzzer
+
+- [ ] Upload na porta correta conclui.
+- [ ] Serial Monitor mostra endereço I2C e `WHO_AM_I`.
+- [ ] `sensor_ready=1`, `sensor_valid=1` e `sensor_read_ok=1`.
+- [ ] Em repouso, magnitude corrigida fica próxima de `1 g`.
+- [ ] `sample_age_ms` permanece baixo.
+- [ ] `i2c_error_count` não cresce continuamente.
+- [ ] Recovery aparece quando falhas consecutivas atingem o limite.
+- [ ] Raw totalmente zerado é descartado.
+- [ ] Portal mostra configuração atual sem interromper MQTT.
+- [ ] Botão `Testar buzzer` gera pulso curto não bloqueante.
+- [ ] Evento local permitido gera log de buzzer.
+- [ ] Bateria manual aparece como `manual`; sem valor, dashboard mostra `--%`.
+
+## Pareamento: regressão não invasiva
+
+O pareamento não deve ser alterado nesta rodada. Para validar sem refatorar:
+
+- [ ] Device já claimed continua associado à organização correta.
+- [ ] Reiniciar ESP32 não cria device duplicado.
+- [ ] Device MQTT desconhecido permanece `unclaimed`.
+- [ ] Não gerar novo código nem executar claim durante a apresentação se o vínculo atual já está correto.
+- [ ] Não rodar reset do banco antes de validar o vínculo atual.
+
+## Riscos e lacunas atuais
+
+- [ ] Executar `stress:real` em ambiente local/dev preparado para medir broker, backend e MySQL reais.
+- [ ] Repetir teste ponta a ponta com ESP32 real, evento controlado e dashboard.
+- [ ] Validar buzzer físico para todos os eventos configurados.
+- [ ] Coletar dataset maior para calibrar thresholds e estados.
+- [ ] Validar FFT somente como experimento até existir calibração.
+- [ ] Medir retenção/crescimento de `telemetry_logs`.
+- [ ] Avaliar TLS MQTT e persistência durável de eventos críticos.
