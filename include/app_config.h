@@ -175,7 +175,13 @@ constexpr float SENSOR_ACCEL_CALIBRATION_MAX_MAG_G = 1.25f;
 constexpr float SENSOR_ACCEL_CALIBRATION_MAX_SPAN_G = 0.12f;
 constexpr float SENSOR_ACCEL_CALIBRATION_MAX_GYRO_DPS = 20.0f;
 constexpr unsigned long STATUS_REPORT_INTERVAL_MS = 60000;
-constexpr unsigned long TELEMETRY_REPORT_INTERVAL_MS = 2000;
+// Modo demo e opt-in: deixa o grafico mais fluido sem aumentar a carga por padrao.
+constexpr bool FIRMWARE_DEMO_TELEMETRY_ENABLED = false;
+constexpr unsigned long TELEMETRY_NORMAL_REPORT_INTERVAL_MS = 2000;
+constexpr unsigned long TELEMETRY_DEMO_REPORT_INTERVAL_MS = 1000;
+constexpr unsigned long TELEMETRY_REPORT_INTERVAL_MS =
+    FIRMWARE_DEMO_TELEMETRY_ENABLED ? TELEMETRY_DEMO_REPORT_INTERVAL_MS
+                                    : TELEMETRY_NORMAL_REPORT_INTERVAL_MS;
 constexpr unsigned long MQTT_RECONNECT_INTERVAL_MS = 5000;
 constexpr uint16_t MQTT_PACKET_BUFFER_SIZE = 4096;
 constexpr unsigned long SOS_HOLD_TIME_MS = 1500;

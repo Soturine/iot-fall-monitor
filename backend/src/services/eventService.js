@@ -25,7 +25,6 @@ const TELEMETRY_REQUIRED_NUMERIC_FIELDS = ["ax", "ay", "az", "gx", "gy", "gz"];
 const ALERT_EVENT_TYPES = new Set([
   "fall_detected",
   "fall_suspected",
-  "movement_detected",
   "sos_pressed",
   "manual_sos",
   "sensor_fault",
@@ -84,7 +83,7 @@ function deriveSeverity(eventType, payload) {
     case "fall_suspected":
       return "high";
     case "movement_detected":
-      return "medium";
+      return "low";
     case "sos_pressed":
     case "manual_sos":
     case "sensor_fault":

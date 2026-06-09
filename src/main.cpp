@@ -741,7 +741,11 @@ void publishThresholdAlertEvent(const char* eventType,
                 runtimeConfig().alertTuning.cooldownMs,
                 runtimeConfig().alertTuning.sensitivityPreset.c_str());
 
-  triggerConfiguredAlertBuzzer(eventType, buzzerCycles);
+  if (buzzerCycles > 0U) {
+    triggerConfiguredAlertBuzzer(eventType, buzzerCycles);
+  } else {
+    AppLog::infof("[buzzer] skipped reason=non_critical_event event=%s\n", eventType);
+  }
 }
 
 void publishFallAlert(const FallAlert& alert) {
@@ -1307,7 +1311,9 @@ void handleExperimentalAlertDetection(const SensorReading& reading, unsigned lon
                 alertTuning.gyroThresholdDps,
                 alertTuning.sensitivityPreset.c_str(),
                 static_cast<unsigned long>(sensorSampleSeq));
-  publishThresholdAlertEvent(eventType, alert, false, suspectedFall ? 4 : 2);
+  // Eventos experimentais ajudam a validar o fluxo, mas nao acionam alarme local.
+  // O buzzer fica reservado para queda confirmada e SOS.
+  publishThresholdAlertEvent(eventType, alert, false, 0);
 }
 
 }  // namespace

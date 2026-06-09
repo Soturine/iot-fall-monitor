@@ -206,7 +206,6 @@ function buildHarness(options = {}) {
       [
         "fall_detected",
         "fall_suspected",
-        "movement_detected",
         "sos_pressed",
         "manual_sos",
         "sensor_fault",
@@ -214,7 +213,6 @@ function buildHarness(options = {}) {
     shouldCreateAlertForEvent: (event) =>
       [
         "fall_suspected",
-        "movement_detected",
         "sos_pressed",
         "manual_sos",
         "sensor_fault",
@@ -372,7 +370,7 @@ test("telemetry grava amostra, atualiza status e emite telemetry:new", async () 
   });
 });
 
-test("fall_detected, fall_suspected, movement_detected e sos_pressed geram alerta", async () => {
+test("quedas e SOS geram alerta; movement_detected permanece evento informativo", async () => {
   await withHarness({}, async ({ calls, handleMqttMessage }) => {
     for (const eventType of [
       "fall_detected",
@@ -393,10 +391,10 @@ test("fall_detected, fall_suspected, movement_detected e sos_pressed geram alert
     }
 
     assert.equal(calls.events.length, 4);
-    assert.equal(calls.alerts.length, 4);
+    assert.equal(calls.alerts.length, 3);
     assert.deepEqual(
       calls.emits.map((entry) => entry.eventName),
-      ["alert:new", "alert:new", "alert:new", "alert:new"],
+      ["alert:new", "alert:new", "alert:new"],
     );
   });
 });

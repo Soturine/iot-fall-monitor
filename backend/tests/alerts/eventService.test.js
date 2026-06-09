@@ -23,7 +23,7 @@ test("deriveSeverity classifica eventos criticos de queda, SOS e sensor", () => 
   assert.equal(deriveSeverity("manual_sos", {}), "high");
   assert.equal(deriveSeverity("sensor_fault", {}), "high");
   assert.equal(deriveSeverity("fall_suspected", {}), "high");
-  assert.equal(deriveSeverity("movement_detected", {}), "medium");
+  assert.equal(deriveSeverity("movement_detected", {}), "low");
   assert.equal(deriveSeverity("unknown_event", {}), "medium");
 });
 
@@ -37,7 +37,7 @@ test("shouldCreateAlert cria alerta apenas para eventos criticos", () => {
   assert.equal(shouldCreateAlert("manual_sos"), true);
   assert.equal(shouldCreateAlert("sensor_fault"), true);
   assert.equal(shouldCreateAlert("fall_suspected"), true);
-  assert.equal(shouldCreateAlert("movement_detected"), true);
+  assert.equal(shouldCreateAlert("movement_detected"), false);
   assert.equal(shouldCreateAlert("device_status"), false);
   assert.equal(shouldCreateAlert("heartbeat"), false);
 });
@@ -73,7 +73,7 @@ test("shouldCreateAlertForEvent exige evidencia para queda e preserva SOS manual
   );
   assert.equal(
     shouldCreateAlertForEvent({ eventType: "movement_detected", evidenceStatus: "none" }),
-    true,
+    false,
   );
 });
 
