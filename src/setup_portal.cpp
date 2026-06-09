@@ -1155,9 +1155,9 @@ void SetupPortal::appendAlertTuningCard(String& html) const {
   html += "<form method='post' action='/save' class='grid'>";
   html += "<input type='hidden' name='alert_form' value='1'>";
   html += "<div><label>Modo de operacao</label><select name='operation_mode'>";
-  html += operationModeOption(config_.operationMode, AppConfig::OPERATION_MODE_NORMAL, "Normal");
-  html += operationModeOption(config_.operationMode, AppConfig::OPERATION_MODE_DEMO, "Demo apresentacao");
-  html += "</select><p class='hint'>Modo demo para apresentacao, nao representa calibracao clinica.</p></div>";
+  html += operationModeOption(config_.operationMode, AppConfig::OPERATION_MODE_NORMAL, "Normal - perfil conservador");
+  html += operationModeOption(config_.operationMode, AppConfig::OPERATION_MODE_DEMO, "Demo apresentacao - recomendado para a apresentacao academica");
+  html += "</select><p class='hint'>A build academica inicia em Demo para facilitar validacao em bancada. Para operacao conservadora, selecione Normal. O modo demo nao representa calibracao clinica.</p></div>";
   html += "<div class='two grid'><div><label>Sensibilidade do alerta</label><select name='alert_sensitivity'>";
   html += sensitivityOption(alert, AppConfig::ALERT_SENSITIVITY_LOW, "Baixa");
   html += sensitivityOption(alert, AppConfig::ALERT_SENSITIVITY_NORMAL, "Normal");
