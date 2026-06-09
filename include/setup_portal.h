@@ -28,6 +28,8 @@ class SetupPortal {
                    bool maintenanceMode = false);
   void update();
   bool consumeAlertTuningUpdate(DeviceSettings::AlertTuningConfig& alertTuning);
+  bool consumeOperationModeUpdate(String& operationMode);
+  bool consumePowerUpdate(DeviceSettings::PowerConfig& power);
   void setBuzzerTestCallback(BuzzerTestCallback callback);
 
   bool isRunning() const;
@@ -100,5 +102,9 @@ class SetupPortal {
   String mqttProbeMessage_;
   bool alertTuningUpdatePending_ = false;
   DeviceSettings::AlertTuningConfig pendingAlertTuning_;
+  bool operationModeUpdatePending_ = false;
+  String pendingOperationMode_;
+  bool powerUpdatePending_ = false;
+  DeviceSettings::PowerConfig pendingPower_;
   BuzzerTestCallback buzzerTestCallback_ = nullptr;
 };

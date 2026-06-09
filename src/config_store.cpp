@@ -6,7 +6,8 @@ namespace {
 
 constexpr char kNamespace[] = "queda_cfg";
 constexpr char kConfigVersionKey[] = "cfg_ver";
-constexpr uint8_t kConfigVersion = 5;
+constexpr uint8_t kConfigVersion = 6;
+constexpr char kOperationModeKey[] = "operation_mode";
 constexpr char kWifiCountKey[] = "wifi_count";
 constexpr char kDeviceIdKey[] = "device_id";
 constexpr char kMqttHostKey[] = "mqtt_host";
@@ -35,6 +36,8 @@ constexpr char kAlertBuzzerKey[] = "alert_buzzer";
 constexpr char kAlertEventsKey[] = "alert_events";
 constexpr char kBatteryManualSetKey[] = "bat_manual_set";
 constexpr char kBatteryManualPercentKey[] = "bat_manual_pct";
+constexpr char kBatteryManualUpdatedAtKey[] = "bat_manual_at";
+constexpr char kBatteryCalibrationSequenceKey[] = "bat_cal_seq";
 constexpr char kPendingEventCountKey[] = "evt_count";
 
 String wifiSsidKey(size_t index) {
@@ -75,6 +78,8 @@ DeviceSettings::DeviceConfig ConfigStore::load() {
   }
 
   config.loadedFromNvs = true;
+  config.operationMode = DeviceSettings::normalizeOperationMode(
+      preferences.getString(kOperationModeKey, config.operationMode));
   config.deviceId = preferences.getString(kDeviceIdKey, config.deviceId);
   config.mqtt.host = preferences.getString(kMqttHostKey, config.mqtt.host);
   config.mqtt.port = preferences.getUShort(kMqttPortKey, config.mqtt.port);
@@ -130,6 +135,10 @@ DeviceSettings::DeviceConfig ConfigStore::load() {
       DeviceSettings::clampBatteryPercent(
           preferences.getUChar(kBatteryManualPercentKey,
                                config.power.manualBatteryPercent));
+  config.power.manualBatteryUpdatedAtEpoch =
+      preferences.getULong(kBatteryManualUpdatedAtKey, 0);
+  config.power.manualBatteryCalibrationSequence =
+      preferences.getULong(kBatteryCalibrationSequenceKey, 0);
 
   const size_t count = preferences.getUChar(kWifiCountKey, 0);
   config.wifiNetworkCount = 0;
@@ -168,6 +177,8 @@ bool ConfigStore::save(const DeviceSettings::DeviceConfig& config) {
   }
 
   preferences.putUChar(kConfigVersionKey, kConfigVersion);
+  preferences.putString(kOperationModeKey,
+                        DeviceSettings::normalizeOperationMode(config.operationMode));
   preferences.putString(kDeviceIdKey, config.deviceId);
   preferences.putString(kMqttHostKey, config.mqtt.host);
   preferences.putUShort(kMqttPortKey, config.mqtt.port);
@@ -207,6 +218,10 @@ bool ConfigStore::save(const DeviceSettings::DeviceConfig& config) {
   preferences.putUChar(kBatteryManualPercentKey,
                        DeviceSettings::clampBatteryPercent(
                            config.power.manualBatteryPercent));
+  preferences.putULong(kBatteryManualUpdatedAtKey,
+                       config.power.manualBatteryUpdatedAtEpoch);
+  preferences.putULong(kBatteryCalibrationSequenceKey,
+                       config.power.manualBatteryCalibrationSequence);
   preferences.putUChar(kWifiCountKey, static_cast<uint8_t>(config.wifiNetworkCount));
 
   for (size_t index = 0; index < DeviceSettings::kMaxWifiNetworks; ++index) {

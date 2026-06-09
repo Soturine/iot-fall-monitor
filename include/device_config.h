@@ -48,10 +48,13 @@ struct AlertTuningConfig {
 struct PowerConfig {
   bool manualBatteryPercentSet = false;
   uint8_t manualBatteryPercent = 0;
+  uint32_t manualBatteryUpdatedAtEpoch = 0;
+  uint32_t manualBatteryCalibrationSequence = 0;
 };
 
 struct DeviceConfig {
   bool loadedFromNvs = false;
+  String operationMode;
   String deviceId;
   MqttConfig mqtt;
   String deviceSyncToken;
@@ -89,6 +92,10 @@ float clampAlertGyroThreshold(float value);
 unsigned long clampAlertAnalysisWindowMs(unsigned long value);
 unsigned long clampAlertCooldownMs(unsigned long value);
 uint8_t clampBatteryPercent(long value);
+String normalizeOperationMode(const String& mode);
+bool isDemoOperationMode(const DeviceConfig& config);
+unsigned long effectiveSensorSampleIntervalMs(const DeviceConfig& config);
+unsigned long effectiveTelemetryIntervalMs(const DeviceConfig& config);
 
 bool upsertWifiNetwork(DeviceConfig& config,
                        const String& ssid,

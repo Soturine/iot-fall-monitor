@@ -133,6 +133,17 @@ struct FallAlert {
   unsigned int sampleCount = 0;
   unsigned int samplesConsidered = 0;
   const char* reason = "impact_orientation_immobility";
+  const char* detectorMode = "normal";
+  const char* thresholdProfile = "normal";
+  bool impactDetected = false;
+  bool orientationChangeDetected = false;
+  bool immobilityDetected = false;
+  float impactAccelThresholdG = 0.0f;
+  float impactGyroThresholdDps = 0.0f;
+  float orientationThresholdDeg = 0.0f;
+  unsigned long immobilityRequiredMs = 0;
+  unsigned long sampleIntervalMs = 0;
+  unsigned long telemetryIntervalMs = 0;
   unsigned long timestampMs = 0;
   FallTimeDomainFeatures timeDomainFeatures;
   FallFrequencyDomainFeatures frequencyDomainFeatures;

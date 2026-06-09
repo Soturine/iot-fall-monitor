@@ -7,6 +7,7 @@ class FallDetector {
  public:
   FallAlert update(const SensorReading& reading);
   void reset();
+  void setDemoMode(bool enabled);
 
   bool hasPendingCandidate() const;
 
@@ -39,4 +40,11 @@ class FallDetector {
   unsigned long lastSampleAtMs_ = 0;
   unsigned long immobileAccumulatedMs_ = 0;
   unsigned int samplesConsidered_ = 0;
+  bool demoMode_ = false;
+  float impactThresholdG_ = AppConfig::IMPACT_THRESHOLD_G;
+  float impactGyroThresholdDps_ = AppConfig::IMPACT_GYRO_THRESHOLD_DPS;
+  float orientationThresholdDeg_ = AppConfig::ORIENTATION_CHANGE_THRESHOLD_DEG;
+  unsigned long orientationWindowMs_ = AppConfig::ORIENTATION_WINDOW_MS;
+  unsigned long immobilityWindowMs_ = AppConfig::IMMOBILITY_WINDOW_MS;
+  unsigned long requiredImmobilityMs_ = AppConfig::REQUIRED_IMMOBILITY_MS;
 };

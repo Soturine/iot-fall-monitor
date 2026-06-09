@@ -126,6 +126,8 @@ constexpr char ALERT_SENSITIVITY_NORMAL[] = "normal";
 constexpr char ALERT_SENSITIVITY_HIGH[] = "high";
 constexpr char ALERT_SENSITIVITY_DEMO[] = "demo";
 constexpr char ALERT_DECISION_ENGINE_VERSION[] = "precalibration_threshold_v1";
+constexpr char OPERATION_MODE_NORMAL[] = "normal";
+constexpr char OPERATION_MODE_DEMO[] = "demo";
 constexpr bool ALERT_EVENT_PUBLICATION_ENABLED_DEFAULT = true;
 constexpr bool ALERT_BUZZER_ENABLED_DEFAULT = false;
 constexpr float ALERT_NORMAL_ACCEL_THRESHOLD_G = 2.20f;
@@ -134,10 +136,10 @@ constexpr float ALERT_LOW_ACCEL_THRESHOLD_G = 2.80f;
 constexpr float ALERT_LOW_GYRO_THRESHOLD_DPS = 180.0f;
 constexpr float ALERT_HIGH_ACCEL_THRESHOLD_G = 1.70f;
 constexpr float ALERT_HIGH_GYRO_THRESHOLD_DPS = 80.0f;
-constexpr float ALERT_DEMO_ACCEL_THRESHOLD_G = 1.25f;
-constexpr float ALERT_DEMO_GYRO_THRESHOLD_DPS = 35.0f;
+constexpr float ALERT_DEMO_ACCEL_THRESHOLD_G = 1.70f;
+constexpr float ALERT_DEMO_GYRO_THRESHOLD_DPS = 100.0f;
 constexpr unsigned long ALERT_NORMAL_ANALYSIS_WINDOW_MS = 1200;
-constexpr unsigned long ALERT_DEMO_ANALYSIS_WINDOW_MS = 500;
+constexpr unsigned long ALERT_DEMO_ANALYSIS_WINDOW_MS = 2000;
 constexpr unsigned long ALERT_NORMAL_COOLDOWN_MS = 15000;
 constexpr unsigned long ALERT_DEMO_COOLDOWN_MS = 3000;
 constexpr float ALERT_MIN_ACCEL_THRESHOLD_G = 1.05f;
@@ -150,7 +152,9 @@ constexpr unsigned long ALERT_MIN_COOLDOWN_MS = 1000;
 constexpr unsigned long ALERT_MAX_COOLDOWN_MS = 120000;
 
 // Intervalos principais do firmware.
-constexpr unsigned long SENSOR_SAMPLE_INTERVAL_MS = 50;
+constexpr unsigned long SENSOR_NORMAL_SAMPLE_INTERVAL_MS = 50;
+constexpr unsigned long SENSOR_DEMO_SAMPLE_INTERVAL_MS = 25;
+constexpr unsigned long SENSOR_SAMPLE_INTERVAL_MS = SENSOR_NORMAL_SAMPLE_INTERVAL_MS;
 constexpr uint32_t I2C_CLOCK_HZ = 100000;
 constexpr uint16_t I2C_TIMEOUT_MS = 50;
 constexpr uint8_t I2C_READ_RETRY_COUNT = 3;
@@ -175,13 +179,9 @@ constexpr float SENSOR_ACCEL_CALIBRATION_MAX_MAG_G = 1.25f;
 constexpr float SENSOR_ACCEL_CALIBRATION_MAX_SPAN_G = 0.12f;
 constexpr float SENSOR_ACCEL_CALIBRATION_MAX_GYRO_DPS = 20.0f;
 constexpr unsigned long STATUS_REPORT_INTERVAL_MS = 60000;
-// Modo demo e opt-in: deixa o grafico mais fluido sem aumentar a carga por padrao.
-constexpr bool FIRMWARE_DEMO_TELEMETRY_ENABLED = false;
 constexpr unsigned long TELEMETRY_NORMAL_REPORT_INTERVAL_MS = 2000;
-constexpr unsigned long TELEMETRY_DEMO_REPORT_INTERVAL_MS = 1000;
-constexpr unsigned long TELEMETRY_REPORT_INTERVAL_MS =
-    FIRMWARE_DEMO_TELEMETRY_ENABLED ? TELEMETRY_DEMO_REPORT_INTERVAL_MS
-                                    : TELEMETRY_NORMAL_REPORT_INTERVAL_MS;
+constexpr unsigned long TELEMETRY_DEMO_REPORT_INTERVAL_MS = 500;
+constexpr unsigned long TELEMETRY_REPORT_INTERVAL_MS = TELEMETRY_NORMAL_REPORT_INTERVAL_MS;
 constexpr unsigned long MQTT_RECONNECT_INTERVAL_MS = 5000;
 constexpr uint16_t MQTT_PACKET_BUFFER_SIZE = 4096;
 constexpr unsigned long SOS_HOLD_TIME_MS = 1500;
@@ -207,6 +207,15 @@ constexpr float IMMOBILE_GYRO_THRESHOLD_DPS = 15.0f;
 constexpr unsigned long ORIENTATION_WINDOW_MS = 1500;
 constexpr unsigned long IMMOBILITY_WINDOW_MS = 4000;
 constexpr unsigned long REQUIRED_IMMOBILITY_MS = 2000;
+constexpr float DEMO_IMPACT_THRESHOLD_G = 1.70f;
+constexpr float DEMO_IMPACT_GYRO_THRESHOLD_DPS = 100.0f;
+constexpr float DEMO_ORIENTATION_CHANGE_THRESHOLD_DEG = 30.0f;
+constexpr unsigned long DEMO_ORIENTATION_WINDOW_MS = 2000;
+constexpr unsigned long DEMO_IMMOBILITY_WINDOW_MS = 5000;
+constexpr unsigned long DEMO_REQUIRED_IMMOBILITY_MS = 1000;
+
+// Estimativa experimental baseada em recalibracao manual, nao em medicao eletrica.
+constexpr float BATTERY_INITIAL_MINUTES_PER_PERCENT = 33.5f;
 
 // Camada experimental de features. A decisao principal continua na FSM atual.
 constexpr bool FALL_FEATURE_EXTRACTOR_ENABLED = true;

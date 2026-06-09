@@ -2,6 +2,8 @@
 
 #include <cmath>
 
+#include "app_logging.h"
+
 FallAlert FallDetector::update(const SensorReading& reading) {
   FallAlert alert;
 
@@ -31,6 +33,12 @@ FallAlert FallDetector::update(const SensorReading& reading) {
         peakAccelMagnitudeG_ = reading.accelMagnitudeG;
         peakGyroMagnitudeDegPerSec_ = reading.gyroMagnitudeDegPerSec;
         peakOrientationDeltaDeg_ = 0.0f;
+        AppLog::warnf("[fall] impact detected mode=%s accel=%.2f threshold=%.2f gyro=%.1f threshold=%.1f\n",
+                      demoMode_ ? "demo" : "normal",
+                      reading.accelMagnitudeG,
+                      impactThresholdG_,
+                      reading.gyroMagnitudeDegPerSec,
+                      impactGyroThresholdDps_);
       }
       break;
 
@@ -42,11 +50,19 @@ FallAlert FallDetector::update(const SensorReading& reading) {
           fmaxf(peakGyroMagnitudeDegPerSec_, reading.gyroMagnitudeDegPerSec);
       peakOrientationDeltaDeg_ = fmaxf(peakOrientationDeltaDeg_, orientationDeltaDeg(reading));
 
-      if (orientationDeltaDeg(reading) >= AppConfig::ORIENTATION_CHANGE_THRESHOLD_DEG) {
+      if (orientationDeltaDeg(reading) >= orientationThresholdDeg_) {
         state_ = State::WaitingForImmobility;
         stateStartedAtMs_ = nowMs;
         immobileAccumulatedMs_ = 0;
-      } else if ((nowMs - stateStartedAtMs_) > AppConfig::ORIENTATION_WINDOW_MS) {
+        AppLog::warnf("[fall] orientation detected mode=%s delta=%.1f threshold=%.1f\n",
+                      demoMode_ ? "demo" : "normal",
+                      peakOrientationDeltaDeg_,
+                      orientationThresholdDeg_);
+      } else if ((nowMs - stateStartedAtMs_) > orientationWindowMs_) {
+        AppLog::infof("[fall] candidate rejected reason=missing_orientation mode=%s window_ms=%lu peak_delta=%.1f\n",
+                      demoMode_ ? "demo" : "normal",
+                      orientationWindowMs_,
+                      peakOrientationDeltaDeg_);
         reset();
       }
       break;
@@ -65,7 +81,12 @@ FallAlert FallDetector::update(const SensorReading& reading) {
         immobileAccumulatedMs_ = 0;
       }
 
-      if (immobileAccumulatedMs_ >= AppConfig::REQUIRED_IMMOBILITY_MS) {
+      if (immobileAccumulatedMs_ >= requiredImmobilityMs_) {
+        AppLog::warnf("[fall] confirmed reason=impact_orientation_immobility mode=%s immobility_ms=%lu required_ms=%lu samples=%u\n",
+                      demoMode_ ? "demo" : "normal",
+                      immobileAccumulatedMs_,
+                      requiredImmobilityMs_,
+                      samplesConsidered_);
         alert.detected = true;
         alert.candidate = true;
         alert.immobilityConfirmed = true;
@@ -89,15 +110,53 @@ FallAlert FallDetector::update(const SensorReading& reading) {
         alert.windowEndedAtMs = nowMs;
         alert.sampleCount = samplesConsidered_;
         alert.samplesConsidered = samplesConsidered_;
+        alert.detectorMode = demoMode_ ? "demo" : "normal";
+        alert.thresholdProfile = alert.detectorMode;
+        alert.impactDetected = true;
+        alert.orientationChangeDetected = true;
+        alert.immobilityDetected = true;
+        alert.impactAccelThresholdG = impactThresholdG_;
+        alert.impactGyroThresholdDps = impactGyroThresholdDps_;
+        alert.orientationThresholdDeg = orientationThresholdDeg_;
+        alert.immobilityRequiredMs = requiredImmobilityMs_;
+        alert.sampleIntervalMs = demoMode_ ? AppConfig::SENSOR_DEMO_SAMPLE_INTERVAL_MS
+                                           : AppConfig::SENSOR_NORMAL_SAMPLE_INTERVAL_MS;
+        alert.telemetryIntervalMs = demoMode_ ? AppConfig::TELEMETRY_DEMO_REPORT_INTERVAL_MS
+                                              : AppConfig::TELEMETRY_NORMAL_REPORT_INTERVAL_MS;
         alert.timestampMs = nowMs;
         reset();
-      } else if ((nowMs - stateStartedAtMs_) > AppConfig::IMMOBILITY_WINDOW_MS) {
+      } else if ((nowMs - stateStartedAtMs_) > immobilityWindowMs_) {
+        AppLog::infof("[fall] candidate rejected reason=missing_immobility mode=%s window_ms=%lu accumulated_ms=%lu\n",
+                      demoMode_ ? "demo" : "normal",
+                      immobilityWindowMs_,
+                      immobileAccumulatedMs_);
         reset();
       }
       break;
   }
 
   return alert;
+}
+
+void FallDetector::setDemoMode(bool enabled) {
+  if (demoMode_ == enabled) {
+    return;
+  }
+
+  demoMode_ = enabled;
+  impactThresholdG_ = enabled ? AppConfig::DEMO_IMPACT_THRESHOLD_G
+                              : AppConfig::IMPACT_THRESHOLD_G;
+  impactGyroThresholdDps_ = enabled ? AppConfig::DEMO_IMPACT_GYRO_THRESHOLD_DPS
+                                    : AppConfig::IMPACT_GYRO_THRESHOLD_DPS;
+  orientationThresholdDeg_ = enabled ? AppConfig::DEMO_ORIENTATION_CHANGE_THRESHOLD_DEG
+                                     : AppConfig::ORIENTATION_CHANGE_THRESHOLD_DEG;
+  orientationWindowMs_ = enabled ? AppConfig::DEMO_ORIENTATION_WINDOW_MS
+                                 : AppConfig::ORIENTATION_WINDOW_MS;
+  immobilityWindowMs_ = enabled ? AppConfig::DEMO_IMMOBILITY_WINDOW_MS
+                                : AppConfig::IMMOBILITY_WINDOW_MS;
+  requiredImmobilityMs_ = enabled ? AppConfig::DEMO_REQUIRED_IMMOBILITY_MS
+                                  : AppConfig::REQUIRED_IMMOBILITY_MS;
+  reset();
 }
 
 void FallDetector::reset() {
@@ -139,8 +198,8 @@ void FallDetector::refreshBaseline(const SensorReading& reading) {
 
 bool FallDetector::isImpact(const SensorReading& reading) const {
   // Exigir impacto e giro ao mesmo tempo reduz disparos por sacudidas leves.
-  return reading.accelMagnitudeG >= AppConfig::IMPACT_THRESHOLD_G &&
-         reading.gyroMagnitudeDegPerSec >= AppConfig::IMPACT_GYRO_THRESHOLD_DPS;
+  return reading.accelMagnitudeG >= impactThresholdG_ &&
+         reading.gyroMagnitudeDegPerSec >= impactGyroThresholdDps_;
 }
 
 bool FallDetector::isImmobile(const SensorReading& reading) const {

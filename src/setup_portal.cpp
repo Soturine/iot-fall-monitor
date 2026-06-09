@@ -1,6 +1,7 @@
 #include "setup_portal.h"
 
 #include <cmath>
+#include <time.h>
 
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
@@ -101,6 +102,21 @@ String sensitivityOption(const DeviceSettings::AlertTuningConfig& alertTuning,
   html += value;
   html += "'";
   if (DeviceSettings::normalizeAlertSensitivityPreset(alertTuning.sensitivityPreset) == value) {
+    html += " selected";
+  }
+  html += ">";
+  html += label;
+  html += "</option>";
+  return html;
+}
+
+String operationModeOption(const String& currentMode,
+                           const char* value,
+                           const char* label) {
+  String html = "<option value='";
+  html += value;
+  html += "'";
+  if (DeviceSettings::normalizeOperationMode(currentMode) == value) {
     html += " selected";
   }
   html += ">";
@@ -280,6 +296,26 @@ bool SetupPortal::consumeAlertTuningUpdate(DeviceSettings::AlertTuningConfig& al
   return true;
 }
 
+bool SetupPortal::consumeOperationModeUpdate(String& operationMode) {
+  if (!operationModeUpdatePending_) {
+    return false;
+  }
+
+  operationMode = pendingOperationMode_;
+  operationModeUpdatePending_ = false;
+  return true;
+}
+
+bool SetupPortal::consumePowerUpdate(DeviceSettings::PowerConfig& power) {
+  if (!powerUpdatePending_) {
+    return false;
+  }
+
+  power = pendingPower_;
+  powerUpdatePending_ = false;
+  return true;
+}
+
 void SetupPortal::setBuzzerTestCallback(BuzzerTestCallback callback) {
   buzzerTestCallback_ = callback;
 }
@@ -426,6 +462,7 @@ void SetupPortal::handleSaveSettings() {
       server_.hasArg("mqtt_password") || server_.hasArg("mqtt_client_id") ||
       server_.hasArg("backend_api_base_url");
   const bool updatesAlert =
+      server_.hasArg("operation_mode") ||
       server_.hasArg("alert_sensitivity") ||
       server_.hasArg("alert_accel_threshold_g") ||
       server_.hasArg("alert_gyro_threshold_dps") ||
@@ -459,8 +496,28 @@ void SetupPortal::handleSaveSettings() {
   }
 
   if (updatesAlert) {
-    bool alertPresetChanged = false;
-    if (server_.hasArg("alert_sensitivity")) {
+    bool operationModeChanged = false;
+    if (server_.hasArg("operation_mode")) {
+      const String newOperationMode =
+          DeviceSettings::normalizeOperationMode(server_.arg("operation_mode"));
+      operationModeChanged =
+          newOperationMode != DeviceSettings::normalizeOperationMode(updated.operationMode);
+      updated.operationMode = newOperationMode;
+      if (operationModeChanged) {
+        const bool oldBuzzer = updated.alertTuning.buzzerEnabled;
+        const bool oldEvents = updated.alertTuning.eventsEnabled;
+        DeviceSettings::applyAlertSensitivityPreset(
+            updated.alertTuning,
+            DeviceSettings::isDemoOperationMode(updated)
+                ? AppConfig::ALERT_SENSITIVITY_DEMO
+                : AppConfig::ALERT_SENSITIVITY_NORMAL);
+        updated.alertTuning.buzzerEnabled = oldBuzzer;
+        updated.alertTuning.eventsEnabled = oldEvents;
+      }
+    }
+
+    bool alertPresetChanged = operationModeChanged;
+    if (!alertPresetChanged && server_.hasArg("alert_sensitivity")) {
       const String oldPreset = updated.alertTuning.sensitivityPreset;
       const String newPreset =
           DeviceSettings::normalizeAlertSensitivityPreset(server_.arg("alert_sensitivity"));
@@ -518,6 +575,17 @@ void SetupPortal::handleSaveSettings() {
 
     updated.power.manualBatteryPercentSet = manualSet;
     updated.power.manualBatteryPercent = manualPercent;
+    if (manualSet) {
+      const time_t now = time(nullptr);
+      updated.power.manualBatteryUpdatedAtEpoch =
+          now >= 1700000000 ? static_cast<uint32_t>(now) : 0U;
+      ++updated.power.manualBatteryCalibrationSequence;
+      if (updated.power.manualBatteryCalibrationSequence == 0U) {
+        updated.power.manualBatteryCalibrationSequence = 1U;
+      }
+    } else {
+      updated.power.manualBatteryUpdatedAtEpoch = 0U;
+    }
   }
 
   if (updatesMqtt && !DeviceSettings::hasValidMqttConfig(updated)) {
@@ -539,6 +607,12 @@ void SetupPortal::handleSaveSettings() {
   if (updatesAlert) {
     pendingAlertTuning_ = updated.alertTuning;
     alertTuningUpdatePending_ = true;
+    pendingOperationMode_ = updated.operationMode;
+    operationModeUpdatePending_ = true;
+  }
+  if (updatesPower) {
+    pendingPower_ = updated.power;
+    powerUpdatePending_ = true;
   }
   clearOperationalProbeResults();
   if (server_.arg("action") == "save_restart") {
@@ -550,7 +624,7 @@ void SetupPortal::handleSaveSettings() {
   } else if (updatesPower && !updatesMqtt) {
     flashMessage_ =
         updated.power.manualBatteryPercentSet
-            ? "Bateria manual salva em NVS. O proximo status MQTT publicara origem manual."
+            ? "Bateria recalibrada em NVS. O backend aprendera a taxa sem tratar o valor como medicao eletrica."
             : "Bateria manual removida. O site mostrara bateria como nao informada.";
     flashTone_ = "success";
   } else {
@@ -1051,16 +1125,21 @@ void SetupPortal::appendMqttCard(String& html) const {
 
 void SetupPortal::appendPowerCard(String& html) const {
   html += "<div class='card'><h2>Energia e bateria</h2>";
-  html += "<p class='muted'>Enquanto nao houver leitura automatica por ADC ou fuel gauge, copie manualmente a porcentagem exibida no modulo de bateria. Esse valor e apenas informativo.</p>";
+  html += "<p class='muted'>Estimativa experimental por tempo. Use este campo para recalibrar o dashboard; nao e medicao eletrica real.</p>";
   html += "<form method='post' action='/save' class='grid'>";
   html += "<input type='hidden' name='power_form' value='1'>";
-  html += "<div><label>Porcentagem manual da bateria</label><input name='battery_percent_manual' type='number' min='0' max='100' step='1' value='";
+  html += "<div><label>Bateria atual (%)</label><input name='battery_percent_manual' type='number' min='0' max='100' step='1' value='";
   html += config_.power.manualBatteryPercentSet ? String(config_.power.manualBatteryPercent) : "";
   html += "' placeholder='Ex.: 78'></div>";
   html += "<p class='hint'>Atual: ";
   if (config_.power.manualBatteryPercentSet) {
     html += String(config_.power.manualBatteryPercent);
     html += "% manual";
+    html += " | calibracoes: ";
+    html += String(config_.power.manualBatteryCalibrationSequence);
+    html += " | taxa inicial: ";
+    html += String(AppConfig::BATTERY_INITIAL_MINUTES_PER_PERCENT, 1);
+    html += " min/%";
   } else {
     html += "nao informado";
   }
@@ -1075,6 +1154,10 @@ void SetupPortal::appendAlertTuningCard(String& html) const {
   html += "<p class='muted'>Ajuste usado para testes controlados em bancada. O modo normal continua conservador; nao use como validacao clinica nem teste queda em pessoa.</p>";
   html += "<form method='post' action='/save' class='grid'>";
   html += "<input type='hidden' name='alert_form' value='1'>";
+  html += "<div><label>Modo de operacao</label><select name='operation_mode'>";
+  html += operationModeOption(config_.operationMode, AppConfig::OPERATION_MODE_NORMAL, "Normal");
+  html += operationModeOption(config_.operationMode, AppConfig::OPERATION_MODE_DEMO, "Demo apresentacao");
+  html += "</select><p class='hint'>Modo demo para apresentacao, nao representa calibracao clinica.</p></div>";
   html += "<div class='two grid'><div><label>Sensibilidade do alerta</label><select name='alert_sensitivity'>";
   html += sensitivityOption(alert, AppConfig::ALERT_SENSITIVITY_LOW, "Baixa");
   html += sensitivityOption(alert, AppConfig::ALERT_SENSITIVITY_NORMAL, "Normal");

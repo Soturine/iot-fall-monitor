@@ -160,6 +160,14 @@ const DeviceSettings::DeviceConfig& runtimeConfig() {
   return connectivityManager.config();
 }
 
+unsigned long effectiveSensorSampleIntervalMs() {
+  return DeviceSettings::effectiveSensorSampleIntervalMs(runtimeConfig());
+}
+
+unsigned long effectiveTelemetryIntervalMs() {
+  return DeviceSettings::effectiveTelemetryIntervalMs(runtimeConfig());
+}
+
 bool handlePortalBuzzerTest(String* message) {
   const bool enabled = runtimeConfig().alertTuning.buzzerEnabled;
   indicator.setBuzzerEnabled(enabled);
@@ -311,6 +319,20 @@ void addBatteryFieldsToPayload(JsonDocument& doc) {
   doc["battery_level"] = batteryPercent;
   doc["battery_percent"] = batteryPercent;
   doc["battery_percent_source"] = "manual";
+  doc["battery_manual_percent"] = batteryPercent;
+  doc["battery_manual_updated_at"] = powerConfig.manualBatteryUpdatedAtEpoch;
+  doc["battery_calibration_sequence"] = powerConfig.manualBatteryCalibrationSequence;
+  doc["battery_estimated_minutes_per_percent"] =
+      AppConfig::BATTERY_INITIAL_MINUTES_PER_PERCENT;
+  doc["battery_estimate_mode"] = "time_decay";
+}
+
+void addOperationModeFieldsToPayload(JsonDocument& doc) {
+  doc["detector_mode"] = DeviceSettings::normalizeOperationMode(runtimeConfig().operationMode);
+  doc["threshold_profile"] = runtimeConfig().alertTuning.sensitivityPreset;
+  doc["sample_interval_ms"] = effectiveSensorSampleIntervalMs();
+  doc["telemetry_interval_ms"] = effectiveTelemetryIntervalMs();
+  doc["fft_enabled"] = AppConfig::FALL_FFT_EXPERIMENTAL_ENABLED;
 }
 
 void addNetworkFieldsToPayload(JsonDocument& doc) {
@@ -420,6 +442,25 @@ FallAlert buildExperimentalAlertDecision(const SensorReading& reading,
   alert.samplesConsidered = alert.sampleCount;
   alert.immobilityDurationMs = 0;
   alert.reason = reason;
+  alert.detectorMode = DeviceSettings::isDemoOperationMode(runtimeConfig()) ? "demo" : "normal";
+  alert.thresholdProfile = alertTuning.sensitivityPreset.c_str();
+  alert.impactDetected = accelTriggered && gyroTriggered;
+  alert.orientationChangeDetected = false;
+  alert.immobilityDetected = false;
+  alert.impactAccelThresholdG = DeviceSettings::isDemoOperationMode(runtimeConfig())
+                                    ? AppConfig::DEMO_IMPACT_THRESHOLD_G
+                                    : AppConfig::IMPACT_THRESHOLD_G;
+  alert.impactGyroThresholdDps = DeviceSettings::isDemoOperationMode(runtimeConfig())
+                                     ? AppConfig::DEMO_IMPACT_GYRO_THRESHOLD_DPS
+                                     : AppConfig::IMPACT_GYRO_THRESHOLD_DPS;
+  alert.orientationThresholdDeg = DeviceSettings::isDemoOperationMode(runtimeConfig())
+                                      ? AppConfig::DEMO_ORIENTATION_CHANGE_THRESHOLD_DEG
+                                      : AppConfig::ORIENTATION_CHANGE_THRESHOLD_DEG;
+  alert.immobilityRequiredMs = DeviceSettings::isDemoOperationMode(runtimeConfig())
+                                  ? AppConfig::DEMO_REQUIRED_IMMOBILITY_MS
+                                  : AppConfig::REQUIRED_IMMOBILITY_MS;
+  alert.sampleIntervalMs = effectiveSensorSampleIntervalMs();
+  alert.telemetryIntervalMs = effectiveTelemetryIntervalMs();
   alert.timestampMs = reading.timestampMs;
   alert.timeDomainFeatures = timeFeatures;
   alert.frequencyDomainFeatures = fallFeatureExtractor.frequencyDomainSnapshot();
@@ -441,7 +482,7 @@ String buildEventPayload(const char* eventType,
                          uint32_t sampleSeq,
                          const FallAlert* fallAlert = nullptr) {
   // Mantem o formato do payload centralizado em um unico ponto.
-  StaticJsonDocument<3072> doc;
+  StaticJsonDocument<3584> doc;
   const unsigned long nowMs = millis();
   addDeviceIdentityToPayload(doc);
   doc["event_type"] = eventType;
@@ -454,6 +495,7 @@ String buildEventPayload(const char* eventType,
   doc["gyro_magnitude"] = gyroMagnitudeDegPerSec;
   doc["immobility_confirmed"] = immobilityConfirmed;
   addBatteryFieldsToPayload(doc);
+  addOperationModeFieldsToPayload(doc);
   doc["algorithm"] = fallAlert != nullptr
                          ? fallAlert->algorithmVersion
                          : AppConfig::ALERT_DECISION_ENGINE_VERSION;
@@ -482,6 +524,15 @@ String buildEventPayload(const char* eventType,
     doc["roll_deg"] = fallAlert->rollDeg;
     doc["orientation_delta_deg"] = fallAlert->orientationDeltaDeg;
     doc["immobility_duration_ms"] = fallAlert->immobilityDurationMs;
+    doc["detector_mode"] = fallAlert->detectorMode;
+    doc["threshold_profile"] = fallAlert->thresholdProfile;
+    doc["impact_detected"] = fallAlert->impactDetected;
+    doc["orientation_change_detected"] = fallAlert->orientationChangeDetected;
+    doc["immobility_detected"] = fallAlert->immobilityDetected;
+    doc["immobility_accumulated_ms"] = fallAlert->immobilityDurationMs;
+    doc["fall_decision_reason"] = fallAlert->reason;
+    doc["sample_interval_ms"] = fallAlert->sampleIntervalMs;
+    doc["telemetry_interval_ms"] = fallAlert->telemetryIntervalMs;
 
     JsonObject features = doc.createNestedObject("features");
     features["decision_source"] = fallAlert->decisionSource;
@@ -513,10 +564,10 @@ String buildEventPayload(const char* eventType,
     linkedTelemetryWindow["sample_count"] = fallAlert->linkedTelemetryWindow.sampleCount;
 
     JsonObject thresholds = doc.createNestedObject("thresholds");
-    thresholds["impact_accel_g"] = AppConfig::IMPACT_THRESHOLD_G;
-    thresholds["impact_gyro_dps"] = AppConfig::IMPACT_GYRO_THRESHOLD_DPS;
-    thresholds["orientation_change_deg"] = AppConfig::ORIENTATION_CHANGE_THRESHOLD_DEG;
-    thresholds["required_immobility_ms"] = AppConfig::REQUIRED_IMMOBILITY_MS;
+    thresholds["impact_accel_g"] = fallAlert->impactAccelThresholdG;
+    thresholds["impact_gyro_dps"] = fallAlert->impactGyroThresholdDps;
+    thresholds["orientation_change_deg"] = fallAlert->orientationThresholdDeg;
+    thresholds["required_immobility_ms"] = fallAlert->immobilityRequiredMs;
     thresholds["experimental_accel_g"] = runtimeConfig().alertTuning.accelThresholdG;
     thresholds["experimental_gyro_dps"] = runtimeConfig().alertTuning.gyroThresholdDps;
     thresholds["experimental_window_ms"] = runtimeConfig().alertTuning.analysisWindowMs;
@@ -536,7 +587,7 @@ String buildStatusPayload() {
   // O status periodico carrega telemetria minima para observabilidade do dispositivo.
   const unsigned long nowMs = millis();
   const bool sensorSampleFresh = hasFreshSensorSample(nowMs);
-  StaticJsonDocument<768> doc;
+  StaticJsonDocument<1024> doc;
   addDeviceIdentityToPayload(doc);
   doc["event_type"] = "device_status";
   doc["timestamp"] = currentTimestampSeconds();
@@ -546,6 +597,7 @@ String buildStatusPayload() {
   }
   doc["immobility_confirmed"] = false;
   addBatteryFieldsToPayload(doc);
+  addOperationModeFieldsToPayload(doc);
   addNetworkFieldsToPayload(doc);
   doc["buffered_events"] = eventBuffer.size();
   doc["sample_seq"] = sensorSampleSeq;
@@ -563,13 +615,14 @@ String buildStatusPayload() {
 String buildTelemetryPayload() {
   const unsigned long nowMs = millis();
   const bool sensorSampleFresh = hasFreshSensorSample(nowMs);
-  StaticJsonDocument<896> doc;
+  StaticJsonDocument<1152> doc;
   addDeviceIdentityToPayload(doc);
   doc["timestamp"] = currentTimestampSeconds();
   if (sensorSampleFresh) {
     addLatestReadingFieldsToPayload(doc);
   }
   addBatteryFieldsToPayload(doc);
+  addOperationModeFieldsToPayload(doc);
   addNetworkFieldsToPayload(doc);
   doc["sample_seq"] = sensorSampleSeq;
   addSensorDiagnosticsToPayload(doc, nowMs, sensorSampleFresh);
@@ -1121,11 +1174,14 @@ void logLoopHealthIfDue(unsigned long nowMs) {
 
   lastLoopHealthLogAtMs = nowMs;
   const bool telemetryDue =
-      (nowMs - lastTelemetrySentAtMs) >= AppConfig::TELEMETRY_REPORT_INTERVAL_MS;
+      (nowMs - lastTelemetrySentAtMs) >= effectiveTelemetryIntervalMs();
   const unsigned long sampleAgeMs = latestSensorSampleAgeMs(nowMs);
   const bool sensorSampleFresh = hasFreshSensorSample(nowMs);
   const String telemetryTopic = DeviceSettings::buildTopic(runtimeConfig(), "telemetry");
-  AppLog::infof("[loop] maintenance_portal_active=%u state=%s wifi_connected=%u mqtt_connected=%u telemetry_due=%u sensor_ready=%u latest_valid=%u sensor_valid=%u sensor_read_ok=%u sample_age_ms=%lu telemetry_topic=%s i2c_errors=%lu recoveries=%lu\n",
+  AppLog::infof("[loop] mode=%s sample_interval_ms=%lu telemetry_interval_ms=%lu maintenance_portal_active=%u state=%s wifi_connected=%u mqtt_connected=%u telemetry_due=%u sensor_ready=%u latest_valid=%u sensor_valid=%u sensor_read_ok=%u sample_age_ms=%lu telemetry_topic=%s i2c_errors=%lu recoveries=%lu\n",
+                runtimeConfig().operationMode.c_str(),
+                effectiveSensorSampleIntervalMs(),
+                effectiveTelemetryIntervalMs(),
                 setupPortal.isRunning() && !connectivityManager.isSetupMode() ? 1U : 0U,
                 connectivityManager.stateLabel().c_str(),
                 connectivityManager.isWifiConnected() ? 1U : 0U,
@@ -1366,6 +1422,12 @@ void setup() {
   AppLog::infof("[boot] sensorReady final=%u\n", sensorReady ? 1U : 0U);
 
   connectivityManager.begin();
+  fallDetector.setDemoMode(DeviceSettings::isDemoOperationMode(runtimeConfig()));
+  AppLog::infof("[boot] operation_mode=%s sample_interval_ms=%lu telemetry_interval_ms=%lu fft_enabled=%u\n",
+                runtimeConfig().operationMode.c_str(),
+                effectiveSensorSampleIntervalMs(),
+                effectiveTelemetryIntervalMs(),
+                AppConfig::FALL_FFT_EXPERIMENTAL_ENABLED ? 1U : 0U);
   indicator.setBuzzerEnabled(runtimeConfig().alertTuning.buzzerEnabled);
   AppLog::infof("[buzzer] enabled=%u pin=%u active_high=%u alarm_only=%u source=portal_config\n",
                 runtimeConfig().alertTuning.buzzerEnabled ? 1U : 0U,
@@ -1388,7 +1450,9 @@ void loop() {
   logLoopHealthIfDue(nowMs);
   retrySensorBeginIfDue(nowMs);
 
-  if (sensorReady && (nowMs - lastSensorSampleAtMs) >= AppConfig::SENSOR_SAMPLE_INTERVAL_MS) {
+  fallDetector.setDemoMode(DeviceSettings::isDemoOperationMode(runtimeConfig()));
+
+  if (sensorReady && (nowMs - lastSensorSampleAtMs) >= effectiveSensorSampleIntervalMs()) {
     lastSensorSampleAtMs = nowMs;
 
     if (sensor.update()) {
@@ -1435,7 +1499,7 @@ void loop() {
     publishPeriodicStatus();
   }
 
-  if ((nowMs - lastTelemetrySentAtMs) >= AppConfig::TELEMETRY_REPORT_INTERVAL_MS) {
+  if ((nowMs - lastTelemetrySentAtMs) >= effectiveTelemetryIntervalMs()) {
     lastTelemetrySentAtMs = nowMs;
     publishPeriodicTelemetry(nowMs);
   }

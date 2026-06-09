@@ -243,6 +243,18 @@ void ConnectivityManager::updatePortalContext() {
                   config_.alertTuning.eventsEnabled ? 1U : 0U,
                   config_.alertTuning.buzzerEnabled ? 1U : 0U);
   }
+  if (setupPortal_.consumeOperationModeUpdate(config_.operationMode)) {
+    AppLog::infof("[portal] operation mode applied mode=%s sample_interval_ms=%lu telemetry_interval_ms=%lu\n",
+                  config_.operationMode.c_str(),
+                  DeviceSettings::effectiveSensorSampleIntervalMs(config_),
+                  DeviceSettings::effectiveTelemetryIntervalMs(config_));
+  }
+  if (setupPortal_.consumePowerUpdate(config_.power)) {
+    AppLog::infof("[portal] battery recalibration applied set=%u percent=%u sequence=%lu\n",
+                  config_.power.manualBatteryPercentSet ? 1U : 0U,
+                  static_cast<unsigned>(config_.power.manualBatteryPercent),
+                  static_cast<unsigned long>(config_.power.manualBatteryCalibrationSequence));
+  }
 }
 
 void ConnectivityManager::enterSetupMode(const String& reason) {

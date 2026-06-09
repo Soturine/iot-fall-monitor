@@ -111,6 +111,7 @@ namespace DeviceSettings {
 DeviceConfig makeDefaultConfig() {
   DeviceConfig config;
   config.loadedFromNvs = false;
+  config.operationMode = AppConfig::OPERATION_MODE_NORMAL;
   config.deviceId = AppConfig::DEFAULT_DEVICE_ID;
   config.mqtt.host = AppConfig::DEFAULT_MQTT_HOST;
   config.mqtt.port = AppConfig::DEFAULT_MQTT_PORT;
@@ -314,6 +315,30 @@ uint8_t clampBatteryPercent(long value) {
   }
 
   return static_cast<uint8_t>(value);
+}
+
+String normalizeOperationMode(const String& mode) {
+  String normalized = trimValue(mode);
+  normalized.toLowerCase();
+  return normalized == AppConfig::OPERATION_MODE_DEMO
+             ? AppConfig::OPERATION_MODE_DEMO
+             : AppConfig::OPERATION_MODE_NORMAL;
+}
+
+bool isDemoOperationMode(const DeviceConfig& config) {
+  return normalizeOperationMode(config.operationMode) == AppConfig::OPERATION_MODE_DEMO;
+}
+
+unsigned long effectiveSensorSampleIntervalMs(const DeviceConfig& config) {
+  return isDemoOperationMode(config)
+             ? AppConfig::SENSOR_DEMO_SAMPLE_INTERVAL_MS
+             : AppConfig::SENSOR_NORMAL_SAMPLE_INTERVAL_MS;
+}
+
+unsigned long effectiveTelemetryIntervalMs(const DeviceConfig& config) {
+  return isDemoOperationMode(config)
+             ? AppConfig::TELEMETRY_DEMO_REPORT_INTERVAL_MS
+             : AppConfig::TELEMETRY_NORMAL_REPORT_INTERVAL_MS;
 }
 
 void applyAlertSensitivityPreset(AlertTuningConfig& alertTuning, const String& preset) {
