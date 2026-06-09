@@ -19,6 +19,7 @@ const {
   validateTelemetryPayload,
 } = require("./eventService");
 const { createAlertForEvent } = require("./alertService");
+const { processBatteryPayload } = require("./batteryEstimationService");
 const { emitScopedEvent } = require("../socket/scopedEmitter");
 const { runWithKeyedLock } = require("../utils/keyedLock");
 
@@ -32,20 +33,24 @@ function normalizeBatteryPercentSource(value) {
     return null;
   }
 
-  if (["manual", "estimated", "automatic", "adc", "fuel_gauge", "not_configured"].includes(normalized)) {
+  if (["manual", "manual_estimated", "estimated", "automatic", "adc", "fuel_gauge", "not_configured"].includes(normalized)) {
     return normalized;
   }
 
   return null;
 }
 
-function buildStatusUpdateFromPayload(payload, receivedAt, diagnostics = {}) {
+function buildStatusUpdateFromPayload(payload, receivedAt, diagnostics = {}, batteryStatus = {}) {
   return {
     online: payload.online === undefined ? true : toBoolean(payload.online),
     wifiRssi: toNullableNumber(payload.wifi_rssi),
     batteryPercent: toNullableNumber(payload.battery_percent ?? payload.battery_level),
     batteryPercentSource: normalizeBatteryPercentSource(payload.battery_percent_source),
+    ...batteryStatus,
     firmwareVersion: payload.firmware_version ? String(payload.firmware_version) : null,
+    detectorMode: payload.detector_mode ? String(payload.detector_mode) : null,
+    sampleIntervalMs: toNullableNumber(payload.sample_interval_ms),
+    telemetryIntervalMs: toNullableNumber(payload.telemetry_interval_ms),
     lastSeenAt: receivedAt,
     sensorReady: payload.sensor_ready,
     sensorValid: payload.sensor_valid,
@@ -201,6 +206,10 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
         patientId: currentScope.patientId,
         correlationId,
       };
+      const batteryStatus =
+        topicInfo.channel === "events"
+          ? {}
+          : await processBatteryPayload({ deviceId: device.id, payload, receivedAt }, connection);
 
       if (topicInfo.channel === "status") {
         logger.info("MQTT status recebido com escopo resolvido.", {
@@ -225,7 +234,7 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
           device.id,
           buildStatusUpdateFromPayload(payload, receivedAt, {
             lastStatusTopic: topicInfo.topic,
-          }),
+          }, batteryStatus),
           currentScope,
           connection,
         );
@@ -258,7 +267,7 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
             device.id,
             buildStatusUpdateFromPayload(payload, receivedAt, {
               lastTelemetryTopic: topicInfo.topic,
-            }),
+            }, batteryStatus),
             currentScope,
             connection,
           );
@@ -276,7 +285,7 @@ async function handleMqttMessage({ topicInfo, payloadText, io }) {
           buildStatusUpdateFromPayload(payload, receivedAt, {
             lastTelemetryTopic: topicInfo.topic,
             lastTelemetryAt: receivedAt,
-          }),
+          }, batteryStatus),
           currentScope,
           connection,
           { returnSnapshot: false },

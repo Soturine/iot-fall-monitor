@@ -19,6 +19,15 @@ const REQUIRED_RUNTIME_SCHEMA = [
   { tableName: "device_status", columnName: "last_event_topic" },
   { tableName: "device_status", columnName: "last_telemetry_at" },
   { tableName: "device_status", columnName: "last_event_at" },
+  { tableName: "device_status", columnName: "battery_percent_source" },
+  { tableName: "device_status", columnName: "battery_manual_percent" },
+  { tableName: "device_status", columnName: "battery_manual_updated_at" },
+  { tableName: "device_status", columnName: "battery_minutes_per_percent" },
+  { tableName: "device_status", columnName: "battery_estimated_remaining_minutes" },
+  { tableName: "device_status", columnName: "battery_calibration_count" },
+  { tableName: "device_status", columnName: "detector_mode" },
+  { tableName: "device_status", columnName: "sample_interval_ms" },
+  { tableName: "device_status", columnName: "telemetry_interval_ms" },
 ];
 
 async function tableExists(tableName) {
@@ -67,6 +76,9 @@ async function checkRuntimeSchema() {
 
   if (!(await tableExists("event_telemetry_evidence"))) {
     missing.push("event_telemetry_evidence");
+  }
+  if (!(await tableExists("battery_calibrations"))) {
+    missing.push("battery_calibrations");
   }
 
   return {

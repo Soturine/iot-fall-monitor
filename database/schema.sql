@@ -10,6 +10,7 @@ DROP TABLE IF EXISTS alerts;
 DROP TABLE IF EXISTS event_telemetry_evidence;
 DROP TABLE IF EXISTS events;
 DROP TABLE IF EXISTS telemetry_logs;
+DROP TABLE IF EXISTS battery_calibrations;
 DROP TABLE IF EXISTS device_status;
 DROP TABLE IF EXISTS device_pairing_sessions;
 DROP TABLE IF EXISTS caregiver_assignments;
@@ -201,7 +202,16 @@ CREATE TABLE IF NOT EXISTS device_status (
   online TINYINT(1) NOT NULL DEFAULT 0,
   wifi_rssi INT NULL,
   battery_percent TINYINT UNSIGNED NULL,
+  battery_percent_source VARCHAR(32) NULL,
+  battery_manual_percent TINYINT UNSIGNED NULL,
+  battery_manual_updated_at DATETIME NULL,
+  battery_minutes_per_percent DOUBLE NULL,
+  battery_estimated_remaining_minutes INT UNSIGNED NULL,
+  battery_calibration_count INT UNSIGNED NOT NULL DEFAULT 0,
   firmware_version VARCHAR(64) NULL,
+  detector_mode VARCHAR(16) NULL,
+  sample_interval_ms INT UNSIGNED NULL,
+  telemetry_interval_ms INT UNSIGNED NULL,
   sensor_ready TINYINT(1) NULL,
   sensor_valid TINYINT(1) NULL,
   sensor_read_ok TINYINT(1) NULL,
@@ -235,6 +245,25 @@ CREATE TABLE IF NOT EXISTS device_status (
   CONSTRAINT fk_device_status_assignment
     FOREIGN KEY (device_assignment_history_id) REFERENCES device_assignment_history (id)
     ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS battery_calibrations (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  device_id BIGINT UNSIGNED NOT NULL,
+  battery_percent TINYINT UNSIGNED NOT NULL,
+  calibrated_at DATETIME NOT NULL,
+  source VARCHAR(32) NOT NULL DEFAULT 'portal_manual',
+  calibration_sequence BIGINT UNSIGNED NULL,
+  observed_minutes_per_percent DOUBLE NULL,
+  applied_minutes_per_percent DOUBLE NOT NULL,
+  ignored_reason VARCHAR(80) NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_battery_calibration_device_sequence (device_id, calibration_sequence),
+  KEY idx_battery_calibration_device_time (device_id, calibrated_at),
+  CONSTRAINT fk_battery_calibration_device
+    FOREIGN KEY (device_id) REFERENCES devices (id)
+    ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS telemetry_logs (

@@ -86,7 +86,21 @@ function mapDeviceRow(row) {
       wifiRssi: row.wifiRssi ?? row.wifi_rssi ?? null,
       batteryPercent: row.batteryPercent ?? row.battery_percent ?? null,
       batteryPercentSource: row.batteryPercentSource ?? row.battery_percent_source ?? null,
+      batteryManualPercent: row.batteryManualPercent ?? row.battery_manual_percent ?? null,
+      batteryManualUpdatedAt: toIso(row.batteryManualUpdatedAt || row.battery_manual_updated_at),
+      batteryMinutesPerPercent:
+        toNullableNumber(row.batteryMinutesPerPercent ?? row.battery_minutes_per_percent),
+      batteryEstimatedRemainingMinutes:
+        toNullableNumber(
+          row.batteryEstimatedRemainingMinutes ?? row.battery_estimated_remaining_minutes,
+        ),
+      batteryCalibrationCount:
+        Number(row.batteryCalibrationCount ?? row.battery_calibration_count ?? 0),
       firmwareVersion: row.firmwareVersion || row.firmware_version || null,
+      detectorMode: row.detectorMode ?? row.detector_mode ?? null,
+      sampleIntervalMs: toNullableNumber(row.sampleIntervalMs ?? row.sample_interval_ms),
+      telemetryIntervalMs:
+        toNullableNumber(row.telemetryIntervalMs ?? row.telemetry_interval_ms),
       sensorReady: toNullableBoolean(row.sensorReady ?? row.sensor_ready),
       sensorValid: toNullableBoolean(row.sensorValid ?? row.sensor_valid),
       sensorReadOk: toNullableBoolean(row.sensorReadOk ?? row.sensor_read_ok),
@@ -466,7 +480,16 @@ async function getDeviceStatusSnapshot(deviceId, executor = null) {
         ds.online,
         ds.wifi_rssi AS wifiRssi,
         ds.battery_percent AS batteryPercent,
+        ds.battery_percent_source AS batteryPercentSource,
+        ds.battery_manual_percent AS batteryManualPercent,
+        ds.battery_manual_updated_at AS batteryManualUpdatedAt,
+        ds.battery_minutes_per_percent AS batteryMinutesPerPercent,
+        ds.battery_estimated_remaining_minutes AS batteryEstimatedRemainingMinutes,
+        ds.battery_calibration_count AS batteryCalibrationCount,
         ds.firmware_version AS firmwareVersion,
+        ds.detector_mode AS detectorMode,
+        ds.sample_interval_ms AS sampleIntervalMs,
+        ds.telemetry_interval_ms AS telemetryIntervalMs,
         ds.sensor_ready AS sensorReady,
         ds.sensor_valid AS sensorValid,
         ds.sensor_read_ok AS sensorReadOk,
@@ -1096,7 +1119,17 @@ async function upsertDeviceStatus(deviceId, fields, scope = null, executor = nul
     wifiRssi: toNullableNumber(fields.wifiRssi),
     batteryPercent: toNullableNumber(fields.batteryPercent),
     batteryPercentSource: toNullableString(fields.batteryPercentSource, 32),
+    batteryManualPercent: toNullableNumber(fields.batteryManualPercent),
+    batteryManualUpdatedAt: fields.batteryManualUpdatedAt || null,
+    batteryMinutesPerPercent: toNullableNumber(fields.batteryMinutesPerPercent),
+    batteryEstimatedRemainingMinutes:
+      toNullableNumber(fields.batteryEstimatedRemainingMinutes),
+    batteryCalibrationCount: toNullableNumber(fields.batteryCalibrationCount),
+    clearBatteryEstimate: Boolean(fields.clearBatteryEstimate),
     firmwareVersion: fields.firmwareVersion ? String(fields.firmwareVersion) : null,
+    detectorMode: toNullableString(fields.detectorMode, 16),
+    sampleIntervalMs: toNullableNumber(fields.sampleIntervalMs),
+    telemetryIntervalMs: toNullableNumber(fields.telemetryIntervalMs),
     sensorReady: toNullableBoolean(fields.sensorReady),
     sensorValid: toNullableBoolean(fields.sensorValid),
     sensorReadOk: toNullableBoolean(fields.sensorReadOk),
@@ -1128,7 +1161,16 @@ async function upsertDeviceStatus(deviceId, fields, scope = null, executor = nul
         online,
         wifi_rssi,
         battery_percent,
+        battery_percent_source,
+        battery_manual_percent,
+        battery_manual_updated_at,
+        battery_minutes_per_percent,
+        battery_estimated_remaining_minutes,
+        battery_calibration_count,
         firmware_version,
+        detector_mode,
+        sample_interval_ms,
+        telemetry_interval_ms,
         sensor_ready,
         sensor_valid,
         sensor_read_ok,
@@ -1145,7 +1187,7 @@ async function upsertDeviceStatus(deviceId, fields, scope = null, executor = nul
         last_seen_at,
         updated_at
       )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP())
       ON DUPLICATE KEY UPDATE
         organization_id = VALUES(organization_id),
         patient_id = VALUES(patient_id),
@@ -1153,7 +1195,16 @@ async function upsertDeviceStatus(deviceId, fields, scope = null, executor = nul
         online = VALUES(online),
         wifi_rssi = COALESCE(VALUES(wifi_rssi), wifi_rssi),
         battery_percent = IF(? = 1, NULL, COALESCE(VALUES(battery_percent), battery_percent)),
+        battery_percent_source = COALESCE(VALUES(battery_percent_source), battery_percent_source),
+        battery_manual_percent = IF(? = 1, NULL, COALESCE(VALUES(battery_manual_percent), battery_manual_percent)),
+        battery_manual_updated_at = IF(? = 1, NULL, COALESCE(VALUES(battery_manual_updated_at), battery_manual_updated_at)),
+        battery_minutes_per_percent = IF(? = 1, NULL, COALESCE(VALUES(battery_minutes_per_percent), battery_minutes_per_percent)),
+        battery_estimated_remaining_minutes = IF(? = 1, NULL, COALESCE(VALUES(battery_estimated_remaining_minutes), battery_estimated_remaining_minutes)),
+        battery_calibration_count = IF(? = 1, 0, COALESCE(VALUES(battery_calibration_count), battery_calibration_count)),
         firmware_version = COALESCE(VALUES(firmware_version), firmware_version),
+        detector_mode = COALESCE(VALUES(detector_mode), detector_mode),
+        sample_interval_ms = COALESCE(VALUES(sample_interval_ms), sample_interval_ms),
+        telemetry_interval_ms = COALESCE(VALUES(telemetry_interval_ms), telemetry_interval_ms),
         sensor_ready = COALESCE(VALUES(sensor_ready), sensor_ready),
         sensor_valid = COALESCE(VALUES(sensor_valid), sensor_valid),
         sensor_read_ok = COALESCE(VALUES(sensor_read_ok), sensor_read_ok),
@@ -1178,7 +1229,16 @@ async function upsertDeviceStatus(deviceId, fields, scope = null, executor = nul
       status.online ? 1 : 0,
       status.wifiRssi,
       status.batteryPercent,
+      status.batteryPercentSource,
+      status.batteryManualPercent,
+      status.batteryManualUpdatedAt,
+      status.batteryMinutesPerPercent,
+      status.batteryEstimatedRemainingMinutes,
+      status.batteryCalibrationCount,
       status.firmwareVersion,
+      status.detectorMode,
+      status.sampleIntervalMs,
+      status.telemetryIntervalMs,
       status.sensorReady,
       status.sensorValid,
       status.sensorReadOk,
@@ -1194,6 +1254,11 @@ async function upsertDeviceStatus(deviceId, fields, scope = null, executor = nul
       status.lastEventAt,
       status.lastSeenAt,
       clearBatteryPercent ? 1 : 0,
+      status.clearBatteryEstimate ? 1 : 0,
+      status.clearBatteryEstimate ? 1 : 0,
+      status.clearBatteryEstimate ? 1 : 0,
+      status.clearBatteryEstimate ? 1 : 0,
+      status.clearBatteryEstimate ? 1 : 0,
     ],
   );
 
@@ -1218,9 +1283,33 @@ async function upsertDeviceStatus(deviceId, fields, scope = null, executor = nul
         statusPatch.batteryPercent = null;
       }
     }
+    if (status.batteryManualPercent != null) {
+      statusPatch.batteryManualPercent = status.batteryManualPercent;
+    }
+    if (status.batteryManualUpdatedAt) {
+      statusPatch.batteryManualUpdatedAt = toIso(status.batteryManualUpdatedAt);
+    }
+    if (status.batteryMinutesPerPercent != null) {
+      statusPatch.batteryMinutesPerPercent = status.batteryMinutesPerPercent;
+    }
+    if (status.batteryEstimatedRemainingMinutes != null) {
+      statusPatch.batteryEstimatedRemainingMinutes = status.batteryEstimatedRemainingMinutes;
+    }
+    if (status.batteryCalibrationCount != null) {
+      statusPatch.batteryCalibrationCount = status.batteryCalibrationCount;
+    }
 
     if (status.firmwareVersion) {
       statusPatch.firmwareVersion = status.firmwareVersion;
+    }
+    if (status.detectorMode) {
+      statusPatch.detectorMode = status.detectorMode;
+    }
+    if (status.sampleIntervalMs != null) {
+      statusPatch.sampleIntervalMs = status.sampleIntervalMs;
+    }
+    if (status.telemetryIntervalMs != null) {
+      statusPatch.telemetryIntervalMs = status.telemetryIntervalMs;
     }
 
     if (status.sensorReady != null) {
@@ -1362,7 +1451,16 @@ async function listDevices(filters = {}, accessContext) {
         ds.online,
         ds.wifi_rssi AS wifiRssi,
         ds.battery_percent AS batteryPercent,
+        ds.battery_percent_source AS batteryPercentSource,
+        ds.battery_manual_percent AS batteryManualPercent,
+        ds.battery_manual_updated_at AS batteryManualUpdatedAt,
+        ds.battery_minutes_per_percent AS batteryMinutesPerPercent,
+        ds.battery_estimated_remaining_minutes AS batteryEstimatedRemainingMinutes,
+        ds.battery_calibration_count AS batteryCalibrationCount,
         ds.firmware_version AS firmwareVersion,
+        ds.detector_mode AS detectorMode,
+        ds.sample_interval_ms AS sampleIntervalMs,
+        ds.telemetry_interval_ms AS telemetryIntervalMs,
         ds.sensor_ready AS sensorReady,
         ds.sensor_valid AS sensorValid,
         ds.sensor_read_ok AS sensorReadOk,
@@ -1445,7 +1543,7 @@ async function getDeviceById(deviceId, accessContext) {
       WHERE device_id = ?
         ${patientScoped ? `AND patient_id IN (${patientPlaceholders})` : ""}
       ORDER BY created_at DESC
-      LIMIT 60
+      LIMIT 120
     `,
     [deviceId, ...patientParams],
   );
@@ -1859,7 +1957,16 @@ async function markDevicesOffline(cutoffDate) {
         ds.online,
         ds.wifi_rssi AS wifiRssi,
         ds.battery_percent AS batteryPercent,
+        ds.battery_percent_source AS batteryPercentSource,
+        ds.battery_manual_percent AS batteryManualPercent,
+        ds.battery_manual_updated_at AS batteryManualUpdatedAt,
+        ds.battery_minutes_per_percent AS batteryMinutesPerPercent,
+        ds.battery_estimated_remaining_minutes AS batteryEstimatedRemainingMinutes,
+        ds.battery_calibration_count AS batteryCalibrationCount,
         ds.firmware_version AS firmwareVersion,
+        ds.detector_mode AS detectorMode,
+        ds.sample_interval_ms AS sampleIntervalMs,
+        ds.telemetry_interval_ms AS telemetryIntervalMs,
         ds.sensor_ready AS sensorReady,
         ds.sensor_valid AS sensorValid,
         ds.sensor_read_ok AS sensorReadOk,
