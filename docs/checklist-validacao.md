@@ -24,12 +24,14 @@ Este checklist separa validação automatizada, integração local e testes manu
 
 ## Resultado auditado em 9 de junho de 2026
 
-- [x] `npm test --prefix backend`: passou, `41/41`.
-- [x] `npm run test:integration --prefix backend`: passou, `34/34`.
+- [x] `npm test --prefix backend`: passou, `44/44`.
+- [x] `npm run test:integration --prefix backend`: passou, `37/37`.
 - [x] `npm run stress:dry --prefix backend`: passou após alinhar o harness à validação real de telemetria; `225/225` mensagens processadas e `0` falhas.
 - [x] `npm run build --prefix frontend`: passou.
 - [x] `npm run lint --prefix frontend`: passou.
 - [x] `npm run dev:smoke`: passou após subir broker/backend/frontend com `powershell -ExecutionPolicy Bypass -File .\scripts\start-all.ps1 -NoBrowser`.
+- [x] `GET /api/alerts/export` sem token retornou `401`.
+- [x] `GET /api/alerts/export?status=open&severity=critical` com login demo e organização ativa retornou relatório da `Familia Demo`, filtros esperados e `19` campos por item.
 
 O primeiro `dev:smoke` sem serviços ativos falhou corretamente em `/health`. Isso confirma que o script detecta ambiente indisponível em vez de produzir falso positivo.
 
@@ -61,6 +63,8 @@ npm run dev:check
 - [ ] `caregiver`, `operator` e `viewer` não acessam outra organização.
 - [ ] Quando existem assignments, usuário restrito vê somente pacientes atribuídos.
 - [ ] Após F5, o frontend reidrata sessão via `GET /api/me`.
+- [ ] `GET /api/alerts/export` sem Bearer Token retorna `401`.
+- [ ] `GET /api/alerts/export` envia e respeita `X-Organization-Id`.
 
 ## MQTT e ingestão
 
@@ -111,6 +115,19 @@ npm run mqtt:publish:test --prefix backend -- --device esp32_01 --count 10
 - [ ] `alert_actions` registra ações humanas.
 - [ ] `audit_logs` registra operações administrativas relevantes.
 
+## Histórico e exportação de relatório
+
+- [ ] A tela continua carregando alertas e eventos históricos.
+- [ ] Os filtros de status, severidade, dispositivo, data inicial e data final continuam funcionando.
+- [ ] **Exportar JSON** baixa apenas os alertas compatíveis com os filtros atuais.
+- [ ] O JSON contém `generatedAt`, organização, filtros, total e itens.
+- [ ] Cada item exportado contém identidade do alerta, paciente, dispositivo, evento, evidência e ações/status relevantes.
+- [ ] A exportação respeita organização ativa e assignments de paciente.
+- [ ] O backend limita a exportação a no máximo `500` registros.
+- [ ] **Exportar PDF** abre uma visualização imprimível com título, organização, filtros, total, tabela e aviso experimental.
+- [ ] O navegador permite salvar a visualização como PDF.
+- [ ] Acknowledge, cancelamento e resolução continuam gerando `alert_actions` e `audit_logs` quando aplicável.
+
 ## Fluxo de alerta
 
 - [ ] Telemetria real continua chegando antes, durante e depois de evento.
@@ -147,6 +164,7 @@ O pareamento não deve ser alterado nesta rodada. Para validar sem refatorar:
 - [ ] Device MQTT desconhecido permanece `unclaimed`.
 - [ ] Não gerar novo código nem executar claim durante a apresentação se o vínculo atual já está correto.
 - [ ] Não rodar reset do banco antes de validar o vínculo atual.
+- [ ] Confirmar que nenhum arquivo de pareamento foi alterado nesta rodada.
 
 ## Riscos e lacunas atuais
 
@@ -157,3 +175,5 @@ O pareamento não deve ser alterado nesta rodada. Para validar sem refatorar:
 - [ ] Validar FFT somente como experimento até existir calibração.
 - [ ] Medir retenção/crescimento de `telemetry_logs`.
 - [ ] Avaliar TLS MQTT e persistência durável de eventos críticos.
+- [ ] Validar visualmente a impressão PDF nos navegadores usados na apresentação.
+- [ ] QR Code permanece fora do escopo.

@@ -4,6 +4,8 @@
 ### Adicionado
 - roteiro de demonstração acadêmica com sequência de apresentação para JWT, multi-tenant, MQTT, banco, Socket.IO, telemetria e alertas
 - checklist de validação com matriz dos testes automatizados e verificações manuais de backend, frontend, hardware e segurança
+- exportação dos alertas filtrados em JSON pela rota protegida `GET /api/alerts/export`, limitada a `500` registros
+- visualização imprimível dos alertas filtrados para salvar em PDF pelo recurso nativo do navegador
 
 ### Corrigido
 - `stress:dry` volta a processar telemetria após alinhar o harness mockado à função real `validateTelemetryPayload`
@@ -11,6 +13,7 @@
 ### Documentação
 - README e integração passam a diferenciar testes com mocks, smoke com serviços locais reais e validação ponta a ponta com ESP32
 - resultados auditados dos comandos de teste ficam registrados no checklist de validação
+- roteiro acadêmico passa a demonstrar JWT, perfis, cards reais, tempo real, filtros, exportação JSON/PDF e auditoria parcial de ações de alerta
 
 ### Pendente / Faltando
 - capturar GIF real do fluxo ESP32/evento -> MQTT -> backend -> dashboard atualizando

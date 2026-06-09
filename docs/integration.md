@@ -593,6 +593,17 @@ O mesmo principio vale para `Socket.IO`:
 - o socket recebe token e `organizationId`
 - o backend emite `alert:new`, `alert:updated`, `device:status` e `telemetry:new` apenas para conexoes autorizadas naquele escopo
 
+### Exportação do histórico de alertas
+
+`GET /api/alerts/export` reutiliza a autenticação JWT, o header `X-Organization-Id`, os filtros e o escopo multi-tenant de `listAlerts`. A rota aceita `status`, `severity`, `deviceId`, `startDate` e `endDate`, fica declarada antes de `/alerts/:id` e retorna no máximo `500` registros.
+
+O frontend usa o mesmo JSON para duas saídas:
+
+- download estruturado `.json`
+- página imprimível aberta pelo navegador, com `window.print()` para salvar em PDF
+
+Nenhuma biblioteca pesada de geração de PDF foi adicionada. Ações humanas sobre alertas continuam registradas em `alert_actions` e, quando aplicável, em `audit_logs`.
+
 No resumo atual do dashboard:
 
 - `recentEvents` volta a incluir `patient`, `device`, `assignmentHistoryId`, `intensity` e `immobility`

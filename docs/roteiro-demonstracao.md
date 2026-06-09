@@ -109,6 +109,7 @@ Abra o detalhe de um dispositivo e mostre:
 
 Explique que:
 
+- os cards do dashboard usam dados reais retornados pelo backend, não valores fixos do frontend
 - MQTT entrega dados do ESP32 ao backend
 - o backend persiste telemetria válida em `telemetry_logs`
 - `telemetry:new` atualiza o frontend por Socket.IO
@@ -146,7 +147,18 @@ Fluxo explicado:
 6. `alert:new` atualiza o painel autorizado
 7. reenvio com o mesmo `event_uuid` não cria duplicata
 
-### 7. Evidências de qualidade
+### 7. Histórico, exportação e auditoria parcial
+
+Abra **Alertas e Histórico** e demonstre:
+
+1. aplique filtros de status, severidade, dispositivo e período
+2. clique em **Exportar JSON** e mostre `generatedAt`, organização, filtros, total e itens
+3. clique em **Exportar PDF** e mostre a visualização imprimível do navegador
+4. abra os detalhes de um alerta e mostre as ações registradas
+
+Explique que a exportação usa a rota protegida `GET /api/alerts/export`, respeita JWT, `X-Organization-Id` e o mesmo escopo multi-tenant da tela. O backend limita o relatório a `500` registros. Acknowledge, cancelamento e resolução geram rastreabilidade em `alert_actions` e `audit_logs` quando aplicável.
+
+### 8. Evidências de qualidade
 
 Mostre os resultados dos comandos:
 
@@ -159,7 +171,7 @@ Mostre os resultados dos comandos:
 
 Se precisar demonstrar carga real, use `stress:real` somente em ambiente local/dev preparado. Ele não deve ser executado em produção.
 
-### 8. Limitações e próximos passos
+### 9. Limitações e próximos passos
 
 Feche com transparência:
 
@@ -168,6 +180,8 @@ Feche com transparência:
 - bateria automática ainda depende de ADC calibrado ou fuel gauge
 - fila principal de eventos críticos é limitada; persistência durável pode evoluir
 - testes ponta a ponta com hardware, rede e movimentos controlados precisam ser repetidos em mais cenários
+- o PDF depende da caixa de impressão do navegador e pode variar visualmente entre navegadores
+- QR Code e alterações no pareamento não fazem parte desta rodada
 
 ## Plano B para falhas durante a apresentação
 

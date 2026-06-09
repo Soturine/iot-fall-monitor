@@ -69,6 +69,7 @@ O modelo atual deixou de ser um painel global único e passou a trabalhar com or
 - testes unitários e de integração leve para alertas, ingestão MQTT e realtime escopado
 - suite de stress dry-run para rajadas de telemetria, quedas, payloads ruins e concorrência
 - alertas de queda e imobilidade
+- exportação do histórico de alertas filtrado em JSON e visualização imprimível para salvar em PDF
 - telemetria em tempo real no dashboard
 - gráfico de telemetria com eixo Y normalizado, unidades e tooltip técnico para aceleração, giroscópio e eixos do sensor
 - atualização do navegador via `Socket.IO`
@@ -364,6 +365,17 @@ O diagnóstico de realtime no frontend separa o socket do navegador da saúde MQ
 No firmware, os tópicos continuam seguindo `queda/devices/{deviceId}/status`, `queda/devices/{deviceId}/telemetry` e `queda/devices/{deviceId}/events`. Para status online/offline, o backend usa a hora em que recebeu MQTT como `lastSeenAt`. Para telemetria/eventos, timestamps do device só são usados quando estão plausíveis e próximos do recebimento; se o NTP estiver ausente ou stale, a hora do backend entra como fallback para evitar gráfico antigo e falso offline.
 
 Após F5 em rota protegida, o frontend preserva o token, reidrata o usuário via `GET /api/me`, descarta apenas uma organização salva inválida e só cria o Socket.IO depois que a sessão mínima está hidratada.
+
+## Relatórios de Alertas
+
+A tela **Alertas e Histórico** permite aplicar os filtros existentes de status, severidade, dispositivo, data inicial e data final e exportar o mesmo escopo em:
+
+- **JSON:** baixa o relatório estruturado retornado por `GET /api/alerts/export`
+- **PDF imprimível:** abre uma visualização própria para impressão e usa `window.print()`, permitindo salvar em PDF pelo navegador
+
+A rota de exportação continua protegida por JWT, recebe a organização ativa via `X-Organization-Id`, reutiliza o escopo multi-tenant da listagem de alertas e limita cada relatório a `500` registros. Ações de acknowledge, cancelamento e resolução continuam gerando `alert_actions` e `audit_logs` quando aplicável.
+
+Nesta rodada, JWT, perfis de acesso, cards com dados reais, MQTT + Socket.IO, histórico, relatório JSON/PDF, auditoria parcial e testes/evidências são itens demonstráveis. QR Code e alterações no pareamento não fazem parte do escopo.
 
 ## Status Heurístico Experimental
 
