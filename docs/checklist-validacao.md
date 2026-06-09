@@ -29,11 +29,11 @@ Este checklist separa validação automatizada, integração local e testes manu
 - [x] `npm run stress:dry --prefix backend`: passou após alinhar o harness à validação real de telemetria; `225/225` mensagens processadas e `0` falhas.
 - [x] `npm run build --prefix frontend`: passou.
 - [x] `npm run lint --prefix frontend`: passou.
-- [x] `npm run dev:smoke`: passou após subir broker/backend/frontend com `powershell -ExecutionPolicy Bypass -File .\scripts\start-all.ps1 -NoBrowser`.
+- [x] `npm run dev:smoke`: passou após subir broker/backend/frontend com `powershell -ExecutionPolicy Bypass -File .\scripts\start-all.ps1 -UseDevBroker -NoBrowser`; nenhum processo `mockPublisher` ficou órfão.
 - [x] `GET /api/alerts/export` sem token retornou `401`.
 - [x] `GET /api/alerts/export?status=open&severity=critical` com login demo e organização ativa retornou relatório da `Familia Demo`, filtros esperados e `19` campos por item.
 
-O primeiro `dev:smoke` sem serviços ativos falhou corretamente em `/health`. Isso confirma que o script detecta ambiente indisponível em vez de produzir falso positivo.
+O primeiro `dev:smoke` sem serviços ativos falhou corretamente em `/health`. Durante a investigação, publishers mock órfãos foram identificados como causa de saturação MQTT e login lento; o script agora encerra toda a árvore do processo auxiliar.
 
 ## Pré-validação do ambiente
 
@@ -113,6 +113,7 @@ npm run mqtt:publish:test --prefix backend -- --device esp32_01 --count 10
 - [ ] `event_telemetry_evidence` relaciona evento e amostras.
 - [ ] `alerts.event_id` impede alerta duplicado para o mesmo evento.
 - [ ] `alert_actions` registra ações humanas.
+- [ ] `npm run db:migrate:alert-actions --prefix backend` garante a tabela sem resetar o banco.
 - [ ] `audit_logs` registra operações administrativas relevantes.
 
 ## Histórico e exportação de relatório
@@ -132,12 +133,14 @@ npm run mqtt:publish:test --prefix backend -- --device esp32_01 --count 10
 
 - [ ] Telemetria real continua chegando antes, durante e depois de evento.
 - [ ] `movement_detected`/`fall_suspected` são apresentados como heurística experimental.
+- [ ] `movement_detected` é evento informativo e não cria alerta ativo nem buzzer.
 - [ ] `fall_detected` sem evidência suficiente é auditado, mas não vira alerta confirmado automático.
 - [ ] `fall_detected` com evidência `partial`/`linked` pode criar alerta.
 - [ ] SOS manual continua funcionando sem depender da telemetria.
 - [ ] Backend persiste evento antes de criar alerta.
 - [ ] Frontend apenas exibe a decisão/evidência.
 - [ ] Buzzer local não depende do frontend.
+- [ ] Buzzer toca apenas para queda confirmada/SOS e ignora eventos experimentais não críticos.
 - [ ] Cooldown/deduplicação evitam spam de alerta.
 
 ## Hardware ESP32, IMU e buzzer
@@ -165,6 +168,9 @@ O pareamento não deve ser alterado nesta rodada. Para validar sem refatorar:
 - [ ] Não gerar novo código nem executar claim durante a apresentação se o vínculo atual já está correto.
 - [ ] Não rodar reset do banco antes de validar o vínculo atual.
 - [ ] Confirmar que nenhum arquivo de pareamento foi alterado nesta rodada.
+- [ ] Desvincular paciente encerra o assignment sem apagar histórico.
+- [ ] Resetar claim exige JWT + `organization_admin` e preserva telemetria/eventos/alertas.
+- [ ] Arquivar paciente sem device muda status para `archived`; com device vinculado, a ação é bloqueada.
 
 ## Riscos e lacunas atuais
 

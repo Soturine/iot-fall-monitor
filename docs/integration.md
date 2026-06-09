@@ -104,7 +104,7 @@ O campo `timestamp` deve ser Unix time em segundos quando o NTP já sincronizou.
 
 Para `fall_detected`, o firmware continua sendo a fonte da decisão local confirmada e do buzzer. O backend não recalcula a queda para acionar alarme local; ele audita o evento, preserva `raw_payload_json`, copia a decisão/feature set para `evidence_summary_json` e procura telemetria do mesmo device entre `event_time - 10s` e `event_time + 3s`. Se encontrar amostras, grava `evidenceStatus` (`partial` ou `linked`), `evidenceTelemetryId`, contagem, janela e resumo técnico. Se não encontrar, grava o evento com `evidenceStatus=none`, loga warning e não cria alerta automático de queda confirmada.
 
-Na `v0.8.27`, o firmware também pode publicar `fall_suspected` e `movement_detected` a partir de uma pré-calibração experimental salva no portal do ESP32. Esses eventos carregam `alert_settings`, `thresholds`, motivo da decisão, amostra do sensor e diagnóstico I2C. Eles servem para validar o fluxo real `telemetria -> evento -> alerta -> frontend -> buzzer` em bancada, sem substituir a FSM de `fall_detected`. O backend cria alertas para esses eventos experimentais, mas eles devem ser tratados como heurística operacional, não como certeza clínica. `sos_pressed` e `manual_sos` continuam podendo criar alerta sem telemetria por serem acionamento manual.
+Na `v0.8.27`, o firmware também passou a publicar `fall_suspected` e `movement_detected` a partir de uma pré-calibração experimental salva no portal do ESP32. Na `v0.8.31`, `movement_detected` permanece persistido como evento informativo de baixa severidade, mas não cria alerta ativo nem buzzer. `fall_suspected` continua podendo criar alerta experimental para investigação, sem acionar o buzzer local. O alarme sonoro fica reservado para `fall_detected` confirmado e SOS.
 
 Na `v0.8.28`, o contrato MQTT permanece o mesmo, mas a fronteira física da IMU ficou mais rígida: o firmware aceita `WHO_AM_I=0x68` (`MPU6050`), `0x70` (`MPU6500`) e `0x71` (`MPU9250`), usa a faixa efetiva lida em `ACCEL_CONFIG`/`GYRO_CONFIG`, preserva a última escala efetiva durante recoveries com readback falho, descarta amostra raw totalmente zerada e mantém `sensor_read_ok=false` quando a leitura falha. O buzzer continua sendo decisão local do firmware; alertas criados apenas no backend não acionam hardware sem um futuro comando MQTT de retorno para `queda/devices/{deviceId}/commands`.
 
@@ -603,6 +603,14 @@ O frontend usa o mesmo JSON para duas saídas:
 - página imprimível aberta pelo navegador, com `window.print()` para salvar em PDF
 
 Nenhuma biblioteca pesada de geração de PDF foi adicionada. Ações humanas sobre alertas continuam registradas em `alert_actions` e, quando aplicável, em `audit_logs`.
+
+Para banco existente sem a tabela de ações, aplique:
+
+```powershell
+npm run db:migrate:alert-actions --prefix backend
+```
+
+A migração é idempotente e não reseta dados. Administradores também podem usar `POST /api/devices/:id/assign-patient` com `patientId: null`, `POST /api/devices/:id/reset-claim` e `POST /api/patients/:id/archive`. As três rotas preservam histórico e registram auditoria; o reset de claim não usa `DELETE /api/devices/:id`.
 
 No resumo atual do dashboard:
 

@@ -113,7 +113,7 @@ Explique que:
 - MQTT entrega dados do ESP32 ao backend
 - o backend persiste telemetria válida em `telemetry_logs`
 - `telemetry:new` atualiza o frontend por Socket.IO
-- a janela visual mantém 30 amostras recentes
+- a janela visual mantém 60 amostras recentes
 
 ### 5. Persistência e rastreabilidade
 
@@ -155,10 +155,21 @@ Abra **Alertas e Histórico** e demonstre:
 2. clique em **Exportar JSON** e mostre `generatedAt`, organização, filtros, total e itens
 3. clique em **Exportar PDF** e mostre a visualização imprimível do navegador
 4. abra os detalhes de um alerta e mostre as ações registradas
+5. demonstre **Confirmar atendimento**, resolver ou cancelar sem observação obrigatória
 
 Explique que a exportação usa a rota protegida `GET /api/alerts/export`, respeita JWT, `X-Organization-Id` e o mesmo escopo multi-tenant da tela. O backend limita o relatório a `500` registros. Acknowledge, cancelamento e resolução geram rastreabilidade em `alert_actions` e `audit_logs` quando aplicável.
 
-### 8. Evidências de qualidade
+### 8. Gestão segura para repetir a demo
+
+1. no detalhe do device, desvincule o paciente e mostre que o assignment antigo recebeu fim
+2. arquive um paciente sem device e mostre que ele some da lista padrão
+3. ative **Mostrar arquivados** para comprovar que o paciente não foi apagado
+4. use **Desparear para demo** somente após confirmação forte
+5. volte ao fluxo de pairing existente e faça novo claim
+
+Explique que reset de claim e arquivamento são ações auditadas e não apagam telemetria, eventos, alertas ou histórico.
+
+### 9. Evidências de qualidade
 
 Mostre os resultados dos comandos:
 
@@ -171,7 +182,7 @@ Mostre os resultados dos comandos:
 
 Se precisar demonstrar carga real, use `stress:real` somente em ambiente local/dev preparado. Ele não deve ser executado em produção.
 
-### 9. Limitações e próximos passos
+### 10. Limitações e próximos passos
 
 Feche com transparência:
 

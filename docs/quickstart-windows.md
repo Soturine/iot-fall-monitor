@@ -223,6 +223,7 @@ Na versão atual ele também:
 - envia `X-Organization-Id` nas consultas protegidas
 - valida `organization`, `patients`, `dashboard`, `devices` e `alerts`
 - trata a publicação do mock como verificação auxiliar, sem mascarar o sucesso do fluxo principal
+- encerra a árvore completa do mock publisher ao terminar, evitando processos órfãos e saturação MQTT em execuções repetidas
 
 ### Testes técnicos de backend e stress
 
@@ -399,6 +400,14 @@ Se o backend iniciar avisando schema desatualizado para evidência, rode a migra
 ```powershell
 npm run db:migrate:evidence --prefix backend
 ```
+
+Se confirmar atendimento, resolver ou cancelar alerta informar que `alert_actions` está ausente, aplique a migração incremental:
+
+```powershell
+npm run db:migrate:alert-actions --prefix backend
+```
+
+Esse comando usa `CREATE TABLE IF NOT EXISTS` e não reseta o banco.
 
 Observações:
 

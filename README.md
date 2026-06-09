@@ -6,9 +6,11 @@ O objetivo do repositório é integrar hardware embarcado, ingestão de eventos,
 
 ## Baseline Atual
 
-Baseline atual do repositório: `v0.8.30`.
+Baseline atual do repositório: `v0.8.31`.
 
-A baseline `v0.8.30` fecha a leitura falsa de bateria: o firmware deixou de publicar `100%` como placeholder fixo, o portal ESP32 ganhou uma bateria manual opcional persistida em `NVS`, os payloads MQTT passam a indicar `battery_percent_source` e o frontend mostra `--%`/`não informado` quando não existe valor real ou manual. O valor manual é apenas informativo, útil para copiar o percentual exibido por um módulo externo de bateria enquanto a medição automática por ADC ou fuel gauge não existir. Na validação com o ESP32 novo em `COM5`, a telemetria permaneceu estável por cerca de `75 s` com `i2c_errors=0`, `recoveries=0`, `sensor_read_ok=1` e `accel_magnitude=1.00`, indicando que a instabilidade anterior do barramento era física ou de montagem/hardware.
+A baseline `v0.8.31` fecha bloqueios operacionais da demo sem apagar histórico: adiciona migração incremental de `alert_actions`, timeout e retry visível no frontend, desvinculação de paciente, reset administrativo de claim e arquivamento lógico de paciente. O gráfico mantém `60` amostras recentes e eventos experimentais `movement_detected` passam a ser apenas informativos, sem alerta ativo ou buzzer; o alarme local fica reservado para queda confirmada e SOS.
+
+A baseline anterior `v0.8.30` fecha a leitura falsa de bateria: o firmware deixou de publicar `100%` como placeholder fixo, o portal ESP32 ganhou uma bateria manual opcional persistida em `NVS`, os payloads MQTT passam a indicar `battery_percent_source` e o frontend mostra `--%`/`não informado` quando não existe valor real ou manual. O valor manual é apenas informativo, útil para copiar o percentual exibido por um módulo externo de bateria enquanto a medição automática por ADC ou fuel gauge não existir. Na validação com o ESP32 novo em `COM5`, a telemetria permaneceu estável por cerca de `75 s` com `i2c_errors=0`, `recoveries=0`, `sensor_read_ok=1` e `accel_magnitude=1.00`, indicando que a instabilidade anterior do barramento era física ou de montagem/hardware.
 
 A baseline anterior `v0.8.29` é uma rodada conservadora de qualidade de código e validação da documentação operacional. Ela preserva a lógica de alerta, telemetria, MQTT, Socket.IO e schema, mas reduz duplicações em pontos críticos: payloads comuns do firmware, normalizadores backend e helpers de diagnóstico do detalhe do dispositivo no frontend.
 
@@ -238,6 +240,7 @@ npm run test:alerts --prefix backend
 npm run test:mqtt --prefix backend
 npm run stress:dry --prefix backend
 npm run stress:real --prefix backend
+npm run db:migrate:alert-actions --prefix backend
 npm run db:migrate:evidence --prefix backend
 npm run db:migrate:sensor-diagnostics --prefix backend
 npm run mqtt:watch --prefix backend
@@ -248,7 +251,7 @@ npm run mqtt:publish:test --prefix backend
 
 Para preparar uma banca ou entrega acadêmica, use o [roteiro de demonstração](docs/roteiro-demonstracao.md) e o [checklist de validação](docs/checklist-validacao.md). Os documentos distinguem testes com mocks, smoke com serviços locais reais e validações manuais com ESP32.
 
-`db:migrate:evidence` aplica apenas a migração idempotente das colunas/tabela de evidência sem resetar dados. `db:migrate:sensor-diagnostics` adiciona os campos de saúde do sensor em `device_status` sem reset destrutivo. `mqtt:watch` assina os tópicos reais `queda/devices/+/status`, `telemetry` e `events` para confirmar se o ESP32 está publicando. `mqtt:publish:test` publica status e telemetria válidos no mesmo contrato do firmware, útil para testar backend/dashboard sem hardware.
+`db:migrate:alert-actions` garante a tabela de ações humanas em bancos existentes sem resetar dados. `db:migrate:evidence` aplica apenas a migração idempotente das colunas/tabela de evidência. `db:migrate:sensor-diagnostics` adiciona os campos de saúde do sensor em `device_status` sem reset destrutivo. `mqtt:watch` assina os tópicos reais `queda/devices/+/status`, `telemetry` e `events` para confirmar se o ESP32 está publicando.
 
 Para validar telemetria real do ESP32, deixe `mqtt:watch` aberto, reinicie a placa e acompanhe o Serial Monitor. O funcionamento esperado mostra `[mqtt] connected`, `[sensor] read ok`, `[telemetry] publish ok` repetindo no intervalo configurado e linhas novas em `queda/devices/esp32_01/telemetry`. Telemetria simulada vem do `clientId` de teste e serve para validar backend/frontend; telemetria real deve vir do `clientId` configurado no ESP32, como `esp32_01_client`.
 
@@ -375,6 +378,10 @@ A tela **Alertas e Histórico** permite aplicar os filtros existentes de status,
 
 A rota de exportação continua protegida por JWT, recebe a organização ativa via `X-Organization-Id`, reutiliza o escopo multi-tenant da listagem de alertas e limita cada relatório a `500` registros. Ações de acknowledge, cancelamento e resolução continuam gerando `alert_actions` e `audit_logs` quando aplicável.
 
+Em banco local criado antes da tabela `alert_actions`, aplique `npm run db:migrate:alert-actions --prefix backend`. O comando usa `CREATE TABLE IF NOT EXISTS`, não executa `DROP`, `TRUNCATE` ou reset do schema.
+
+Administradores da organização podem desvincular o paciente de um device, resetar o claim para demonstrar novo pareamento e arquivar pacientes sem device ativo. Essas operações encerram vínculos e registram auditoria, preservando telemetria, eventos, alertas, pacientes e histórico de assignments.
+
 Nesta rodada, JWT, perfis de acesso, cards com dados reais, MQTT + Socket.IO, histórico, relatório JSON/PDF, auditoria parcial e testes/evidências são itens demonstráveis. QR Code e alterações no pareamento não fazem parte do escopo.
 
 ## Status Heurístico Experimental
@@ -427,7 +434,7 @@ O frontend exibe esse status de forma discreta no dashboard, na lista de disposi
 - Em redes institucionais, isolamento entre clientes pode impedir pareamento ou MQTT local.
 - O broker MQTT embutido é voltado a desenvolvimento e demonstração local.
 - O schema atual é aplicado como reset de ambiente, não como migração incremental versionada.
-- O fluxo completo de unpair ou transferência cross-tenant pela interface ainda não está implementado.
+- O reset administrativo de claim permite demonstrar novo pareamento, mas transferência cross-tenant continua dependendo de novo claim autorizado.
 - O auto-reset de upload pode depender da placa, driver e porta serial; em alguns casos ainda pode ser necessário segurar `BOOT` durante o upload.
 
 ## Documentação Complementar

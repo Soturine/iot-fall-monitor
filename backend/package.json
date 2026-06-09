@@ -1,6 +1,6 @@
 {
   "name": "backend",
-  "version": "0.8.30",
+  "version": "0.8.31",
   "description": "Backend MQTT + API REST do sistema de monitoramento de quedas com ESP32",
   "main": "src/server.js",
   "engines": {
@@ -26,6 +26,7 @@
     "stress:alerts": "npm run stress:dry",
     "stress:cleanup": "node scripts/stress/cleanupStressData.js",
     "db:init": "node scripts/initDb.js",
+    "db:migrate:alert-actions": "node scripts/migrateAlertActionsSchema.js",
     "db:migrate:evidence": "node scripts/migrateEvidenceSchema.js",
     "db:migrate:sensor-diagnostics": "node scripts/migrateSensorDiagnosticsSchema.js"
   },

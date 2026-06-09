@@ -1,21 +1,6 @@
 # Changelog
 
 ## [Unreleased]
-### Adicionado
-- roteiro de demonstração acadêmica com sequência de apresentação para JWT, multi-tenant, MQTT, banco, Socket.IO, telemetria e alertas
-- checklist de validação com matriz dos testes automatizados e verificações manuais de backend, frontend, hardware e segurança
-- exportação dos alertas filtrados em JSON pela rota protegida `GET /api/alerts/export`, limitada a `500` registros
-- visualização imprimível dos alertas filtrados para salvar em PDF pelo recurso nativo do navegador
-
-### Corrigido
-- `stress:dry` volta a processar telemetria após alinhar o harness mockado à função real `validateTelemetryPayload`
-- ações de acknowledge, resolução e cancelamento deixam de falhar quando o frontend envia POST sem observação, e o modal de detalhes passa a permanecer centralizado e resiliente a campos opcionais ausentes
-
-### Documentação
-- README e integração passam a diferenciar testes com mocks, smoke com serviços locais reais e validação ponta a ponta com ESP32
-- resultados auditados dos comandos de teste ficam registrados no checklist de validação
-- roteiro acadêmico passa a demonstrar JWT, perfis, cards reais, tempo real, filtros, exportação JSON/PDF e auditoria parcial de ações de alerta
-
 ### Pendente / Faltando
 - capturar GIF real do fluxo ESP32/evento -> MQTT -> backend -> dashboard atualizando
 - capturar tela real de detalhe do dispositivo com telemetria quando houver device visível no ambiente local
@@ -23,6 +8,37 @@
 - implementar sessões completas de calibração por SOS
 - testar classificação de movimentos com múltiplas runs por classe
 - validar o sistema com ESP32 real, MPU6050, backend, MQTT e dashboard em cenário ponta a ponta
+
+## [v0.8.31] - 2026-06-09
+### Adicionado
+- migração idempotente `db:migrate:alert-actions`, aplicável em banco existente sem reset ou perda de histórico
+- reset administrativo de claim para demonstração, sem excluir device, telemetria, eventos, alertas ou assignments antigos
+- arquivamento lógico de paciente, bloqueado enquanto houver device vinculado
+- estados visíveis de erro e tentativa novamente nas telas de alertas, pacientes, dispositivos e detalhe do device
+- modo de telemetria demo opt-in no firmware, desligado por padrão
+
+### Alterado
+- detalhe do dispositivo passa a manter `60` amostras recentes e scroll interno para alertas/eventos
+- `movement_detected` permanece evento informativo de baixa severidade, mas deixa de criar alerta ativo ou buzzer
+- buzzer local fica reservado para queda confirmada e SOS; `fall_suspected` experimental continua auditável sem alarme sonoro
+- ações administrativas de desvincular paciente e desparear para demo encerram vínculos sem apagar histórico
+- versão alinhada para `0.8.31` em packages e locks existentes
+
+### Corrigido
+- bancos existentes sem `alert_actions` agora possuem caminho incremental claro e erro orientativo
+- timeout global da API impede login e telas protegidas de ficarem carregando indefinidamente
+- botão `Acknowledge` passa a ser exibido como `Confirmar atendimento`
+- ações de acknowledge, resolução e cancelamento aceitam body ausente ou `note: null`
+- modal de detalhes de alerta permanece centralizado e resiliente a campos opcionais ausentes
+- `dev:smoke` encerra toda a árvore do mock publisher e deixa de acumular processos órfãos que saturavam MQTT e backend
+
+### Documentação
+- README, integração, hardware, checklist e roteiro de demonstração documentam migração segura, reset de claim, arquivamento, telemetria demo e política conservadora do buzzer
+
+### Limitações conhecidas
+- reset de claim é uma ação administrativa para demonstração; transferência cross-tenant continua exigindo novo claim autorizado
+- modo demo de telemetria aumenta carga em MQTT, backend e banco e deve permanecer desligado fora da apresentação
+- validação física de buzzer, SOS e pareamento após reset continua dependente do ESP32 real
 
 ## [v0.8.30] - 2026-06-08
 ### Adicionado

@@ -638,8 +638,10 @@ Observações:
 
 ### Botao SOS
 
-- um terminal em `GPIO27`
-- outro terminal em `GND`
+- módulo de 3 pinos: `VCC -> 3V3`, `GND -> GND` e `OUT -> GPIO27`
+- botão simples de 2 terminais: um terminal em `GPIO27` e outro em `GND`
+- para módulo active-low, use pull-up e mantenha a lógica coerente; para active-high, ajuste a leitura antes de habilitar
+- `SOS_BUTTON_ENABLED` permanece `false` por padrão para não alterar a demo sem validação física
 
 ### Buzzer
 
@@ -774,7 +776,9 @@ O que entra no payload quando a queda e confirmada:
 - médias, desvios, energia por eixo e jerk aproximado no domínio do tempo
 - estrutura de FFT/Fourier com `available=false`, pronta para etapa futura
 
-O buzzer continua vinculado a decisões locais do firmware: `fall_detected` confirmado pela FSM, SOS manual quando habilitado e, em bancada, `fall_suspected`/`movement_detected` quando a pré-calibração permitir. A nova camada de features/FFT não substitui a decisão principal.
+O buzzer continua vinculado a decisões locais críticas do firmware: `fall_detected` confirmado pela FSM e SOS manual quando habilitado. Desde a `v0.8.31`, `movement_detected` e `fall_suspected` experimentais são auditáveis, mas não acionam o buzzer. A nova camada de features/FFT não substitui a decisão principal.
+
+Para uma apresentação mais fluida, `FIRMWARE_DEMO_TELEMETRY_ENABLED=true` reduz o intervalo de telemetria de `2000 ms` para `1000 ms`. A flag fica desligada por padrão porque aumenta a carga de MQTT, backend e banco.
 
 ## Parametros atuais de calibração do `fall_detector`
 
