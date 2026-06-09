@@ -251,15 +251,15 @@ export interface EventRecord {
 }
 
 export interface AlertAction {
-  id: number;
-  actionType: string;
-  note: string | null;
-  createdAt: string | null;
-  user: {
+  id?: number | null;
+  actionType?: string | null;
+  note?: string | null;
+  createdAt?: string | null;
+  user?: {
     id: number;
     name: string;
     email: string;
-  };
+  } | null;
 }
 
 export interface AlertRecord {
@@ -292,7 +292,7 @@ export interface AlertRecord {
     eventTime: string | null;
     rawPayloadJson: unknown;
   };
-  actions?: AlertAction[];
+  actions?: Array<AlertAction | null> | null;
 }
 
 export interface AlertReportItem {

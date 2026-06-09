@@ -132,19 +132,31 @@ export function AlertsPage() {
   async function openAlert(alertId: number) {
     try {
       const response = await api.get<{ alert: AlertRecord }>(`/alerts/${alertId}`);
-      setSelectedAlert(response.data.alert);
+      const alert = response.data?.alert;
+
+      if (!alert) {
+        throw new Error("Detalhes do alerta não disponíveis.");
+      }
+
+      setSelectedAlert(alert);
     } catch (error) {
+      setSelectedAlert(null);
       toast.error(getErrorMessage(error));
     }
   }
 
   async function executeAction(alertId: number, action: "acknowledge" | "cancel" | "resolve") {
     try {
-      const response = await api.post<{ alert: AlertRecord }>(`/alerts/${alertId}/${action}`);
+      const response = await api.post<{ alert: AlertRecord }>(
+        `/alerts/${alertId}/${action}`,
+        { note: null },
+      );
       setAlerts((current) =>
         current.map((item) => (item.id === alertId ? response.data.alert : item)),
       );
-      setSelectedAlert(response.data.alert);
+      setSelectedAlert((current) => (
+        current?.id === alertId ? response.data.alert : current
+      ));
       toast.success(`Alerta ${action} com sucesso.`);
     } catch (error) {
       toast.error(getErrorMessage(error));
@@ -200,6 +212,13 @@ export function AlertsPage() {
   const openCount = alerts.filter((alert) => alert.status === "open").length;
   const ackCount = alerts.filter((alert) => alert.status === "acknowledged").length;
   const criticalCount = alerts.filter((a) => a.event.severity === "critical").length;
+  const selectedActions = Array.isArray(selectedAlert?.actions)
+    ? selectedAlert.actions.filter((action): action is NonNullable<typeof action> => Boolean(action))
+    : [];
+  const selectedPayload = selectedAlert?.event?.rawPayloadJson;
+  const selectedPayloadText = selectedPayload == null
+    ? "Payload não disponível"
+    : JSON.stringify(selectedPayload, null, 2) || "{}";
 
   return (
     <div className="space-y-6">
@@ -501,8 +520,8 @@ export function AlertsPage() {
               <Badge tone={statusTone(selectedAlert.status) as never}>
                 {humanizeAlertStatus(selectedAlert.status)}
               </Badge>
-              <Badge tone={severityTone(selectedAlert.event.severity) as never}>
-                {humanizeSeverity(selectedAlert.event.severity)}
+              <Badge tone={severityTone(selectedAlert.event?.severity) as never}>
+                {humanizeSeverity(selectedAlert.event?.severity)}
               </Badge>
             </div>
 
@@ -512,7 +531,9 @@ export function AlertsPage() {
                   Dispositivo
                 </p>
                 <p className="mt-2 font-semibold text-surface-900">
-                  {selectedAlert.device.name || selectedAlert.device.deviceIdentifier}
+                  {selectedAlert.device?.name ||
+                    selectedAlert.device?.deviceIdentifier ||
+                    "Dispositivo não informado"}
                 </p>
               </div>
               <div className="rounded-[24px] bg-surface-50 p-4">
@@ -527,27 +548,30 @@ export function AlertsPage() {
 
             <div className="rounded-[24px] border border-surface-100 bg-white p-4">
               <p className="text-sm font-semibold text-surface-900">Mensagem processada</p>
-              <p className="mt-2 text-sm text-surface-600">{selectedAlert.event.message}</p>
+              <p className="mt-2 text-sm text-surface-600">
+                {selectedAlert.event?.message || "Mensagem não disponível"}
+              </p>
             </div>
 
             <div className="rounded-[24px] border border-surface-100 bg-surface-900 p-4 text-white">
               <p className="text-sm font-semibold">Payload bruto</p>
               <pre className="mt-3 overflow-x-auto whitespace-pre-wrap text-xs leading-6 text-white/80">
-                {JSON.stringify(selectedAlert.event.rawPayloadJson, null, 2)}
+                {selectedPayloadText}
               </pre>
             </div>
 
-            {selectedAlert.actions?.length ? (
+            {selectedActions.length ? (
               <div>
                 <p className="text-sm font-semibold text-surface-900">Ações registradas</p>
                 <div className="mt-3 space-y-3">
-                  {selectedAlert.actions.map((action) => (
+                  {selectedActions.map((action, index) => (
                     <div
-                      key={action.id}
+                      key={action.id ?? `${action.actionType || "acao"}-${index}`}
                       className="rounded-[24px] border border-surface-100 bg-surface-50 p-4"
                     >
                       <p className="font-semibold text-surface-900">
-                        {action.user.name} • {action.actionType}
+                        {action.user?.name || "Usuário não informado"} •{" "}
+                        {action.actionType || "ação não informada"}
                       </p>
                       <p className="mt-1 text-sm text-surface-600">
                         {formatDateTime(action.createdAt)}

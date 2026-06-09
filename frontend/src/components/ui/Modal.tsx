@@ -1,4 +1,5 @@
 import { useEffect, type PropsWithChildren, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
 import { cn } from "../../lib/cn";
@@ -48,9 +49,9 @@ export function Modal({
     return null;
   }
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-surface-900/55 px-4 py-6 backdrop-blur-md animate-[fade_120ms_ease-out]"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-surface-900/55 px-4 py-6 backdrop-blur-md animate-[fade_120ms_ease-out]"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
@@ -95,6 +96,7 @@ export function Modal({
           </div>
         ) : null}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
