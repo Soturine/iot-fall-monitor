@@ -14,6 +14,8 @@ A `v0.9.0` consolida uma demonstração acadêmica ponta a ponta com ESP32 real,
 - ingestão MQTT aceita payloads antigos ou sem bateria e normaliza `battery_calibration_count` ausente para `0`
 - frontend possui título/favicon próprios, gráfico com até `120` amostras em Demo e contexto visual da bateria estimada
 - README e documentação foram reorganizados, com modelo de dados Mermaid e evidências visuais reais
+- fechamento técnico explicita autenticação JWT, papéis, escopo multi-tenant por `X-Organization-Id` e a separação entre sessão web e MQTT do device
+- backend documentado como arquitetura em camadas/MVC-like, com routes/controllers, services, middlewares, acesso MySQL, bridge MQTT e Socket.IO separados
 
 ## Evidências reais
 

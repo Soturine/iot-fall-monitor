@@ -21,6 +21,7 @@ O projeto é composto por:
 - backend `Node.js` com `Express`, API REST, bridge MQTT e emissão `Socket.IO`
 - banco de dados `MySQL`
 - frontend web em `React`, `Vite`, `TypeScript` e `Tailwind CSS`
+- autenticação web por `JWT`, com controle de acesso por papel e organização ativa
 - portal local de configuração do ESP32
 - dashboard multi-tenant por organização
 
@@ -150,6 +151,23 @@ flowchart LR
 - **Banco MySQL:** armazena organizações, membros, pacientes, dispositivos, histórico de vínculos, eventos, alertas, status e telemetria.
 - **Socket.IO:** entrega atualizações do backend para o navegador em tempo real.
 - **Frontend Web:** oferece dashboard operacional, telas de pacientes, dispositivos, alertas, organização, pareamento e detalhe de dispositivo.
+
+### Organização do backend
+
+O backend segue uma arquitetura em camadas inspirada em MVC, adequada para uma API REST. Não é um MVC clássico monolítico com views renderizadas no servidor:
+
+- **routes/controllers:** recebem HTTP, extraem e validam entradas básicas e traduzem respostas/erros
+- **services:** concentram regras de negócio, autorização contextual, transações e orquestração
+- **middlewares:** validam JWT, resolvem o escopo da organização ativa e tratam erros
+- **database/repositories:** `src/db` fornece pool e transações MySQL; atualmente as consultas ficam concentradas nos services, sem uma pasta formal de repositories
+- **MQTT ingestion:** bridge separada recebe `events`, `status` e `telemetry` do ESP32
+- **Socket.IO:** entrega atualizações realtime somente aos escopos autorizados do frontend
+
+### Segurança e controle de acesso
+
+O login web gera um token JWT. O frontend envia `Authorization: Bearer <token>` nas rotas protegidas e `X-Organization-Id` para indicar a organização ativa. O backend valida o token, confirma a membership e aplica os papéis `platform_admin`, `organization_admin`, `caregiver`, `operator` e `viewer` antes de consultar ou alterar dados.
+
+JWT protege a sessão web e o Socket.IO autenticado. A comunicação MQTT do ESP32 é um canal separado: identidade do device, claim, tópicos e escopo resolvido na ingestão não dependem da sessão JWT do navegador.
 
 ## Estrutura de Pastas
 

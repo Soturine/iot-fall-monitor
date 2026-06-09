@@ -19,6 +19,12 @@ Em outras palavras:
 - ele entra como `unclaimed`
 - somente o fluxo de pairing por código temporário o transforma em device de fato pertencente a uma organização
 
+### Sessão web JWT e canal MQTT
+
+A integração frontend-backend usa JWT e escopo multi-tenant. Após o login, o frontend envia `Authorization: Bearer <token>` e `X-Organization-Id`; o backend valida o token, a membership, o papel e os pacientes permitidos antes de atender a API ou autorizar rooms do Socket.IO.
+
+O MQTT do ESP32 é separado dessa sessão web: o device não reutiliza o JWT do navegador. A bridge MQTT resolve `device_uid`/`device_id`, claim, organização, paciente e assignment no backend antes de persistir ou emitir realtime. Essa separação evita misturar autenticação humana com identidade técnica do hardware.
+
 ## Identidade do dispositivo
 
 O projeto agora trabalha com duas identidades complementares:

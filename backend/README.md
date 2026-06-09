@@ -57,6 +57,31 @@ backend/
   package.json
 ```
 
+## Arquitetura em camadas / MVC-like
+
+O backend usa uma organização em camadas inspirada em MVC, mas não é um MVC clássico monolítico: ele expõe uma API REST e não renderiza views no servidor.
+
+- **`src/routes`:** declara endpoints, métodos HTTP e middlewares aplicáveis
+- **`src/controllers`:** adapta HTTP para chamadas de serviço, normaliza parâmetros básicos e monta respostas
+- **`src/services`:** concentra regras de negócio, autorização contextual, transações, persistência e orquestração
+- **`src/middlewares`:** valida autenticação JWT, carrega o escopo multi-tenant e trata erros
+- **`src/db`:** fornece o pool MySQL, helpers de consulta e transações; não existe hoje uma pasta formal de repositories, e as consultas permanecem concentradas nos services
+- **`src/mqtt`:** mantém o cliente e os tópicos da bridge MQTT; a ingestão de eventos/status/telemetria é orquestrada separadamente da API HTTP
+- **`src/socket`:** emite eventos realtime para rooms autorizadas
+
+Esse desenho mantém controllers finos e permite que regras de alertas, devices, escopo, bateria e ingestão sejam testadas sem depender diretamente da camada HTTP.
+
+### JWT, organização ativa e papéis
+
+1. `POST /api/auth/login` valida as credenciais e gera um token JWT.
+2. O frontend envia `Authorization: Bearer <token>` nas chamadas protegidas.
+3. `requireAccessContext` valida o token, lê `X-Organization-Id` e carrega usuário, membership, papel e pacientes permitidos em `req.access`.
+4. Routes/controllers encaminham `req.access` aos services.
+5. Services aplicam o escopo antes de consultar ou alterar o MySQL.
+6. Socket.IO usa token e organização ativa para colocar o navegador apenas nas rooms autorizadas.
+
+Os papéis atuais são `platform_admin`, `organization_admin`, `caregiver`, `operator` e `viewer`. A sessão web JWT é separada da comunicação MQTT do ESP32: mensagens do device são resolvidas por identidade técnica, claim e escopo persistido, não pelo token do navegador.
+
 ## Variáveis de ambiente
 
 Copie `.env.example` para `.env` e ajuste:
