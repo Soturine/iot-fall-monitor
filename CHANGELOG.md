@@ -9,6 +9,7 @@
 
 ### Corrigido
 - `stress:dry` volta a processar telemetria após alinhar o harness mockado à função real `validateTelemetryPayload`
+- ações de acknowledge, resolução e cancelamento deixam de falhar quando o frontend envia POST sem observação, e o modal de detalhes passa a permanecer centralizado e resiliente a campos opcionais ausentes
 
 ### Documentação
 - README e integração passam a diferenciar testes com mocks, smoke com serviços locais reais e validação ponta a ponta com ESP32
