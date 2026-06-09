@@ -62,6 +62,8 @@ export function humanizeBatteryPercentSource(
   switch (source) {
     case "manual":
       return "manual";
+    case "manual_estimated":
+      return "estimada por calibração manual";
     case "estimated":
       return "estimado";
     case "automatic":
@@ -81,6 +83,14 @@ export function formatBatteryPercent(value: number | null | undefined) {
   return typeof value === "number" && Number.isFinite(value)
     ? `${value}%`
     : "--%";
+}
+
+export function formatBatteryRemainingMinutes(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "--";
+  }
+
+  return `${Math.max(0, Math.round(value / 60))} h restantes`;
 }
 
 export function expectedTopic(deviceIdentifier: string, channel: DiagnosticMqttChannel) {

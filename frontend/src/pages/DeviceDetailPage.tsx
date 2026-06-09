@@ -17,6 +17,7 @@ import {
   evidenceTone,
   expectedTopic,
   formatBatteryPercent,
+  formatBatteryRemainingMinutes,
   formatBooleanDiagnostic,
   formatEvidenceNumber,
   formatNumberDiagnostic,
@@ -153,6 +154,14 @@ function extractFirmwareDecision(event: EvidenceCarrier) {
     immobilityDurationMs:
       readNumber(rawPayload, "immobility_duration_ms") ??
       readNumber(features, "immobility_duration_ms"),
+    detectorMode: readString(rawPayload, "detector_mode"),
+    thresholdProfile: readString(rawPayload, "threshold_profile"),
+    impactDetected: readBoolean(rawPayload, "impact_detected"),
+    orientationChangeDetected: readBoolean(rawPayload, "orientation_change_detected"),
+    immobilityDetected: readBoolean(rawPayload, "immobility_detected"),
+    immobilityAccumulatedMs: readNumber(rawPayload, "immobility_accumulated_ms"),
+    sampleIntervalMs: readNumber(rawPayload, "sample_interval_ms"),
+    telemetryIntervalMs: readNumber(rawPayload, "telemetry_interval_ms"),
     featuresTimeDomain,
     featuresFrequencyDomain,
     alertSettings,
@@ -263,6 +272,27 @@ function EvidenceSummary({ event }: { event: EvidenceCarrier }) {
             Motivo:{" "}
             <span className="font-semibold text-surface-800">
               {firmwareDecision.reason || "--"}
+            </span>
+          </p>
+          <p>
+            Modo detector:{" "}
+            <span className="font-semibold text-surface-800">
+              {firmwareDecision.detectorMode === "demo" ? "Demo apresentação" : "Normal"}
+            </span>
+          </p>
+          <p>
+            Etapas:{" "}
+            <span className="font-semibold text-surface-800">
+              impacto {formatBooleanDiagnostic(firmwareDecision.impactDetected)} · orientação{" "}
+              {formatBooleanDiagnostic(firmwareDecision.orientationChangeDetected)} · imobilidade{" "}
+              {formatBooleanDiagnostic(firmwareDecision.immobilityDetected)}
+            </span>
+          </p>
+          <p>
+            Intervalos:{" "}
+            <span className="font-semibold text-surface-800">
+              sensor {formatMs(firmwareDecision.sampleIntervalMs)} · MQTT{" "}
+              {formatMs(firmwareDecision.telemetryIntervalMs)}
             </span>
           </p>
           <p>
@@ -529,6 +559,9 @@ export function DeviceDetailPage() {
     detail.device.status.batteryPercentSource,
     detail.device.status.batteryPercent,
   );
+  const batteryRemainingLabel = formatBatteryRemainingMinutes(
+    detail.device.status.batteryEstimatedRemainingMinutes,
+  );
   const statusTopic = expectedTopic(detail.device.deviceIdentifier, "status");
   const telemetryTopic = expectedTopic(detail.device.deviceIdentifier, "telemetry");
   const eventsTopic = expectedTopic(detail.device.deviceIdentifier, "events");
@@ -608,6 +641,9 @@ export function DeviceDetailPage() {
                 <Badge tone={activeAlerts.length ? "critical" : "muted"}>
                   {activeAlerts.length} alertas ativos
                 </Badge>
+                <Badge tone={detail.device.status.detectorMode === "demo" ? "warning" : "neutral"}>
+                  {detail.device.status.detectorMode === "demo" ? "Modo demo" : "Modo normal"}
+                </Badge>
               </div>
               <h2 className="mt-4 font-display text-4xl tracking-tight">
                 {detail.device.name}
@@ -639,6 +675,10 @@ export function DeviceDetailPage() {
                 </p>
                 <p className="mt-1 text-xs font-medium text-white/65">
                   {batterySourceLabel || "não informado"}
+                </p>
+                <p className="mt-1 text-[11px] text-white/55">
+                  {batteryRemainingLabel} ·{" "}
+                  {detail.device.status.batteryCalibrationCount ?? 0} calibrações
                 </p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
@@ -893,6 +933,15 @@ export function DeviceDetailPage() {
                 {detail.device.status.online
                   ? "telemetria MQTT recente"
                   : "sem telemetria MQTT recente"}
+              </p>
+              <p className="mt-2 text-xs text-surface-500">
+                Modo detector:{" "}
+                {detail.device.status.detectorMode === "demo" ? "Demo apresentação" : "Normal"}{" "}
+                · leitura {formatNumberDiagnostic(detail.device.status.sampleIntervalMs, " ms")} · MQTT{" "}
+                {formatNumberDiagnostic(detail.device.status.telemetryIntervalMs, " ms")}
+              </p>
+              <p className="mt-1 text-xs text-surface-500">
+                Estimativa baseada na última calibração manual · {batteryRemainingLabel}
               </p>
             </div>
           </div>

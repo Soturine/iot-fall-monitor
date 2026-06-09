@@ -623,6 +623,9 @@ export function DevicesPage() {
                       {device.activeAlerts > 0 ? (
                         <Badge tone="critical">{device.activeAlerts} alertas</Badge>
                       ) : null}
+                      <Badge tone={device.status.detectorMode === "demo" ? "warning" : "neutral"}>
+                        {device.status.detectorMode === "demo" ? "Demo" : "Normal"}
+                      </Badge>
                     </div>
                     <h3 className="mt-3 font-display text-2xl text-surface-900 truncate">
                       {device.name}
@@ -690,6 +693,12 @@ export function DevicesPage() {
                     <p className="mt-1 text-[11px] text-surface-500">
                       {batterySourceLabel || "Não informado"}
                     </p>
+                    {typeof device.status.batteryEstimatedRemainingMinutes === "number" ? (
+                      <p className="mt-1 text-[11px] text-surface-500">
+                        ~{Math.round(device.status.batteryEstimatedRemainingMinutes / 60)} h ·{" "}
+                        {device.status.batteryCalibrationCount ?? 0} calibrações
+                      </p>
+                    ) : null}
                     <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-surface-100">
                       <div
                         className={cn(
