@@ -160,7 +160,7 @@ test("createAlertForEvent reaproveita alerta existente sem duplicar", async () =
   }
 });
 
-async function runTransition(actionType, expectedStatus) {
+async function runTransition(actionType, expectedStatus, note = "ok") {
   const actionInserts = [];
   const fakePool = {
     transaction: async (work) => work({ connection: true }),
@@ -191,7 +191,7 @@ async function runTransition(actionType, expectedStatus) {
           {
             id: 33,
             action_type: actionType,
-            note: "ok",
+            note,
             created_at: new Date("2026-05-12T21:01:00.000Z"),
             userId: 1,
             userName: "Admin",
@@ -210,13 +210,13 @@ async function runTransition(actionType, expectedStatus) {
       10,
       actionType,
       1,
-      "ok",
+      note,
       access,
     );
 
     assert.equal(alert.status, expectedStatus);
     assert.equal(alert.actions.length, 1);
-    assert.deepEqual(actionInserts[0], [10, 1, actionType, "ok"]);
+    assert.deepEqual(actionInserts[0], [10, 1, actionType, note]);
   } finally {
     restore();
   }
@@ -226,6 +226,10 @@ test("updateAlertStatus permite acknowledge, resolve e cancel com alert_actions"
   await runTransition("acknowledge", "acknowledged");
   await runTransition("resolve", "resolved");
   await runTransition("cancel", "canceled");
+});
+
+test("updateAlertStatus registra note null quando observacao nao foi enviada", async () => {
+  await runTransition("acknowledge", "acknowledged", null);
 });
 
 test("updateAlertStatus impede transicao invalida", async () => {

@@ -24,11 +24,12 @@ const getById = asyncHandler(async (req, res) => {
 
 function createActionHandler(actionType) {
   return asyncHandler(async (req, res) => {
+    const note = req.body?.note ?? null;
     const alert = await updateAlertStatus(
       Number(req.params.id),
       actionType,
       req.user.id,
-      req.body.note,
+      note,
       req.access,
     );
 
