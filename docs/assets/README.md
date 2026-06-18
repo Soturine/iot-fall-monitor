@@ -6,3 +6,4 @@ A regra principal é simples: **não versionar mockups, prints antigos renomeado
 
 ## Finalidade
 
+Os arquivos desta pasta documentam o funcionamento
