@@ -6,4 +6,7 @@ A regra principal é simples: **não versionar mockups, prints antigos renomeado
 
 ## Finalidade
 
-Os arquivos desta pasta documentam o funcionamento
+Os arquivos desta pasta documentam o funcionamento real do sistema, incluindo:
+
+- protótipo físico com ESP32, sensor inercial MPU6050, buzzer/LED e alimentação;
+- portal local do ESP32 para Wi
